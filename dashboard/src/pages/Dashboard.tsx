@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, createProject, updateProject, deleteProject } from '../api/projects';
+import { getKeywords, createKeyword, updateKeyword, deleteKeyword } from '../api/keywords';
 import type { Project, CreateProjectPayload } from '../types/project';
+import type { Keyword, CreateKeywordPayload, UpdateKeywordPayload } from '../types/keyword';
 import { ProjectFormModal } from '../components/ProjectFormModal';
+import { KeywordFormModal } from '../components/KeywordFormModal';
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -13,12 +16,24 @@ export const Dashboard: React.FC = () => {
   const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
   const [projectError, setProjectError] = useState<string | null>(null);
 
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Project Modal state
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
+  // Keyword state
+  const [keywords, setKeywords] = useState<Keyword[]>([]);
+  const [isLoadingKeywords, setIsLoadingKeywords] = useState<boolean>(false);
+  const [keywordError, setKeywordError] = useState<string | null>(null);
+
+  // Keyword Modal state
+  const [isKeywordModalOpen, setIsKeywordModalOpen] = useState(false);
+  const [editingKeyword, setEditingKeyword] = useState<Keyword | null>(null);
+  const [deletingKeyword, setDeletingKeyword] = useState<Keyword | null>(null);
+  const [isDeletingKeyword, setIsDeletingKeyword] = useState(false);
+
+  // Load user projects on initial mount
   const fetchUserProjects = async () => {
     setIsLoadingProjects(true);
     setProjectError(null);
@@ -46,14 +61,37 @@ export const Dashboard: React.FC = () => {
     fetchUserProjects();
   }, []);
 
-  const handleOpenCreateModal = () => {
-    setEditingProject(null);
-    setIsModalOpen(true);
+  // Fetch keywords whenever active project changes
+  const fetchProjectKeywords = async (projectId: number) => {
+    setIsLoadingKeywords(true);
+    setKeywordError(null);
+    try {
+      const data = await getKeywords(projectId);
+      setKeywords(data);
+    } catch (err: any) {
+      setKeywordError(err?.data?.detail || 'Failed to load keywords for this project.');
+    } finally {
+      setIsLoadingKeywords(false);
+    }
   };
 
-  const handleOpenEditModal = (project: Project) => {
+  useEffect(() => {
+    if (selectedProject) {
+      fetchProjectKeywords(selectedProject.id);
+    } else {
+      setKeywords([]);
+    }
+  }, [selectedProject?.id]);
+
+  // Project Handlers
+  const handleOpenCreateProjectModal = () => {
+    setEditingProject(null);
+    setIsProjectModalOpen(true);
+  };
+
+  const handleOpenEditProjectModal = (project: Project) => {
     setEditingProject(project);
-    setIsModalOpen(true);
+    setIsProjectModalOpen(true);
   };
 
   const handleSaveProject = async (payload: CreateProjectPayload) => {
@@ -70,9 +108,9 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDeleteProject = async () => {
     if (!deletingProject) return;
-    setIsDeleting(true);
+    setIsDeletingProject(true);
     try {
       await deleteProject(deletingProject.id);
       const remaining = projects.filter((p) => p.id !== deletingProject.id);
@@ -84,10 +122,44 @@ export const Dashboard: React.FC = () => {
     } catch (err: any) {
       alert(err?.data?.detail || 'Failed to delete project.');
     } finally {
-      setIsDeleting(false);
+      setIsDeletingProject(false);
     }
   };
 
+  // Keyword Handlers
+  const handleOpenCreateKeywordModal = () => {
+    setEditingKeyword(null);
+    setIsKeywordModalOpen(true);
+  };
+
+  const handleOpenEditKeywordModal = (keyword: Keyword) => {
+    setEditingKeyword(keyword);
+    setIsKeywordModalOpen(true);
+  };
+
+  const handleSaveKeyword = async (payload: CreateKeywordPayload | UpdateKeywordPayload) => {
+    if (editingKeyword) {
+      const updated = await updateKeyword(editingKeyword.id, payload as UpdateKeywordPayload);
+      setKeywords((prev) => prev.map((k) => (k.id === updated.id ? updated : k)));
+    } else {
+      const created = await createKeyword(payload as CreateKeywordPayload);
+      setKeywords((prev) => [created, ...prev]);
+    }
+  };
+
+  const handleConfirmDeleteKeyword = async () => {
+    if (!deletingKeyword) return;
+    setIsDeletingKeyword(true);
+    try {
+      await deleteKeyword(deletingKeyword.id);
+      setKeywords((prev) => prev.filter((k) => k.id !== deletingKeyword.id));
+      setDeletingKeyword(null);
+    } catch (err: any) {
+      alert(err?.data?.detail || 'Failed to delete keyword.');
+    } finally {
+      setIsDeletingKeyword(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'system-ui, sans-serif', width: '100%', boxSizing: 'border-box' }}>
@@ -130,7 +202,7 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main style={{ maxWidth: '1080px', margin: '32px auto', padding: '0 20px', textAlign: 'left' }}>
+      <main style={{ maxWidth: '1120px', margin: '32px auto', padding: '0 20px', textAlign: 'left' }}>
         
         {/* Selected Project Overview Card */}
         {selectedProject ? (
@@ -154,7 +226,14 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  onClick={() => handleOpenEditModal(selectedProject)}
+                  id="header-track-keyword-button"
+                  onClick={handleOpenCreateKeywordModal}
+                  style={primaryAddBtnStyle}
+                >
+                  + Track Keyword
+                </button>
+                <button
+                  onClick={() => handleOpenEditProjectModal(selectedProject)}
                   style={secondaryActionBtnStyle}
                 >
                   Edit Project
@@ -173,136 +252,262 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Projects Section Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '32px 0 16px 0' }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
-              Your Projects {projects.length > 0 && `(${projects.length})`}
-            </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-              Manage the websites you are tracking on DoxaRank.
-            </p>
-          </div>
-          <button
-            id="add-project-button"
-            onClick={handleOpenCreateModal}
-            style={primaryAddBtnStyle}
-          >
-            + Add Project
-          </button>
-        </div>
+        {/* SECTION 1: KEYWORDS MANAGEMENT (Visible when a project is selected) */}
+        {selectedProject && (
+          <section style={{ marginTop: '36px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
+                  Tracked Keywords {keywords.length > 0 && `(${keywords.length})`}
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
+                  SEO queries monitored for <strong>{selectedProject.name}</strong> on Ethiopian Google search.
+                </p>
+              </div>
+              <button
+                id="add-keyword-button"
+                onClick={handleOpenCreateKeywordModal}
+                style={primaryAddBtnStyle}
+              >
+                + Track Keyword
+              </button>
+            </div>
 
-        {/* Error Alert */}
-        {projectError && (
-          <div style={errorAlertStyle}>
-            {projectError}
-          </div>
+            {keywordError && (
+              <div style={errorAlertStyle}>
+                {keywordError}
+              </div>
+            )}
+
+            {isLoadingKeywords ? (
+              <div style={loadingStateStyle}>
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading keywords for {selectedProject.name}...</p>
+              </div>
+            ) : keywords.length === 0 ? (
+              <div style={emptyStateCardStyle}>
+                <div style={{ fontSize: '36px', marginBottom: '10px' }}>🔍</div>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: '#111827' }}>
+                  No keywords tracked yet
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#6b7280', maxWidth: '420px' }}>
+                  Add search terms (e.g. "seo agency addis ababa") to monitor your ranking positions on Google Ethiopia.
+                </p>
+                <button
+                  id="empty-add-keyword-button"
+                  onClick={handleOpenCreateKeywordModal}
+                  style={primaryAddBtnStyle}
+                >
+                  Track your first keyword
+                </button>
+              </div>
+            ) : (
+              <div style={tableContainerStyle}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                      <th style={thStyle}>Keyword / Query</th>
+                      <th style={thStyle}>Search Engine</th>
+                      <th style={thStyle}>Location & Lang</th>
+                      <th style={thStyle}>Device</th>
+                      <th style={thStyle}>Status</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {keywords.map((kw) => (
+                      <tr key={kw.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={tdStyle}>
+                          <span style={{ fontWeight: 600, color: '#0f172a', fontSize: '15px' }}>
+                            {kw.keyword}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={engineBadgeStyle}>
+                            Google
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={countryBadgeStyle}>
+                            🇪🇹 {kw.country} · {kw.language.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={deviceBadgeStyle}>
+                            {kw.device === 'desktop' ? '💻 Desktop' : '📱 Mobile'}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          {kw.is_active ? (
+                            <span style={activeStatusStyle}>● Active</span>
+                          ) : (
+                            <span style={inactiveStatusStyle}>○ Paused</span>
+                          )}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>
+                          <button
+                            id={`edit-kw-${kw.id}`}
+                            onClick={() => handleOpenEditKeywordModal(kw)}
+                            style={actionInlineBtnStyle}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            id={`delete-kw-${kw.id}`}
+                            onClick={() => setDeletingKeyword(kw)}
+                            style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         )}
 
-        {/* Loading State */}
-        {isLoadingProjects ? (
-          <div style={loadingStateStyle}>
-            <p style={{ color: '#6b7280', fontSize: '15px' }}>Loading projects from Neon PostgreSQL...</p>
-          </div>
-        ) : projects.length === 0 ? (
-          /* Empty State */
-          <div style={emptyStateCardStyle}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>📁</div>
-            <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 600, color: '#111827' }}>
-              No projects yet
-            </h4>
-            <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#6b7280', maxWidth: '400px' }}>
-              Create your first project to begin tracking Ethiopian search keywords, search intent, and rankings.
-            </p>
+        {/* SECTION 2: PROJECTS MANAGEMENT */}
+        <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
+                All Projects {projects.length > 0 && `(${projects.length})`}
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
+                Select or manage your tracked websites.
+              </p>
+            </div>
             <button
-              id="empty-add-project-button"
-              onClick={handleOpenCreateModal}
+              id="add-project-button"
+              onClick={handleOpenCreateProjectModal}
               style={primaryAddBtnStyle}
             >
-              Create your first project
+              + Add Project
             </button>
           </div>
-        ) : (
-          /* Projects Grid */
-          <div style={projectsGridStyle}>
-            {projects.map((project) => {
-              const isSelected = selectedProject?.id === project.id;
-              return (
-                <div
-                  key={project.id}
-                  style={{
-                    ...projectCardStyle,
-                    borderColor: isSelected ? '#3b82f6' : '#e5e7eb',
-                    backgroundColor: isSelected ? '#f8faff' : '#ffffff',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: 700, color: '#111827' }}>
-                        {project.name}
-                      </h4>
-                      <a
-                        href={project.website_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#2563eb', fontSize: '13px', textDecoration: 'none', wordBreak: 'break-all' }}
-                      >
-                        {project.website_url}
-                      </a>
+
+          {projectError && (
+            <div style={errorAlertStyle}>
+              {projectError}
+            </div>
+          )}
+
+          {isLoadingProjects ? (
+            <div style={loadingStateStyle}>
+              <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading projects from Neon PostgreSQL...</p>
+            </div>
+          ) : projects.length === 0 ? (
+            <div style={emptyStateCardStyle}>
+              <div style={{ fontSize: '36px', marginBottom: '10px' }}>📁</div>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: '#111827' }}>
+                No projects yet
+              </h4>
+              <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#6b7280', maxWidth: '400px' }}>
+                Create your first project to start tracking keywords and rankings.
+              </p>
+              <button
+                id="empty-add-project-button"
+                onClick={handleOpenCreateProjectModal}
+                style={primaryAddBtnStyle}
+              >
+                Create your first project
+              </button>
+            </div>
+          ) : (
+            <div style={projectsGridStyle}>
+              {projects.map((project) => {
+                const isSelected = selectedProject?.id === project.id;
+                return (
+                  <div
+                    key={project.id}
+                    style={{
+                      ...projectCardStyle,
+                      borderColor: isSelected ? '#3b82f6' : '#e5e7eb',
+                      backgroundColor: isSelected ? '#f8faff' : '#ffffff',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: 700, color: '#111827' }}>
+                          {project.name}
+                        </h4>
+                        <a
+                          href={project.website_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#2563eb', fontSize: '13px', textDecoration: 'none', wordBreak: 'break-all' }}
+                        >
+                          {project.website_url}
+                        </a>
+                      </div>
+                      {isSelected && (
+                        <span style={activeTagStyle}>Active</span>
+                      )}
                     </div>
-                    {isSelected && (
-                      <span style={activeTagStyle}>Active</span>
-                    )}
-                  </div>
 
-                  <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
-                    Created on {new Date(project.created_at).toLocaleDateString()}
-                  </div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
+                      Created on {new Date(project.created_at).toLocaleDateString()}
+                    </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
-                    {!isSelected ? (
-                      <button
-                        onClick={() => setSelectedProject(project)}
-                        style={selectBtnStyle}
-                      >
-                        Select
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb' }}>● Selected</span>
-                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
+                      {!isSelected ? (
+                        <button
+                          onClick={() => setSelectedProject(project)}
+                          style={selectBtnStyle}
+                        >
+                          Select
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb' }}>● Selected</span>
+                      )}
 
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => handleOpenEditModal(project)}
-                        style={cardActionBtnStyle}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        id={`delete-btn-${project.id}`}
-                        onClick={() => setDeletingProject(project)}
-                        style={{ ...cardActionBtnStyle, color: '#ef4444' }}
-                      >
-                        Delete
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleOpenEditProjectModal(project)}
+                          style={cardActionBtnStyle}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          id={`delete-btn-${project.id}`}
+                          onClick={() => setDeletingProject(project)}
+                          style={{ ...cardActionBtnStyle, color: '#ef4444' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </section>
       </main>
 
       {/* Create / Edit Project Modal */}
       <ProjectFormModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
         onSave={handleSaveProject}
         projectToEdit={editingProject}
       />
 
-      {/* Custom Delete Confirmation Modal */}
+      {/* Create / Edit Keyword Modal */}
+      {selectedProject && (
+        <KeywordFormModal
+          isOpen={isKeywordModalOpen}
+          onClose={() => setIsKeywordModalOpen(false)}
+          onSave={handleSaveKeyword}
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          keywordToEdit={editingKeyword}
+        />
+      )}
+
+      {/* Project Delete Modal */}
       {deletingProject && (
         <div style={modalOverlayStyle}>
           <div style={deleteModalBoxStyle}>
@@ -310,7 +515,7 @@ export const Dashboard: React.FC = () => {
               Delete Project
             </h3>
             <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4b5563', lineHeight: 1.5 }}>
-              Are you sure you want to delete <strong>{deletingProject.name}</strong> ({deletingProject.website_url})? This action cannot be undone.
+              Are you sure you want to delete <strong>{deletingProject.name}</strong> ({deletingProject.website_url})? All tracked keywords under this project will also be removed.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
@@ -321,17 +526,53 @@ export const Dashboard: React.FC = () => {
                 Cancel
               </button>
               <button
-                id="confirm-delete-button"
+                id="confirm-delete-project-button"
                 type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
+                onClick={handleConfirmDeleteProject}
+                disabled={isDeletingProject}
                 style={{
                   ...confirmDeleteBtnStyle,
-                  opacity: isDeleting ? 0.7 : 1,
-                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  opacity: isDeletingProject ? 0.7 : 1,
+                  cursor: isDeletingProject ? 'not-allowed' : 'pointer',
                 }}
               >
-                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                {isDeletingProject ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyword Delete Modal */}
+      {deletingKeyword && (
+        <div style={modalOverlayStyle}>
+          <div style={deleteModalBoxStyle}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+              Delete Keyword
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4b5563', lineHeight: 1.5 }}>
+              Are you sure you want to stop tracking <strong>"{deletingKeyword.keyword}"</strong>?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setDeletingKeyword(null)}
+                style={cancelDeleteBtnStyle}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-delete-keyword-button"
+                type="button"
+                onClick={handleConfirmDeleteKeyword}
+                disabled={isDeletingKeyword}
+                style={{
+                  ...confirmDeleteBtnStyle,
+                  opacity: isDeletingKeyword ? 0.7 : 1,
+                  cursor: isDeletingKeyword ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isDeletingKeyword ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
           </div>
@@ -340,51 +581,6 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
-
-const modalOverlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: '16px',
-};
-
-const deleteModalBoxStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  borderRadius: '12px',
-  padding: '24px',
-  width: '100%',
-  maxWidth: '420px',
-  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-};
-
-const cancelDeleteBtnStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  backgroundColor: '#f3f4f6',
-  color: '#374151',
-  border: '1px solid #d1d5db',
-  borderRadius: '6px',
-  fontSize: '14px',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const confirmDeleteBtnStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  backgroundColor: '#dc2626',
-  color: '#ffffff',
-  border: 'none',
-  borderRadius: '6px',
-  fontSize: '14px',
-  fontWeight: 600,
-};
-
 
 // Styles
 const headerStyle: React.CSSProperties = {
@@ -455,12 +651,12 @@ const primaryAddBtnStyle: React.CSSProperties = {
 };
 
 const secondaryActionBtnStyle: React.CSSProperties = {
-  padding: '8px 14px',
+  padding: '10px 16px',
   backgroundColor: '#ffffff',
   color: '#374151',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  fontSize: '13px',
+  fontSize: '14px',
   fontWeight: 600,
   cursor: 'pointer',
 };
@@ -477,7 +673,7 @@ const errorAlertStyle: React.CSSProperties = {
 
 const loadingStateStyle: React.CSSProperties = {
   textAlign: 'center',
-  padding: '48px 0',
+  padding: '36px 0',
   backgroundColor: '#ffffff',
   borderRadius: '12px',
   border: '1px solid #e5e7eb',
@@ -485,13 +681,89 @@ const loadingStateStyle: React.CSSProperties = {
 
 const emptyStateCardStyle: React.CSSProperties = {
   textAlign: 'center',
-  padding: '48px 24px',
+  padding: '40px 24px',
   backgroundColor: '#ffffff',
   borderRadius: '12px',
   border: '1px dashed #d1d5db',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
+};
+
+const tableContainerStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  borderRadius: '12px',
+  border: '1px solid #e2e8f0',
+  overflow: 'hidden',
+  boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '14px 16px',
+  fontSize: '12px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '14px 16px',
+  verticalAlign: 'middle',
+};
+
+const engineBadgeStyle: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '12px',
+  fontWeight: 600,
+  color: '#1e293b',
+  backgroundColor: '#f1f5f9',
+  padding: '3px 8px',
+  borderRadius: '6px',
+};
+
+const countryBadgeStyle: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '12px',
+  fontWeight: 600,
+  color: '#0369a1',
+  backgroundColor: '#e0f2fe',
+  padding: '3px 8px',
+  borderRadius: '6px',
+};
+
+const deviceBadgeStyle: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '12px',
+  fontWeight: 500,
+  color: '#475569',
+};
+
+const activeStatusStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 700,
+  color: '#16a34a',
+  backgroundColor: '#dcfce7',
+  padding: '3px 8px',
+  borderRadius: '12px',
+};
+
+const inactiveStatusStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 600,
+  color: '#64748b',
+  backgroundColor: '#f1f5f9',
+  padding: '3px 8px',
+  borderRadius: '12px',
+};
+
+const actionInlineBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: '#2563eb',
+  fontSize: '13px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '4px 8px',
 };
 
 const projectsGridStyle: React.CSSProperties = {
@@ -539,4 +811,48 @@ const cardActionBtnStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   padding: '4px 8px',
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
+  padding: '16px',
+};
+
+const deleteModalBoxStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  borderRadius: '12px',
+  padding: '24px',
+  width: '100%',
+  maxWidth: '420px',
+  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+};
+
+const cancelDeleteBtnStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  backgroundColor: '#f3f4f6',
+  color: '#374151',
+  border: '1px solid #d1d5db',
+  borderRadius: '6px',
+  fontSize: '14px',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+const confirmDeleteBtnStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  backgroundColor: '#dc2626',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '6px',
+  fontSize: '14px',
+  fontWeight: 600,
 };
