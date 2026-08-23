@@ -80,3 +80,69 @@ class Keyword(models.Model):
 
     def __str__(self):
         return f"{self.keyword} ({self.project.name} - {self.country}/{self.language})"
+
+
+class KeywordRanking(models.Model):
+    """
+    KeywordRanking model representing a single ranking observation in search results.
+    Relationship: Keyword 1 ─────── * KeywordRanking
+    Ownership follows: ranking.keyword -> keyword.project -> project.owner
+    """
+    keyword = models.ForeignKey(
+        Keyword,
+        on_delete=models.CASCADE,
+        related_name='rankings',
+        help_text='The tracked keyword this ranking observation belongs to.'
+    )
+    position = models.PositiveIntegerField(
+        help_text='Observed ranking position in search results (e.g. 1 for rank #1).'
+    )
+    ranking_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='The exact landing page URL found ranking on the search engine.'
+    )
+    search_engine = models.CharField(
+        max_length=50,
+        choices=SearchEngine.choices,
+        default=SearchEngine.GOOGLE,
+        help_text='Target search engine.'
+    )
+    country = models.CharField(
+        max_length=10,
+        choices=Country.choices,
+        default=Country.ET,
+        help_text='Target country code.'
+    )
+    language = models.CharField(
+        max_length=10,
+        choices=Language.choices,
+        default=Language.EN,
+        help_text='Target search language code.'
+    )
+    device = models.CharField(
+        max_length=20,
+        choices=Device.choices,
+        default=Device.DESKTOP,
+        help_text='Target device type.'
+    )
+    recorded_at = models.DateTimeField(
+        help_text='Timestamp when the ranking observation occurred.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'seo_keyword_rankings'
+        verbose_name = 'keyword ranking'
+        verbose_name_plural = 'keyword rankings'
+        ordering = ['-recorded_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['keyword', 'search_engine', 'country', 'language', 'device', 'recorded_at'],
+                name='unique_ranking_observation_per_time'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.keyword.keyword} - Pos #{self.position} ({self.recorded_at})"

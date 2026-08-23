@@ -1,9 +1,10 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
 from apps.projects.models import Project
-from apps.seo.models import Keyword, SearchEngine, Country, Language, Device
+from apps.seo.models import Keyword, KeywordRanking, SearchEngine, Country, Language, Device
 
 User = get_user_model()
 
@@ -199,7 +200,6 @@ class KeywordAPITests(TestCase):
     def test_project_filtering_works(self):
         """15. Project filtering works via ?project_id=."""
         self.client.force_authenticate(user=self.user_a)
-        # Create a second project for User A
         project_a2 = Project.objects.create(
             owner=self.user_a,
             name='Project A2',
@@ -237,3 +237,247 @@ class KeywordAPITests(TestCase):
         res = self.client.post(self.keywords_url, payload, format='json')
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue('keyword' in res.data or 'non_field_errors' in res.data)
+
+
+class KeywordRankingAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.rankings_url = '/api/seo/rankings/'
+
+        self.user_a = User.objects.create_user(
+            email='ranking_user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='ranking_user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Media',
+            website_url='https://shega.co'
+        )
+
+        self.keyword_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='ethiopia tech news'
+        )
+        self.keyword_b = Keyword.objects.create(
+            project=self.project_b,
+            keyword='addis ababa startup'
+        )
+
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.keyword_a,
+            position=12,
+            ranking_url='https://addisinsight.net/tech-news',
+            recorded_at=timezone.now() - timezone.timedelta(days=1)
+        )
+        self.ranking_b = KeywordRanking.objects.create(
+            keyword=self.keyword_b,
+            position=5,
+            ranking_url='https://shega.co/startups',
+            recorded_at=timezone.now() - timezone.timedelta(days=1)
+        )
+
+    def test_unauthenticated_get_rejected(self):
+        """1. Unauthenticated GET is rejected (401)."""
+        res = self.client.get(self.rankings_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_a_can_create_ranking_for_own_keyword(self):
+        """2. User A can create a ranking for User A's keyword."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'keyword': self.keyword_a.id,
+            'position': 8,
+            'ranking_url': 'https://addisinsight.net/tech-news-top',
+            'search_engine': 'google',
+            'country': 'ET',
+            'language': 'en',
+            'device': 'desktop',
+            'recorded_at': timezone.now().isoformat()
+        }
+        res = self.client.post(self.rankings_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['position'], 8)
+        self.assertEqual(res.data['keyword'], self.keyword_a.id)
+
+    def test_user_b_can_create_ranking_for_own_keyword(self):
+        """3. User B can create a ranking for User B's keyword."""
+        self.client.force_authenticate(user=self.user_b)
+        payload = {
+            'keyword': self.keyword_b.id,
+            'position': 3,
+            'ranking_url': 'https://shega.co/addis-startup-top',
+            'recorded_at': timezone.now().isoformat()
+        }
+        res = self.client.post(self.rankings_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['position'], 3)
+
+    def test_user_a_cannot_create_ranking_for_user_b_keyword(self):
+        """4. User A cannot create a ranking for User B's keyword (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'keyword': self.keyword_b.id,  # Owned by User B!
+            'position': 1,
+            'recorded_at': timezone.now().isoformat()
+        }
+        res = self.client.post(self.rankings_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('keyword', res.data)
+
+    def test_user_a_can_list_own_rankings(self):
+        """5. User A can list their own rankings."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.rankings_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [r['id'] for r in res.data]
+        self.assertIn(self.ranking_a.id, ids)
+        self.assertNotIn(self.ranking_b.id, ids)
+
+    def test_user_a_cannot_see_user_b_rankings(self):
+        """6. User A cannot see User B's rankings."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.rankings_url)
+        ids = [r['id'] for r in res.data]
+        self.assertNotIn(self.ranking_b.id, ids)
+
+    def test_user_a_cannot_retrieve_user_b_ranking(self):
+        """7. User A cannot retrieve User B's ranking (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'/api/seo/rankings/{self.ranking_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_a_cannot_modify_user_b_ranking(self):
+        """8. User A cannot modify User B's ranking (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/rankings/{self.ranking_b.id}/',
+            {'position': 99},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.ranking_b.refresh_from_db()
+        self.assertEqual(self.ranking_b.position, 5)
+
+    def test_user_a_cannot_delete_user_b_ranking(self):
+        """9. User A cannot delete User B's ranking (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/rankings/{self.ranking_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(KeywordRanking.objects.filter(id=self.ranking_b.id).exists())
+
+    def test_user_a_can_update_own_ranking(self):
+        """10. User A can update their own ranking."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/rankings/{self.ranking_a.id}/',
+            {'position': 10, 'ranking_url': 'https://addisinsight.net/updated-url'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.ranking_a.refresh_from_db()
+        self.assertEqual(self.ranking_a.position, 10)
+        self.assertEqual(self.ranking_a.ranking_url, 'https://addisinsight.net/updated-url')
+
+    def test_user_a_can_delete_own_ranking(self):
+        """11. User A can delete their own ranking."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/rankings/{self.ranking_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(KeywordRanking.objects.filter(id=self.ranking_a.id).exists())
+
+    def test_invalid_position_rejected(self):
+        """12. Invalid position is rejected (<= 0 or string)."""
+        self.client.force_authenticate(user=self.user_a)
+        for bad_pos in [0, -1, 9999]:
+            res = self.client.post(
+                self.rankings_url,
+                {'keyword': self.keyword_a.id, 'position': bad_pos, 'recorded_at': timezone.now().isoformat()},
+                format='json'
+            )
+            self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_ranking_url_rejected(self):
+        """13. Invalid ranking URL is rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(
+            self.rankings_url,
+            {'keyword': self.keyword_a.id, 'position': 10, 'ranking_url': 'not_a_valid_url', 'recorded_at': timezone.now().isoformat()},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_keyword_filtering_works(self):
+        """14. Keyword filtering works via ?keyword_id=."""
+        self.client.force_authenticate(user=self.user_a)
+        keyword_a2 = Keyword.objects.create(
+            project=self.project_a,
+            keyword='another keyword a'
+        )
+        ranking_a2 = KeywordRanking.objects.create(
+            keyword=keyword_a2,
+            position=20,
+            recorded_at=timezone.now()
+        )
+
+        res = self.client.get(f'{self.rankings_url}?keyword_id={self.keyword_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [r['id'] for r in res.data]
+        self.assertIn(self.ranking_a.id, ids)
+        self.assertNotIn(ranking_a2.id, ids)
+
+    def test_cross_user_keyword_filtering_does_not_leak_data(self):
+        """15. Cross-user keyword filtering does not leak data (returns [])."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.rankings_url}?keyword_id={self.keyword_b.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 0)
+
+    def test_duplicate_observations_handled(self):
+        """16. Duplicate observations are rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        now_ts = timezone.now()
+        KeywordRanking.objects.create(
+            keyword=self.keyword_a,
+            position=15,
+            search_engine=SearchEngine.GOOGLE,
+            country=Country.ET,
+            language=Language.EN,
+            device=Device.DESKTOP,
+            recorded_at=now_ts
+        )
+        payload = {
+            'keyword': self.keyword_a.id,
+            'position': 16,
+            'search_engine': 'google',
+            'country': 'ET',
+            'language': 'en',
+            'device': 'desktop',
+            'recorded_at': now_ts.isoformat()
+        }
+        res = self.client.post(self.rankings_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_ranking_history_remains_associated_with_correct_keyword(self):
+        """17. Ranking history remains associated with correct keyword."""
+        self.assertEqual(self.ranking_a.keyword, self.keyword_a)
+        self.assertEqual(self.ranking_a.keyword.project, self.project_a)
+
+    def test_deleting_keyword_removes_ranking_history_via_cascade(self):
+        """18. Deleting a keyword removes its ranking history through CASCADE."""
+        ranking_id = self.ranking_a.id
+        self.keyword_a.delete()
+        self.assertFalse(KeywordRanking.objects.filter(id=ranking_id).exists())

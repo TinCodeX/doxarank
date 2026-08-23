@@ -1,6 +1,6 @@
 from rest_framework import viewsets, permissions
-from .models import Keyword
-from .serializers import KeywordSerializer
+from .models import Keyword, KeywordRanking
+from .serializers import KeywordSerializer, KeywordRankingSerializer
 
 
 class KeywordViewSet(viewsets.ModelViewSet):
@@ -25,5 +25,31 @@ class KeywordViewSet(viewsets.ModelViewSet):
         project_id = self.request.query_params.get('project_id')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
+
+        return queryset
+
+
+class KeywordRankingViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for KeywordRanking operations.
+    
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by `keyword__project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports optional `keyword_id` filtering without bypassing ownership isolation.
+    """
+    serializer_class = KeywordRankingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only rankings belonging to keywords owned by the authenticated user.
+        """
+        queryset = KeywordRanking.objects.filter(keyword__project__owner=self.request.user)
+
+        keyword_id = self.request.query_params.get('keyword_id')
+        if keyword_id:
+            queryset = queryset.filter(keyword_id=keyword_id)
 
         return queryset
