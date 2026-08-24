@@ -9,8 +9,10 @@ import type { Ranking, CreateRankingPayload, UpdateRankingPayload } from '../typ
 import { ProjectFormModal } from '../components/ProjectFormModal';
 import { KeywordFormModal } from '../components/KeywordFormModal';
 import { RankingFormModal } from '../components/RankingFormModal';
+import { SiteAuditPanel } from '../components/SiteAuditPanel';
 
 export const Dashboard: React.FC = () => {
+
   const { user, logout } = useAuth();
 
   // Project state
@@ -668,13 +670,19 @@ export const Dashboard: React.FC = () => {
           </section>
         )}
 
-        {/* SECTION 3: PROJECTS MANAGEMENT */}
+        {/* SECTION 3: SITE AUDIT (Visible when a project is selected) */}
+        {selectedProject && (
+          <SiteAuditPanel project={selectedProject} />
+        )}
+
+        {/* SECTION 4: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
                 All Projects {projects.length > 0 && `(${projects.length})`}
               </h3>
+
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
                 Select or manage your tracked websites.
               </p>
