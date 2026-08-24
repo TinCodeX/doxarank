@@ -2,9 +2,11 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
-    SiteAudit, AuditIssue, AuditStatus, IssueSeverity
+    SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
+    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus
 )
 from apps.projects.models import Project
+
 
 
 class KeywordSerializer(serializers.ModelSerializer):
@@ -252,4 +254,61 @@ class AuditIssueSerializer(serializers.ModelSerializer):
         if not trimmed:
             raise serializers.ValidationError("Title cannot be blank.")
         return trimmed
+
+
+class SearchConsoleConnectionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SearchConsoleConnection model.
+    Enforces strict project ownership validation and property URL hygiene.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+
+    class Meta:
+        model = SearchConsoleConnection
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'property_url',
+            'permission_level',
+            'is_connected',
+            'connected_at',
+            'last_synced_at',
+            'sync_status',
+            'error_message',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = ('id', 'project_name', 'project_website_url', 'connected_at', 'created_at', 'updated_at')
+
+    def validate_property_url(self, value):
+        trimmed = value.strip()
+        if not trimmed:
+            raise serializers.ValidationError("Property URL cannot be blank.")
+        if len(trimmed) > 500:
+            raise serializers.ValidationError("Property URL cannot exceed 500 characters.")
+        return trimmed
+
+    def validate_project(self, value):
+        """
+        Critical security boundary:
+        Ensure the target project is owned by the currently authenticated user.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to connect Search Console to this project.")
+        return value
+
+    def validate(self, attrs):
+        project = attrs.get('project') or (self.instance.project if self.instance else None)
+        if project and not self.instance:
+            if SearchConsoleConnection.objects.filter(project=project).exists():
+                raise serializers.ValidationError({
+                    'project': "A Search Console connection already exists for this project."
+                })
+        return attrs
+
 

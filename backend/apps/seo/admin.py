@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Keyword, KeywordRanking, SiteAudit, AuditIssue
+from .models import (
+    Keyword, KeywordRanking, SiteAudit, AuditIssue,
+    SearchConsoleConnection
+)
 
 
 
@@ -116,4 +119,35 @@ class AuditIssueAdmin(admin.ModelAdmin):
     )
     readonly_fields = ('created_at',)
     ordering = ('-created_at',)
+
+
+@admin.register(SearchConsoleConnection)
+class SearchConsoleConnectionAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'property_url',
+        'permission_level',
+        'is_connected',
+        'sync_status',
+        'last_synced_at',
+        'created_at'
+    )
+    list_filter = (
+        'is_connected',
+        'sync_status',
+        'permission_level',
+        'created_at',
+        'last_synced_at'
+    )
+    search_fields = (
+        'property_url',
+        'project__name',
+        'project__website_url',
+        'project__owner__email',
+        'error_message'
+    )
+    readonly_fields = ('connected_at', 'created_at', 'updated_at')
+    ordering = ('-created_at',)
+
 

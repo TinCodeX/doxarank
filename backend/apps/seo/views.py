@@ -1,8 +1,12 @@
 from rest_framework import viewsets, permissions
-from .models import Keyword, KeywordRanking, SiteAudit, AuditIssue
+from .models import (
+    Keyword, KeywordRanking, SiteAudit, AuditIssue,
+    SearchConsoleConnection
+)
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
-    SiteAuditSerializer, AuditIssueSerializer
+    SiteAuditSerializer, AuditIssueSerializer,
+    SearchConsoleConnectionSerializer
 )
 
 
@@ -108,4 +112,31 @@ class AuditIssueViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(audit_id=audit_id)
 
         return queryset
+
+
+class SearchConsoleConnectionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for SearchConsoleConnection operations.
+    
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports optional `project_id` filtering without bypassing ownership isolation.
+    """
+    serializer_class = SearchConsoleConnectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only Search Console connections belonging to projects owned by the authenticated user.
+        """
+        queryset = SearchConsoleConnection.objects.filter(project__owner=self.request.user)
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        return queryset
+
 

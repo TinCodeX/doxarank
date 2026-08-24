@@ -283,3 +283,82 @@ class AuditIssue(models.Model):
     def __str__(self):
         return f"[{self.severity.upper()}] {self.title} (Audit #{self.audit_id})"
 
+
+class SearchConsoleSyncStatus(models.TextChoices):
+    IDLE = 'idle', 'Idle'
+    SYNCING = 'syncing', 'Syncing'
+    SUCCESS = 'success', 'Success'
+    FAILED = 'failed', 'Failed'
+
+
+class SearchConsolePermission(models.TextChoices):
+    SITE_OWNER = 'siteOwner', 'Site Owner'
+    SITE_FULL_USER = 'siteFullUser', 'Full User'
+    SITE_RESTRICTED_USER = 'siteRestrictedUser', 'Restricted User'
+    SITE_UNVERIFIED_USER = 'siteUnverifiedUser', 'Unverified User'
+
+
+class SearchConsoleConnection(models.Model):
+    """
+    SearchConsoleConnection model representing a link between a DoxaRank Project
+    and a Google Search Console verified property.
+    Relationship: Project 1 ─────── 1 SearchConsoleConnection (OneToOne)
+    Ownership follows: connection.project -> project.owner
+    """
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='search_console_connection',
+        help_text='The project linked to this Search Console property.'
+    )
+    property_url = models.CharField(
+        max_length=500,
+        help_text='The Search Console site URL or domain property (e.g. "sc-domain:example.com" or "https://example.com/").'
+    )
+    permission_level = models.CharField(
+        max_length=50,
+        choices=SearchConsolePermission.choices,
+        default=SearchConsolePermission.SITE_OWNER,
+        help_text='Permission level of the authenticated user on this Search Console property.'
+    )
+    is_connected = models.BooleanField(
+        default=True,
+        help_text='Whether this project is actively connected to Google Search Console.'
+    )
+    connected_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the Search Console connection was established.'
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp of the most recent data sync from Search Console.'
+    )
+    sync_status = models.CharField(
+        max_length=20,
+        choices=SearchConsoleSyncStatus.choices,
+        default=SearchConsoleSyncStatus.IDLE,
+        help_text='Current data synchronization status.'
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Error details if the connection or last sync failed.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_search_console_connections'
+        verbose_name = 'Search Console connection'
+        verbose_name_plural = 'Search Console connections'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'is_connected'], name='seo_gsc_proj_conn_idx'),
+            models.Index(fields=['sync_status'], name='seo_gsc_sync_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"GSC: {self.property_url} ({self.project.name})"
+
+

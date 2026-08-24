@@ -6,10 +6,12 @@ from rest_framework import status
 from apps.projects.models import Project
 from apps.seo.models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
-    SiteAudit, AuditIssue, AuditStatus, IssueSeverity
+    SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
+    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus
 )
 
 User = get_user_model()
+
 
 
 
@@ -812,4 +814,203 @@ class AuditIssueAPITests(TestCase):
         issue_id = self.issue_a.id
         self.audit_a.delete()
         self.assertFalse(AuditIssue.objects.filter(id=issue_id).exists())
+
+
+class SearchConsoleConnectionAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.gsc_url = '/api/seo/search-console/'
+
+        self.user_a = User.objects.create_user(
+            email='gsc_user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='gsc_user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Media',
+            website_url='https://shega.co'
+        )
+
+        self.conn_a = SearchConsoleConnection.objects.create(
+            project=self.project_a,
+            property_url='sc-domain:addisinsight.net',
+            permission_level=SearchConsolePermission.SITE_OWNER,
+            is_connected=True
+        )
+        self.conn_b = SearchConsoleConnection.objects.create(
+            project=self.project_b,
+            property_url='https://shega.co/',
+            permission_level=SearchConsolePermission.SITE_FULL_USER,
+            is_connected=True
+        )
+
+    def test_unauthenticated_get_rejected(self):
+        """1. Unauthenticated GET is rejected (401)."""
+        res = self.client.get(self.gsc_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_a_can_create_connection_for_own_project(self):
+        """2. User A can create a GSC connection for own project."""
+        self.client.force_authenticate(user=self.user_a)
+        project_a2 = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Tech Hub',
+            website_url='https://addistech.et'
+        )
+        payload = {
+            'project': project_a2.id,
+            'property_url': 'sc-domain:addistech.et',
+            'permission_level': 'siteOwner'
+        }
+        res = self.client.post(self.gsc_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['property_url'], 'sc-domain:addistech.et')
+        self.assertEqual(res.data['project_name'], 'Addis Tech Hub')
+
+    def test_user_b_can_create_connection_for_own_project(self):
+        """3. User B can create a GSC connection for own project."""
+        self.client.force_authenticate(user=self.user_b)
+        project_b2 = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Venture',
+            website_url='https://shega.co/venture'
+        )
+        payload = {
+            'project': project_b2.id,
+            'property_url': 'https://shega.co/venture/',
+            'permission_level': 'siteFullUser'
+        }
+        res = self.client.post(self.gsc_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['project'], project_b2.id)
+
+    def test_user_a_cannot_create_connection_for_user_b_project(self):
+        """4. User A cannot create a GSC connection for User B's project (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        project_b_new = Project.objects.create(
+            owner=self.user_b,
+            name='User B Extra Proj',
+            website_url='https://b-extra.com'
+        )
+        payload = {
+            'project': project_b_new.id,
+            'property_url': 'sc-domain:b-extra.com'
+        }
+        res = self.client.post(self.gsc_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('project', res.data)
+
+    def test_user_a_only_sees_own_connection(self):
+        """5. User A only sees their own GSC connections in list."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.gsc_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [c['id'] for c in res.data]
+        self.assertIn(self.conn_a.id, ids)
+        self.assertNotIn(self.conn_b.id, ids)
+
+    def test_user_a_cannot_retrieve_user_b_connection(self):
+        """6. User A cannot retrieve User B's GSC connection (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.gsc_url}{self.conn_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_a_cannot_modify_user_b_connection(self):
+        """7. User A cannot modify User B's GSC connection (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'{self.gsc_url}{self.conn_b.id}/',
+            {'property_url': 'sc-domain:hacked.com'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.conn_b.refresh_from_db()
+        self.assertEqual(self.conn_b.property_url, 'https://shega.co/')
+
+    def test_user_a_cannot_delete_user_b_connection(self):
+        """8. User A cannot delete User B's GSC connection (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.gsc_url}{self.conn_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(SearchConsoleConnection.objects.filter(id=self.conn_b.id).exists())
+
+    def test_user_a_can_update_own_connection(self):
+        """9. User A can update their own GSC connection."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'{self.gsc_url}{self.conn_a.id}/',
+            {'sync_status': 'success', 'is_connected': True},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.conn_a.refresh_from_db()
+        self.assertEqual(self.conn_a.sync_status, 'success')
+
+    def test_user_a_can_delete_own_connection(self):
+        """10. User A can delete / disconnect own GSC connection."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.gsc_url}{self.conn_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SearchConsoleConnection.objects.filter(id=self.conn_a.id).exists())
+
+    def test_project_filtering_works(self):
+        """11. Project filtering works (?project_id=)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.gsc_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [c['id'] for c in res.data]
+        self.assertIn(self.conn_a.id, ids)
+
+    def test_cross_user_project_filtering_is_isolated(self):
+        """12. Cross-user project filtering is isolated (returns [])."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.gsc_url}?project_id={self.project_b.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 0)
+
+    def test_duplicate_connection_rejected(self):
+        """13. Duplicate connection for the same project is rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project': self.project_a.id,
+            'property_url': 'sc-domain:duplicate.com'
+        }
+        res = self.client.post(self.gsc_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_data_rejected(self):
+        """14. Blank property_url or invalid permission level is rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        project_a_temp = Project.objects.create(
+            owner=self.user_a,
+            name='Temp Proj',
+            website_url='https://temp.et'
+        )
+        res = self.client.post(
+            self.gsc_url,
+            {'project': project_a_temp.id, 'property_url': '   '},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cascade_deletion(self):
+        """15. Cascade deletion on project delete."""
+        conn_id = self.conn_a.id
+        self.project_a.delete()
+        self.assertFalse(SearchConsoleConnection.objects.filter(id=conn_id).exists())
+
 
