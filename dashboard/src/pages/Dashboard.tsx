@@ -10,6 +10,7 @@ import { ProjectFormModal } from '../components/ProjectFormModal';
 import { KeywordFormModal } from '../components/KeywordFormModal';
 import { RankingFormModal } from '../components/RankingFormModal';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
+import { SearchConsolePanel } from '../components/SearchConsolePanel';
 
 export const Dashboard: React.FC = () => {
 
@@ -675,7 +676,12 @@ export const Dashboard: React.FC = () => {
           <SiteAuditPanel project={selectedProject} />
         )}
 
-        {/* SECTION 4: PROJECTS MANAGEMENT */}
+        {/* SECTION 4: GOOGLE SEARCH CONSOLE (Visible when a project is selected) */}
+        {selectedProject && (
+          <SearchConsolePanel project={selectedProject} />
+        )}
+
+        {/* SECTION 5: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
