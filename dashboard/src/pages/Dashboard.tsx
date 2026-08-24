@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, createProject, updateProject, deleteProject } from '../api/projects';
 import { getKeywords, createKeyword, updateKeyword, deleteKeyword } from '../api/keywords';
+import { getRankings, createRanking, updateRanking, deleteRanking } from '../api/rankings';
 import type { Project, CreateProjectPayload } from '../types/project';
 import type { Keyword, CreateKeywordPayload, UpdateKeywordPayload } from '../types/keyword';
+import type { Ranking, CreateRankingPayload, UpdateRankingPayload } from '../types/ranking';
 import { ProjectFormModal } from '../components/ProjectFormModal';
 import { KeywordFormModal } from '../components/KeywordFormModal';
+import { RankingFormModal } from '../components/RankingFormModal';
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -24,6 +27,7 @@ export const Dashboard: React.FC = () => {
 
   // Keyword state
   const [keywords, setKeywords] = useState<Keyword[]>([]);
+  const [selectedKeyword, setSelectedKeyword] = useState<Keyword | null>(null);
   const [isLoadingKeywords, setIsLoadingKeywords] = useState<boolean>(false);
   const [keywordError, setKeywordError] = useState<string | null>(null);
 
@@ -32,6 +36,17 @@ export const Dashboard: React.FC = () => {
   const [editingKeyword, setEditingKeyword] = useState<Keyword | null>(null);
   const [deletingKeyword, setDeletingKeyword] = useState<Keyword | null>(null);
   const [isDeletingKeyword, setIsDeletingKeyword] = useState(false);
+
+  // Ranking state
+  const [rankings, setRankings] = useState<Ranking[]>([]);
+  const [isLoadingRankings, setIsLoadingRankings] = useState<boolean>(false);
+  const [rankingError, setRankingError] = useState<string | null>(null);
+
+  // Ranking Modal state
+  const [isRankingModalOpen, setIsRankingModalOpen] = useState(false);
+  const [editingRanking, setEditingRanking] = useState<Ranking | null>(null);
+  const [deletingRanking, setDeletingRanking] = useState<Ranking | null>(null);
+  const [isDeletingRanking, setIsDeletingRanking] = useState(false);
 
   // Load user projects on initial mount
   const fetchUserProjects = async () => {
@@ -65,9 +80,16 @@ export const Dashboard: React.FC = () => {
   const fetchProjectKeywords = async (projectId: number) => {
     setIsLoadingKeywords(true);
     setKeywordError(null);
+    setSelectedKeyword(null);
+    setRankings([]);
     try {
       const data = await getKeywords(projectId);
       setKeywords(data);
+      if (data.length > 0) {
+        setSelectedKeyword(data[0]);
+      } else {
+        setSelectedKeyword(null);
+      }
     } catch (err: any) {
       setKeywordError(err?.data?.detail || 'Failed to load keywords for this project.');
     } finally {
@@ -80,8 +102,33 @@ export const Dashboard: React.FC = () => {
       fetchProjectKeywords(selectedProject.id);
     } else {
       setKeywords([]);
+      setSelectedKeyword(null);
+      setRankings([]);
     }
   }, [selectedProject?.id]);
+
+  // Fetch rankings whenever selected keyword changes
+  const fetchKeywordRankings = async (keywordId: number) => {
+    setIsLoadingRankings(true);
+    setRankingError(null);
+    setRankings([]); // Clear old ranking data immediately when switching keywords
+    try {
+      const data = await getRankings(keywordId);
+      setRankings(data);
+    } catch (err: any) {
+      setRankingError(err?.data?.detail || 'Failed to load ranking history for this keyword.');
+    } finally {
+      setIsLoadingRankings(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedKeyword) {
+      fetchKeywordRankings(selectedKeyword.id);
+    } else {
+      setRankings([]);
+    }
+  }, [selectedKeyword?.id]);
 
   // Project Handlers
   const handleOpenCreateProjectModal = () => {
@@ -141,9 +188,13 @@ export const Dashboard: React.FC = () => {
     if (editingKeyword) {
       const updated = await updateKeyword(editingKeyword.id, payload as UpdateKeywordPayload);
       setKeywords((prev) => prev.map((k) => (k.id === updated.id ? updated : k)));
+      if (selectedKeyword?.id === updated.id) {
+        setSelectedKeyword(updated);
+      }
     } else {
       const created = await createKeyword(payload as CreateKeywordPayload);
       setKeywords((prev) => [created, ...prev]);
+      setSelectedKeyword(created);
     }
   };
 
@@ -152,12 +203,51 @@ export const Dashboard: React.FC = () => {
     setIsDeletingKeyword(true);
     try {
       await deleteKeyword(deletingKeyword.id);
-      setKeywords((prev) => prev.filter((k) => k.id !== deletingKeyword.id));
+      const remaining = keywords.filter((k) => k.id !== deletingKeyword.id);
+      setKeywords(remaining);
+      if (selectedKeyword?.id === deletingKeyword.id) {
+        setSelectedKeyword(remaining.length > 0 ? remaining[0] : null);
+      }
       setDeletingKeyword(null);
     } catch (err: any) {
       alert(err?.data?.detail || 'Failed to delete keyword.');
     } finally {
       setIsDeletingKeyword(false);
+    }
+  };
+
+  // Ranking Handlers
+  const handleOpenCreateRankingModal = () => {
+    setEditingRanking(null);
+    setIsRankingModalOpen(true);
+  };
+
+  const handleOpenEditRankingModal = (ranking: Ranking) => {
+    setEditingRanking(ranking);
+    setIsRankingModalOpen(true);
+  };
+
+  const handleSaveRanking = async (payload: CreateRankingPayload | UpdateRankingPayload) => {
+    if (editingRanking) {
+      const updated = await updateRanking(editingRanking.id, payload as UpdateRankingPayload);
+      setRankings((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    } else {
+      const created = await createRanking(payload as CreateRankingPayload);
+      setRankings((prev) => [created, ...prev]);
+    }
+  };
+
+  const handleConfirmDeleteRanking = async () => {
+    if (!deletingRanking) return;
+    setIsDeletingRanking(true);
+    try {
+      await deleteRanking(deletingRanking.id);
+      setRankings((prev) => prev.filter((r) => r.id !== deletingRanking.id));
+      setDeletingRanking(null);
+    } catch (err: any) {
+      alert(err?.data?.detail || 'Failed to delete ranking observation.');
+    } finally {
+      setIsDeletingRanking(false);
     }
   };
 
@@ -261,7 +351,7 @@ export const Dashboard: React.FC = () => {
                   Tracked Keywords {keywords.length > 0 && `(${keywords.length})`}
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-                  SEO queries monitored for <strong>{selectedProject.name}</strong> on Ethiopian Google search.
+                  SEO queries monitored for <strong>{selectedProject.name}</strong> on Ethiopian Google search. Select a keyword to view ranking history.
                 </p>
               </div>
               <button
@@ -314,53 +404,93 @@ export const Dashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {keywords.map((kw) => (
-                      <tr key={kw.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={tdStyle}>
-                          <span style={{ fontWeight: 600, color: '#0f172a', fontSize: '15px' }}>
-                            {kw.keyword}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={engineBadgeStyle}>
-                            Google
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={countryBadgeStyle}>
-                            🇪🇹 {kw.country} · {kw.language.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={deviceBadgeStyle}>
-                            {kw.device === 'desktop' ? '💻 Desktop' : '📱 Mobile'}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          {kw.is_active ? (
-                            <span style={activeStatusStyle}>● Active</span>
-                          ) : (
-                            <span style={inactiveStatusStyle}>○ Paused</span>
-                          )}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                          <button
-                            id={`edit-kw-${kw.id}`}
-                            onClick={() => handleOpenEditKeywordModal(kw)}
-                            style={actionInlineBtnStyle}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            id={`delete-kw-${kw.id}`}
-                            onClick={() => setDeletingKeyword(kw)}
-                            style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {keywords.map((kw) => {
+                      const isSelected = selectedKeyword?.id === kw.id;
+                      return (
+                        <tr
+                          key={kw.id}
+                          id={`keyword-row-${kw.id}`}
+                          onClick={() => setSelectedKeyword(kw)}
+                          style={{
+                            borderBottom: '1px solid #f1f5f9',
+                            backgroundColor: isSelected ? '#eff6ff' : 'transparent',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                        >
+                          <td style={tdStyle}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {isSelected && (
+                                <span style={{ color: '#2563eb', fontWeight: 700, fontSize: '14px' }}>▶</span>
+                              )}
+                              <span style={{ fontWeight: 600, color: isSelected ? '#1d4ed8' : '#0f172a', fontSize: '15px' }}>
+                                {kw.keyword}
+                              </span>
+                            </div>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={engineBadgeStyle}>
+                              Google
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={countryBadgeStyle}>
+                              🇪🇹 {kw.country} · {kw.language.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={deviceBadgeStyle}>
+                              {kw.device === 'desktop' ? '💻 Desktop' : '📱 Mobile'}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            {kw.is_active ? (
+                              <span style={activeStatusStyle}>● Active</span>
+                            ) : (
+                              <span style={inactiveStatusStyle}>○ Paused</span>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', alignItems: 'center' }}>
+                              <button
+                                id={`select-kw-${kw.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedKeyword(kw);
+                                }}
+                                style={{
+                                  ...actionInlineBtnStyle,
+                                  color: isSelected ? '#1d4ed8' : '#6b7280',
+                                  fontWeight: isSelected ? 700 : 500,
+                                }}
+                              >
+                                {isSelected ? 'Viewing Rankings' : 'Select'}
+                              </button>
+                              <button
+                                id={`edit-kw-${kw.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditKeywordModal(kw);
+                                }}
+                                style={actionInlineBtnStyle}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                id={`delete-kw-${kw.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingKeyword(kw);
+                                }}
+                                style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -368,7 +498,177 @@ export const Dashboard: React.FC = () => {
           </section>
         )}
 
-        {/* SECTION 2: PROJECTS MANAGEMENT */}
+        {/* SECTION 2: RANKING HISTORY (Visible when a keyword is selected) */}
+        {selectedProject && selectedKeyword && (
+          <section style={{ marginTop: '40px', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>
+                    Rank Tracking
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                    Project: <strong>{selectedProject.name}</strong>
+                  </span>
+                </div>
+                <h3 style={{ margin: '6px 0 2px 0', fontSize: '22px', fontWeight: 700, color: '#0f172a' }}>
+                  Ranking History for "{selectedKeyword.keyword}"
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                  Target: Google ({selectedKeyword.country}) · {selectedKeyword.language.toUpperCase()} · {selectedKeyword.device}
+                </p>
+              </div>
+              <button
+                id="record-ranking-button"
+                onClick={handleOpenCreateRankingModal}
+                style={primaryAddBtnStyle}
+              >
+                + Record Ranking
+              </button>
+            </div>
+
+            {rankingError && (
+              <div style={errorAlertStyle}>
+                {rankingError}
+              </div>
+            )}
+
+            {isLoadingRankings ? (
+              <div style={loadingStateStyle}>
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading ranking history for "{selectedKeyword.keyword}"...</p>
+              </div>
+            ) : rankings.length === 0 ? (
+              <div style={{ ...emptyStateCardStyle, border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc' }}>
+                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 600, color: '#111827' }}>
+                  No ranking observations recorded yet
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#6b7280', maxWidth: '420px' }}>
+                  Record your website's position in search results for <strong>"{selectedKeyword.keyword}"</strong> to track historical progress.
+                </p>
+                <button
+                  id="empty-record-ranking-button"
+                  onClick={handleOpenCreateRankingModal}
+                  style={primaryAddBtnStyle}
+                >
+                  Record First Ranking
+                </button>
+              </div>
+            ) : (
+              <div style={tableContainerStyle}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                      <th style={thStyle}>Position</th>
+                      <th style={thStyle}>Ranking URL</th>
+                      <th style={thStyle}>Engine</th>
+                      <th style={thStyle}>Location & Lang</th>
+                      <th style={thStyle}>Device</th>
+                      <th style={thStyle}>Recorded Date</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankings.map((ranking) => {
+                      const isTop3 = ranking.position <= 3;
+                      const isTop10 = ranking.position <= 10;
+                      return (
+                        <tr key={ranking.id} id={`ranking-row-${ranking.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={tdStyle}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                fontWeight: 800,
+                                fontSize: '14px',
+                                backgroundColor: isTop3 ? '#fef3c7' : isTop10 ? '#dbeafe' : '#f1f5f9',
+                                color: isTop3 ? '#92400e' : isTop10 ? '#1e40af' : '#475569',
+                                border: isTop3 ? '1px solid #fcd34d' : isTop10 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                              }}
+                            >
+                              #{ranking.position}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            {ranking.ranking_url ? (
+                              <a
+                                href={ranking.ranking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  fontSize: '13px',
+                                  display: 'inline-block',
+                                  maxWidth: '280px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={ranking.ranking_url}
+                              >
+                                🔗 {ranking.ranking_url}
+                              </a>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={engineBadgeStyle}>
+                              Google
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={countryBadgeStyle}>
+                              🇪🇹 {ranking.country} · {ranking.language.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={deviceBadgeStyle}>
+                              {ranking.device === 'desktop' ? '💻 Desktop' : '📱 Mobile'}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={{ fontSize: '13px', color: '#334155', fontWeight: 500 }}>
+                              {new Date(ranking.recorded_at).toLocaleString(undefined, {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>
+                            <button
+                              id={`edit-ranking-${ranking.id}`}
+                              onClick={() => handleOpenEditRankingModal(ranking)}
+                              style={actionInlineBtnStyle}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              id={`delete-ranking-${ranking.id}`}
+                              onClick={() => setDeletingRanking(ranking)}
+                              style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* SECTION 3: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
@@ -507,6 +807,18 @@ export const Dashboard: React.FC = () => {
         />
       )}
 
+      {/* Create / Edit Ranking Modal */}
+      {selectedProject && selectedKeyword && (
+        <RankingFormModal
+          isOpen={isRankingModalOpen}
+          onClose={() => setIsRankingModalOpen(false)}
+          onSave={handleSaveRanking}
+          keyword={selectedKeyword}
+          projectName={selectedProject.name}
+          rankingToEdit={editingRanking}
+        />
+      )}
+
       {/* Project Delete Modal */}
       {deletingProject && (
         <div style={modalOverlayStyle}>
@@ -515,7 +827,7 @@ export const Dashboard: React.FC = () => {
               Delete Project
             </h3>
             <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4b5563', lineHeight: 1.5 }}>
-              Are you sure you want to delete <strong>{deletingProject.name}</strong> ({deletingProject.website_url})? All tracked keywords under this project will also be removed.
+              Are you sure you want to delete <strong>{deletingProject.name}</strong> ({deletingProject.website_url})? All tracked keywords and rankings under this project will also be removed.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
@@ -551,7 +863,7 @@ export const Dashboard: React.FC = () => {
               Delete Keyword
             </h3>
             <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4b5563', lineHeight: 1.5 }}>
-              Are you sure you want to stop tracking <strong>"{deletingKeyword.keyword}"</strong>?
+              Are you sure you want to stop tracking <strong>"{deletingKeyword.keyword}"</strong>? All ranking history for this keyword will also be deleted.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
@@ -573,6 +885,42 @@ export const Dashboard: React.FC = () => {
                 }}
               >
                 {isDeletingKeyword ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ranking Delete Modal */}
+      {deletingRanking && (
+        <div style={modalOverlayStyle}>
+          <div style={deleteModalBoxStyle}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+              Delete Ranking Observation
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4b5563', lineHeight: 1.5 }}>
+              Are you sure you want to delete the ranking observation for position <strong>#{deletingRanking.position}</strong> recorded on <strong>{new Date(deletingRanking.recorded_at).toLocaleDateString()}</strong>?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setDeletingRanking(null)}
+                style={cancelDeleteBtnStyle}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-delete-ranking-button"
+                type="button"
+                onClick={handleConfirmDeleteRanking}
+                disabled={isDeletingRanking}
+                style={{
+                  ...confirmDeleteBtnStyle,
+                  opacity: isDeletingRanking ? 0.7 : 1,
+                  cursor: isDeletingRanking ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isDeletingRanking ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
           </div>
