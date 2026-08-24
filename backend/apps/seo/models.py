@@ -146,3 +146,140 @@ class KeywordRanking(models.Model):
 
     def __str__(self):
         return f"{self.keyword.keyword} - Pos #{self.position} ({self.recorded_at})"
+
+
+class AuditStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+
+
+class IssueSeverity(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    WARNING = 'warning', 'Warning'
+    NOTICE = 'notice', 'Notice'
+
+
+class SiteAudit(models.Model):
+    """
+    SiteAudit model representing an SEO audit run for a specific project.
+    Relationship: Project 1 ─────── * SiteAudit
+    Ownership follows: audit.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='audits',
+        help_text='The project/website this site audit belongs to.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=AuditStatus.choices,
+        default=AuditStatus.PENDING,
+        db_index=True,
+        help_text='Current status of the audit job.'
+    )
+    score = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Overall SEO health score from 0 to 100.'
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the audit execution began.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the audit execution concluded.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the audit was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the audit was last updated.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Error details if the audit failed.'
+    )
+
+    class Meta:
+        db_table = 'seo_site_audits'
+        verbose_name = 'site audit'
+        verbose_name_plural = 'site audits'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', '-created_at'], name='seo_site_au_project_bd7594_idx'),
+            models.Index(fields=['status'], name='seo_site_au_status_59ac12_idx'),
+        ]
+
+    def __str__(self):
+        return f"Audit #{self.id} - {self.project.name} ({self.status})"
+
+
+class AuditIssue(models.Model):
+    """
+    AuditIssue model representing a specific issue identified during a site audit.
+    Relationship: SiteAudit 1 ─────── * AuditIssue
+    Ownership follows: issue.audit -> audit.project -> project.owner
+    """
+    audit = models.ForeignKey(
+        SiteAudit,
+        on_delete=models.CASCADE,
+        related_name='issues',
+        help_text='The site audit this issue belongs to.'
+    )
+    issue_type = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text='Category identifier of the issue (e.g. missing_title, slow_load, 404_link).'
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=IssueSeverity.choices,
+        default=IssueSeverity.WARNING,
+        db_index=True,
+        help_text='Severity level of the issue.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Short summary title of the issue.'
+    )
+    description = models.TextField(
+        help_text='Detailed explanation of what was found.'
+    )
+    page_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='URL of the affected page if applicable.'
+    )
+    recommendation = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Recommended action steps to resolve the issue.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the issue record was created.'
+    )
+
+    class Meta:
+        db_table = 'seo_audit_issues'
+        verbose_name = 'audit issue'
+        verbose_name_plural = 'audit issues'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['audit', '-created_at'], name='seo_audit_i_audit_i_1512b0_idx'),
+            models.Index(fields=['severity'], name='seo_audit_i_severit_7437cc_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.severity.upper()}] {self.title} (Audit #{self.audit_id})"
+

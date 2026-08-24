@@ -1,6 +1,9 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Keyword, KeywordRanking, SearchEngine, Country, Language, Device
+from .models import (
+    Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
+    SiteAudit, AuditIssue, AuditStatus, IssueSeverity
+)
 from apps.projects.models import Project
 
 
@@ -149,3 +152,104 @@ class KeywordRankingSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+
+class SiteAuditSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SiteAudit model.
+    Enforces project ownership verification and validates score/completion boundaries.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    issues_count = serializers.IntegerField(source='issues.count', read_only=True)
+
+    class Meta:
+        model = SiteAudit
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'status',
+            'score',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+            'error_message',
+            'issues_count'
+        )
+        read_only_fields = ('id', 'project_name', 'project_website_url', 'created_at', 'updated_at', 'issues_count')
+
+    def validate_project(self, value):
+        """
+        Critical security boundary:
+        Ensure the target project is owned by the currently authenticated user.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create site audits for this project.")
+        return value
+
+    def validate_score(self, value):
+        if value is not None:
+            if value < 0 or value > 100:
+                raise serializers.ValidationError("Score must be an integer between 0 and 100.")
+        return value
+
+    def validate(self, attrs):
+        score = attrs.get('score') if 'score' in attrs else (self.instance.score if self.instance else None)
+        if score is not None and (score < 0 or score > 100):
+            raise serializers.ValidationError({'score': "Score must be an integer between 0 and 100."})
+        return attrs
+
+
+class AuditIssueSerializer(serializers.ModelSerializer):
+    """
+    Serializer for AuditIssue model.
+    Enforces audit ownership verification via audit.project.owner.
+    """
+    project_id = serializers.IntegerField(source='audit.project.id', read_only=True)
+    project_name = serializers.CharField(source='audit.project.name', read_only=True)
+
+    class Meta:
+        model = AuditIssue
+        fields = (
+            'id',
+            'audit',
+            'project_id',
+            'project_name',
+            'issue_type',
+            'severity',
+            'title',
+            'description',
+            'page_url',
+            'recommendation',
+            'created_at'
+        )
+        read_only_fields = ('id', 'project_id', 'project_name', 'created_at')
+
+    def validate_audit(self, value):
+        """
+        Critical security boundary:
+        Ensure the target audit belongs to a project owned by the currently authenticated user.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.project.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to add issues to an audit you do not own.")
+        return value
+
+    def validate_issue_type(self, value):
+        trimmed = value.strip()
+        if not trimmed:
+            raise serializers.ValidationError("Issue type cannot be blank.")
+        return trimmed
+
+    def validate_title(self, value):
+        trimmed = value.strip()
+        if not trimmed:
+            raise serializers.ValidationError("Title cannot be blank.")
+        return trimmed
+

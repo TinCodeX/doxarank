@@ -4,9 +4,13 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
 from apps.projects.models import Project
-from apps.seo.models import Keyword, KeywordRanking, SearchEngine, Country, Language, Device
+from apps.seo.models import (
+    Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
+    SiteAudit, AuditIssue, AuditStatus, IssueSeverity
+)
 
 User = get_user_model()
+
 
 
 class KeywordAPITests(TestCase):
@@ -481,3 +485,331 @@ class KeywordRankingAPITests(TestCase):
         ranking_id = self.ranking_a.id
         self.keyword_a.delete()
         self.assertFalse(KeywordRanking.objects.filter(id=ranking_id).exists())
+
+
+class SiteAuditAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.audits_url = '/api/seo/audits/'
+
+        self.user_a = User.objects.create_user(
+            email='audit_user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='audit_user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Media',
+            website_url='https://shega.co'
+        )
+
+        self.audit_a = SiteAudit.objects.create(
+            project=self.project_a,
+            status=AuditStatus.COMPLETED,
+            score=88
+        )
+        self.audit_b = SiteAudit.objects.create(
+            project=self.project_b,
+            status=AuditStatus.PENDING
+        )
+
+    def test_unauthenticated_get_rejected(self):
+        """1. Unauthenticated GET is rejected (401)."""
+        res = self.client.get(self.audits_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_a_can_create_audit_for_own_project(self):
+        """2. User A can create an audit for User A's project."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project': self.project_a.id,
+            'status': 'pending',
+            'score': 90
+        }
+        res = self.client.post(self.audits_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['score'], 90)
+        self.assertEqual(res.data['project_name'], 'Addis Insight')
+
+    def test_user_b_can_create_audit_for_own_project(self):
+        """3. User B can create an audit for User B's project."""
+        self.client.force_authenticate(user=self.user_b)
+        payload = {
+            'project': self.project_b.id,
+            'status': 'running'
+        }
+        res = self.client.post(self.audits_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['status'], 'running')
+
+    def test_user_a_cannot_create_audit_for_user_b_project(self):
+        """4. User A cannot create an audit for User B's project (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project': self.project_b.id,  # Owned by User B!
+            'status': 'pending'
+        }
+        res = self.client.post(self.audits_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('project', res.data)
+
+    def test_user_a_only_sees_own_audits(self):
+        """5. User A only sees their own audits."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.audits_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [a['id'] for a in res.data]
+        self.assertIn(self.audit_a.id, ids)
+        self.assertNotIn(self.audit_b.id, ids)
+
+    def test_user_a_cannot_retrieve_user_b_audit(self):
+        """6. User A cannot retrieve User B's audit (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'/api/seo/audits/{self.audit_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_a_cannot_modify_user_b_audit(self):
+        """7. User A cannot modify User B's audit (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/audits/{self.audit_b.id}/',
+            {'score': 100},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.audit_b.refresh_from_db()
+        self.assertNotEqual(self.audit_b.score, 100)
+
+    def test_user_a_cannot_delete_user_b_audit(self):
+        """8. User A cannot delete User B's audit (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/audits/{self.audit_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(SiteAudit.objects.filter(id=self.audit_b.id).exists())
+
+    def test_user_a_can_update_own_audit(self):
+        """9. User A can update their own audit."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/audits/{self.audit_a.id}/',
+            {'score': 95, 'status': 'completed'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.audit_a.refresh_from_db()
+        self.assertEqual(self.audit_a.score, 95)
+
+    def test_user_a_can_delete_own_audit(self):
+        """10. User A can delete their own audit."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/audits/{self.audit_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SiteAudit.objects.filter(id=self.audit_a.id).exists())
+
+    def test_project_filtering_works(self):
+        """11. Project filtering works (?project_id=)."""
+        self.client.force_authenticate(user=self.user_a)
+        proj_a2 = Project.objects.create(owner=self.user_a, name='Proj A2', website_url='https://a2.com')
+        audit_a2 = SiteAudit.objects.create(project=proj_a2, status=AuditStatus.PENDING)
+
+        res = self.client.get(f'{self.audits_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [a['id'] for a in res.data]
+        self.assertIn(self.audit_a.id, ids)
+        self.assertNotIn(audit_a2.id, ids)
+
+    def test_cross_user_project_filtering_is_isolated(self):
+        """12. Cross-user project filtering is isolated (returns [])."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.audits_url}?project_id={self.project_b.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 0)
+
+    def test_invalid_score_values_rejected(self):
+        """19. Invalid score values (<0 or >100) are rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        for bad_score in [-1, 101, 500]:
+            res = self.client.post(
+                self.audits_url,
+                {'project': self.project_a.id, 'score': bad_score},
+                format='json'
+            )
+            self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class AuditIssueAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.issues_url = '/api/seo/issues/'
+
+        self.user_a = User.objects.create_user(
+            email='issue_user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='issue_user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Media',
+            website_url='https://shega.co'
+        )
+
+        self.audit_a = SiteAudit.objects.create(
+            project=self.project_a,
+            status=AuditStatus.COMPLETED,
+            score=88
+        )
+        self.audit_b = SiteAudit.objects.create(
+            project=self.project_b,
+            status=AuditStatus.RUNNING
+        )
+
+        self.issue_a = AuditIssue.objects.create(
+            audit=self.audit_a,
+            issue_type='missing_title',
+            severity=IssueSeverity.CRITICAL,
+            title='Homepage missing meta title tag'
+        )
+        self.issue_b = AuditIssue.objects.create(
+            audit=self.audit_b,
+            issue_type='broken_link',
+            severity=IssueSeverity.WARNING,
+            title='404 link on contact page'
+        )
+
+    def test_unauthenticated_get_rejected(self):
+        """1. Unauthenticated GET is rejected (401)."""
+        res = self.client.get(self.issues_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_a_can_create_issue_under_own_audit(self):
+        """13. User A can create an issue under their own audit."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'audit': self.audit_a.id,
+            'issue_type': 'slow_lcp',
+            'severity': 'warning',
+            'title': 'LCP exceeds 3.0s',
+            'description': 'Banner image uncompressed',
+            'page_url': 'https://addisinsight.net/',
+            'recommendation': 'Compress banner image with WebP'
+        }
+        res = self.client.post(self.issues_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['audit'], self.audit_a.id)
+        self.assertEqual(res.data['project_name'], 'Addis Insight')
+
+    def test_user_a_cannot_create_issue_under_user_b_audit(self):
+        """14. User A cannot create an issue under User B's audit (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'audit': self.audit_b.id,  # User B's audit!
+            'issue_type': 'hacked_injection',
+            'severity': 'critical',
+            'title': 'Unauthorized issue injection'
+        }
+        res = self.client.post(self.issues_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('audit', res.data)
+
+    def test_user_a_cannot_read_user_b_issue(self):
+        """15. User A cannot read User B's audit issue (404 / filtered from list)."""
+        self.client.force_authenticate(user=self.user_a)
+        res_get = self.client.get(f'/api/seo/issues/{self.issue_b.id}/')
+        self.assertEqual(res_get.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_list = self.client.get(self.issues_url)
+        self.assertEqual(res_list.status_code, status.HTTP_200_OK)
+        ids = [i['id'] for i in res_list.data]
+        self.assertIn(self.issue_a.id, ids)
+        self.assertNotIn(self.issue_b.id, ids)
+
+    def test_user_a_cannot_modify_user_b_issue(self):
+        """16. User A cannot modify User B's audit issue (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/issues/{self.issue_b.id}/',
+            {'title': 'Changed title'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.issue_b.refresh_from_db()
+        self.assertEqual(self.issue_b.title, '404 link on contact page')
+
+    def test_user_a_cannot_delete_user_b_issue(self):
+        """17. User A cannot delete User B's audit issue (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/issues/{self.issue_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(AuditIssue.objects.filter(id=self.issue_b.id).exists())
+
+    def test_user_a_can_update_own_issue(self):
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'/api/seo/issues/{self.issue_a.id}/',
+            {'severity': 'warning'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.issue_a.refresh_from_db()
+        self.assertEqual(self.issue_a.severity, 'warning')
+
+    def test_user_a_can_delete_own_issue(self):
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'/api/seo/issues/{self.issue_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(AuditIssue.objects.filter(id=self.issue_a.id).exists())
+
+    def test_issue_filtering_by_audit_works(self):
+        """18. Issue filtering by audit works (?audit_id=) & cross-user isolated."""
+        self.client.force_authenticate(user=self.user_a)
+        audit_a2 = SiteAudit.objects.create(project=self.project_a, status=AuditStatus.PENDING)
+        issue_a2 = AuditIssue.objects.create(
+            audit=audit_a2,
+            issue_type='viewport_tag',
+            severity=IssueSeverity.NOTICE,
+            title='Missing viewport tag'
+        )
+
+        res = self.client.get(f'{self.issues_url}?audit_id={self.audit_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [i['id'] for i in res.data]
+        self.assertIn(self.issue_a.id, ids)
+        self.assertNotIn(issue_a2.id, ids)
+
+        # Cross-user audit filtering returns []
+        res_cross = self.client.get(f'{self.issues_url}?audit_id={self.audit_b.id}')
+        self.assertEqual(res_cross.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_cross.data), 0)
+
+    def test_cascade_deletion(self):
+        """20. Cascade deletion works correctly."""
+        issue_id = self.issue_a.id
+        self.audit_a.delete()
+        self.assertFalse(AuditIssue.objects.filter(id=issue_id).exists())
+
