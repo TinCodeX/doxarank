@@ -11,6 +11,7 @@ import { KeywordFormModal } from '../components/KeywordFormModal';
 import { RankingFormModal } from '../components/RankingFormModal';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { SearchConsolePanel } from '../components/SearchConsolePanel';
+import { SearchAnalyticsPanel } from '../components/SearchAnalyticsPanel';
 
 export const Dashboard: React.FC = () => {
 
@@ -59,14 +60,14 @@ export const Dashboard: React.FC = () => {
       const data = await getProjects();
       setProjects(data);
       if (data.length > 0) {
-        setSelectedProject((prev) => {
-          if (prev && data.some((p) => p.id === prev.id)) {
-            return data.find((p) => p.id === prev.id) || data[0];
-          }
-          return data[0];
-        });
+        const savedProjectId = localStorage.getItem('doxarank_active_project_id');
+        const matched = savedProjectId ? data.find((p) => String(p.id) === savedProjectId) : null;
+        const initial = matched || data[0];
+        setSelectedProject(initial);
+        localStorage.setItem('doxarank_active_project_id', String(initial.id));
       } else {
         setSelectedProject(null);
+        localStorage.removeItem('doxarank_active_project_id');
       }
     } catch (err: any) {
       setProjectError(err?.data?.detail || 'Failed to load projects.');
@@ -681,7 +682,12 @@ export const Dashboard: React.FC = () => {
           <SearchConsolePanel project={selectedProject} />
         )}
 
-        {/* SECTION 5: PROJECTS MANAGEMENT */}
+        {/* SECTION 5: SEARCH CONSOLE SEARCH ANALYTICS (Visible when a project is selected) */}
+        {selectedProject && (
+          <SearchAnalyticsPanel project={selectedProject} />
+        )}
+
+        {/* SECTION 6: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
@@ -768,7 +774,11 @@ export const Dashboard: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
                       {!isSelected ? (
                         <button
-                          onClick={() => setSelectedProject(project)}
+                          id={`select-project-${project.id}`}
+                          onClick={() => {
+                            setSelectedProject(project);
+                            localStorage.setItem('doxarank_active_project_id', String(project.id));
+                          }}
                           style={selectBtnStyle}
                         >
                           Select
