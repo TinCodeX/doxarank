@@ -336,6 +336,7 @@ class SearchAnalyticsDataSerializer(serializers.ModelSerializer):
             'page',
             'country',
             'device',
+            'search_appearance',
             'clicks',
             'impressions',
             'ctr',
@@ -394,6 +395,7 @@ class SearchAnalyticsDataSerializer(serializers.ModelSerializer):
         page = attrs.get('page') if 'page' in attrs else (self.instance.page if self.instance else '')
         country = attrs.get('country') if 'country' in attrs else (self.instance.country if self.instance else '')
         device = attrs.get('device') if 'device' in attrs else (self.instance.device if self.instance else '')
+        search_appearance = attrs.get('search_appearance') if 'search_appearance' in attrs else (self.instance.search_appearance if self.instance else '')
 
         # Also validate clicks / impressions if both provided
         clicks = attrs.get('clicks') if 'clicks' in attrs else (self.instance.clicks if self.instance else 0)
@@ -411,16 +413,35 @@ class SearchAnalyticsDataSerializer(serializers.ModelSerializer):
                 query=query,
                 page=page,
                 country=country,
-                device=device
+                device=device,
+                search_appearance=search_appearance
             )
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
                 raise serializers.ValidationError(
-                    "A Search Analytics record with this exact combination (connection, date, query, page, country, device) already exists."
+                    "A Search Analytics record with this exact combination (connection, date, query, page, country, device, search_appearance) already exists."
                 )
 
         return attrs
+
+
+class SearchConsoleSyncRequestSerializer(serializers.Serializer):
+    """
+    Serializer for triggering a Google Search Console synchronization.
+    """
+    project_id = serializers.IntegerField(required=False, help_text="ID of the project to synchronize.")
+    connection_id = serializers.IntegerField(required=False, help_text="ID of the connection to synchronize.")
+    start_date = serializers.DateField(required=False, help_text="Start date for Search Analytics query (defaults to 28 days ago).")
+    end_date = serializers.DateField(required=False, help_text="End date for Search Analytics query (defaults to today).")
+
+    def validate(self, attrs):
+        start_date = attrs.get('start_date')
+        end_date = attrs.get('end_date')
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError("start_date cannot be after end_date.")
+        return attrs
+
 
 
 

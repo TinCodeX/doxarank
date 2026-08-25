@@ -1,4 +1,8 @@
-from rest_framework import viewsets, permissions
+from django.db.models import Sum, Avg, Count, F
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData
@@ -6,8 +10,10 @@ from .models import (
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
-    SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer
+    SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
+    SearchConsoleSyncRequestSerializer
 )
+from .services.search_console import GoogleSearchConsoleService
 
 
 class KeywordViewSet(viewsets.ModelViewSet):
@@ -139,6 +145,141 @@ class SearchConsoleConnectionViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    @action(detail=False, methods=['post'], url_path='sync')
+    def sync_by_project_or_connection(self, request):
+        """
+        Synchronize Search Console data for a user project or connection.
+        (POST /api/seo/search-console/sync/)
+        """
+        serializer = SearchConsoleSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        project_id = data.get('project_id')
+        connection_id = data.get('connection_id')
+
+        connection = None
+        if connection_id:
+            connection = SearchConsoleConnection.objects.filter(
+                id=connection_id,
+                project__owner=request.user
+            ).first()
+            if not connection:
+                return Response(
+                    {"detail": "Search Console connection not found or you do not have permission to access it."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        elif project_id:
+            connection = SearchConsoleConnection.objects.filter(
+                project_id=project_id,
+                project__owner=request.user
+            ).first()
+            if not connection:
+                return Response(
+                    {"detail": f"No Search Console connection found for project #{project_id}."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            return Response(
+                {"detail": "Either project_id or connection_id must be provided."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not connection.is_connected:
+            return Response(
+                {"detail": "This Search Console connection is disconnected. Please connect the property first."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            summary = GoogleSearchConsoleService.sync_search_analytics(
+                connection=connection,
+                start_date=data.get('start_date'),
+                end_date=data.get('end_date')
+            )
+            return Response(summary, status=status.HTTP_200_OK)
+        except Exception as exc:
+            return Response(
+                {"detail": f"Synchronization failed: {str(exc)}", "sync_status": "failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'], url_path='sync')
+    def sync_single_connection(self, request, pk=None):
+        """
+        Synchronize Search Console data for a specific connection record.
+        (POST /api/seo/search-console/<id>/sync/)
+        """
+        connection = self.get_object()  # Enforces ownership via get_queryset
+        if not connection.is_connected:
+            return Response(
+                {"detail": "This Search Console connection is disconnected."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = SearchConsoleSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            summary = GoogleSearchConsoleService.sync_search_analytics(
+                connection=connection,
+                start_date=data.get('start_date'),
+                end_date=data.get('end_date')
+            )
+            return Response(summary, status=status.HTTP_200_OK)
+        except Exception as exc:
+            return Response(
+                {"detail": f"Synchronization failed: {str(exc)}", "sync_status": "failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='performance')
+    def performance_overview(self, request):
+        """
+        Retrieve high-level overview performance metrics and timeseries.
+        (GET /api/seo/search-console/performance/)
+        """
+        return self._get_analytics_viewset().performance(request)
+
+    @action(detail=False, methods=['get'], url_path='queries')
+    def queries_breakdown(self, request):
+        """
+        Retrieve search query performance breakdown.
+        (GET /api/seo/search-console/queries/)
+        """
+        return self._get_analytics_viewset().queries(request)
+
+    @action(detail=False, methods=['get'], url_path='pages')
+    def pages_breakdown(self, request):
+        """
+        Retrieve landing page performance breakdown.
+        (GET /api/seo/search-console/pages/)
+        """
+        return self._get_analytics_viewset().pages(request)
+
+    @action(detail=False, methods=['get'], url_path='devices')
+    def devices_breakdown(self, request):
+        """
+        Retrieve device category performance breakdown.
+        (GET /api/seo/search-console/devices/)
+        """
+        return self._get_analytics_viewset().devices(request)
+
+    @action(detail=False, methods=['get'], url_path='countries')
+    def countries_breakdown(self, request):
+        """
+        Retrieve country performance breakdown.
+        (GET /api/seo/search-console/countries/)
+        """
+        return self._get_analytics_viewset().countries(request)
+
+    def _get_analytics_viewset(self):
+        analytics_viewset = SearchAnalyticsViewSet()
+        analytics_viewset.request = self.request
+        analytics_viewset.format_kwarg = self.format_kwarg
+        return analytics_viewset
+
 
 class SearchAnalyticsViewSet(viewsets.ModelViewSet):
     """
@@ -149,7 +290,7 @@ class SearchAnalyticsViewSet(viewsets.ModelViewSet):
     2. Queryset is strictly filtered by `connection__project__owner == request.user`.
     3. Cross-user access returns 404 Not Found.
     4. Supports ownership-safe filtering by project_id, connection_id, date, start_date,
-       end_date, query, page, country, and device.
+       end_date, query, page, country, device, and search_appearance.
     """
     serializer_class = SearchAnalyticsDataSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -198,7 +339,157 @@ class SearchAnalyticsViewSet(viewsets.ModelViewSet):
         if device:
             queryset = queryset.filter(device__iexact=device)
 
+        search_appearance = self.request.query_params.get('search_appearance')
+        if search_appearance:
+            queryset = queryset.filter(search_appearance__iexact=search_appearance)
+
         return queryset
+
+    @action(detail=False, methods=['get'], url_path='performance')
+    def performance(self, request):
+        """
+        Get aggregated performance summary (totals and daily timeseries).
+        """
+        qs = self.get_queryset()
+
+        aggregates = qs.aggregate(
+            total_clicks=Sum('clicks'),
+            total_impressions=Sum('impressions'),
+            avg_ctr=Avg('ctr'),
+            avg_position=Avg('position')
+        )
+
+        total_clicks = aggregates['total_clicks'] or 0
+        total_impressions = aggregates['total_impressions'] or 0
+        average_ctr = round(float(aggregates['avg_ctr'] or 0), 4)
+        if total_impressions > 0 and average_ctr == 0:
+            average_ctr = round(total_clicks / total_impressions, 4)
+
+        average_position = round(float(aggregates['avg_position'] or 0), 2)
+
+        # Daily time series
+        timeseries_qs = qs.values('date').annotate(
+            clicks=Sum('clicks'),
+            impressions=Sum('impressions'),
+            avg_position=Avg('position')
+        ).order_by('date')
+
+        timeseries = [
+            {
+                "date": str(item['date']),
+                "clicks": item['clicks'] or 0,
+                "impressions": item['impressions'] or 0,
+                "ctr": round((item['clicks'] or 0) / (item['impressions'] or 1), 4) if item['impressions'] else 0.0,
+                "position": round(float(item['avg_position'] or 0), 2)
+            }
+            for item in timeseries_qs
+        ]
+
+        return Response({
+            "total_clicks": total_clicks,
+            "total_impressions": total_impressions,
+            "average_ctr": average_ctr,
+            "average_position": average_position,
+            "timeseries": timeseries,
+            "count": len(timeseries)
+        })
+
+    @action(detail=False, methods=['get'], url_path='queries')
+    def queries(self, request):
+        """
+        Get queries performance breakdown.
+        """
+        qs = self.get_queryset().exclude(query='')
+        results = qs.values('query').annotate(
+            clicks=Sum('clicks'),
+            impressions=Sum('impressions'),
+            avg_position=Avg('position')
+        ).order_by('-clicks', '-impressions')[:100]
+
+        data = [
+            {
+                "query": item['query'],
+                "clicks": item['clicks'] or 0,
+                "impressions": item['impressions'] or 0,
+                "ctr": round((item['clicks'] or 0) / (item['impressions'] or 1), 4) if item['impressions'] else 0.0,
+                "position": round(float(item['avg_position'] or 0), 2)
+            }
+            for item in results
+        ]
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='pages')
+    def pages(self, request):
+        """
+        Get landing pages performance breakdown.
+        """
+        qs = self.get_queryset().exclude(page='')
+        results = qs.values('page').annotate(
+            clicks=Sum('clicks'),
+            impressions=Sum('impressions'),
+            avg_position=Avg('position')
+        ).order_by('-clicks', '-impressions')[:100]
+
+        data = [
+            {
+                "page": item['page'],
+                "clicks": item['clicks'] or 0,
+                "impressions": item['impressions'] or 0,
+                "ctr": round((item['clicks'] or 0) / (item['impressions'] or 1), 4) if item['impressions'] else 0.0,
+                "position": round(float(item['avg_position'] or 0), 2)
+            }
+            for item in results
+        ]
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='devices')
+    def devices(self, request):
+        """
+        Get device category performance breakdown.
+        """
+        qs = self.get_queryset().exclude(device='')
+        results = qs.values('device').annotate(
+            clicks=Sum('clicks'),
+            impressions=Sum('impressions'),
+            avg_position=Avg('position')
+        ).order_by('-clicks')
+
+        data = [
+            {
+                "device": item['device'],
+                "clicks": item['clicks'] or 0,
+                "impressions": item['impressions'] or 0,
+                "ctr": round((item['clicks'] or 0) / (item['impressions'] or 1), 4) if item['impressions'] else 0.0,
+                "position": round(float(item['avg_position'] or 0), 2)
+            }
+            for item in results
+        ]
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='countries')
+    def countries(self, request):
+        """
+        Get country performance breakdown.
+        """
+        qs = self.get_queryset().exclude(country='')
+        results = qs.values('country').annotate(
+            clicks=Sum('clicks'),
+            impressions=Sum('impressions'),
+            avg_position=Avg('position')
+        ).order_by('-clicks')
+
+        data = [
+            {
+                "country": item['country'],
+                "clicks": item['clicks'] or 0,
+                "impressions": item['impressions'] or 0,
+                "ctr": round((item['clicks'] or 0) / (item['impressions'] or 1), 4) if item['impressions'] else 0.0,
+                "position": round(float(item['avg_position'] or 0), 2)
+            }
+            for item in results
+        ]
+        return Response(data)
+
 
 
 

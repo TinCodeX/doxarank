@@ -161,6 +161,7 @@ class SearchAnalyticsDataAdmin(admin.ModelAdmin):
         'page',
         'country',
         'device',
+        'search_appearance',
         'clicks',
         'impressions',
         'ctr',
@@ -171,6 +172,7 @@ class SearchAnalyticsDataAdmin(admin.ModelAdmin):
         'date',
         'country',
         'device',
+        'search_appearance',
         'connection__project',
         'created_at'
     )
@@ -179,6 +181,7 @@ class SearchAnalyticsDataAdmin(admin.ModelAdmin):
         'page',
         'country',
         'device',
+        'search_appearance',
         'connection__property_url',
         'connection__project__name',
         'connection__project__owner__email'

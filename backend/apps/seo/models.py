@@ -405,6 +405,12 @@ class SearchAnalyticsData(models.Model):
         default='',
         help_text='Device category (e.g. "desktop", "mobile", "tablet").'
     )
+    search_appearance = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Search appearance dimension (e.g. "AMP_ARTICLE", "RICHDATA").'
+    )
     clicks = models.PositiveIntegerField(
         default=0,
         help_text='Total number of clicks from organic search results.'
@@ -441,7 +447,7 @@ class SearchAnalyticsData(models.Model):
         ordering = ['-date', '-clicks']
         constraints = [
             models.UniqueConstraint(
-                fields=['connection', 'date', 'query', 'page', 'country', 'device'],
+                fields=['connection', 'date', 'query', 'page', 'country', 'device', 'search_appearance'],
                 name='unique_search_analytics_observation'
             )
         ]
