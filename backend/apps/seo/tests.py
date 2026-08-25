@@ -7,7 +7,8 @@ from apps.projects.models import Project
 from apps.seo.models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
-    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus
+    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
+    SearchAnalyticsData
 )
 
 User = get_user_model()
@@ -1012,5 +1013,213 @@ class SearchConsoleConnectionAPITests(TestCase):
         conn_id = self.conn_a.id
         self.project_a.delete()
         self.assertFalse(SearchConsoleConnection.objects.filter(id=conn_id).exists())
+
+
+from datetime import date, timedelta
+from decimal import Decimal
+
+class SearchAnalyticsAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.analytics_url = '/api/seo/search-analytics/'
+
+        self.user_a = User.objects.create_user(
+            email='test_analytics_a@doxarank.com',
+            password='Password123!',
+            first_name='Analytics',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='test_analytics_b@doxarank.com',
+            password='Password123!',
+            first_name='Analytics',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Analytics Proj A',
+            website_url='https://proja.com'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Analytics Proj B',
+            website_url='https://projb.com'
+        )
+
+        self.conn_a = SearchConsoleConnection.objects.create(
+            project=self.project_a,
+            property_url='sc-domain:proja.com',
+            permission_level='siteOwner',
+            is_connected=True
+        )
+        self.conn_b = SearchConsoleConnection.objects.create(
+            project=self.project_b,
+            property_url='https://projb.com/',
+            permission_level='siteFullUser',
+            is_connected=True
+        )
+
+        self.today = date.today()
+        self.yesterday = self.today - timedelta(days=1)
+
+        self.rec_a1 = SearchAnalyticsData.objects.create(
+            connection=self.conn_a,
+            date=self.today,
+            query='keyword rank test',
+            page='https://proja.com/test',
+            country='eth',
+            device='desktop',
+            clicks=50,
+            impressions=1000,
+            ctr=Decimal('0.0500'),
+            position=Decimal('2.50')
+        )
+        self.rec_b1 = SearchAnalyticsData.objects.create(
+            connection=self.conn_b,
+            date=self.today,
+            query='keyword rank user b',
+            page='https://projb.com/test',
+            country='eth',
+            device='mobile',
+            clicks=20,
+            impressions=500,
+            ctr=Decimal('0.0400'),
+            position=Decimal('4.00')
+        )
+
+    def test_unauthenticated_get_rejected(self):
+        """1. Unauthenticated GET rejected (401)."""
+        res = self.client.get(self.analytics_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_authenticated_user_can_create_analytics(self):
+        """2. Authenticated user can create analytics for own connection."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'connection': self.conn_a.id,
+            'date': str(self.yesterday),
+            'query': 'new analytics query',
+            'page': 'https://proja.com/new',
+            'country': 'eth',
+            'device': 'mobile',
+            'clicks': 25,
+            'impressions': 500,
+            'ctr': '0.0500',
+            'position': '3.10'
+        }
+        res = self.client.post(self.analytics_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data['connection'], self.conn_a.id)
+        self.assertEqual(res.data['project_id'], self.project_a.id)
+
+    def test_cross_user_creation_blocked(self):
+        """3. User A cannot create analytics for User B's connection."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'connection': self.conn_b.id,
+            'date': str(self.yesterday),
+            'query': 'unauthorized query',
+            'clicks': 10,
+            'impressions': 100
+        }
+        res = self.client.post(self.analytics_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_isolation(self):
+        """4. User A only sees User A's analytics."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.analytics_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in res.data]
+        self.assertIn(self.rec_a1.id, ids)
+        self.assertNotIn(self.rec_b1.id, ids)
+
+    def test_cross_user_retrieve_blocked(self):
+        """5. User A cannot retrieve User B's analytics."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.analytics_url}{self.rec_b1.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cross_user_modify_blocked(self):
+        """6. User A cannot modify User B's analytics."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(f'{self.analytics_url}{self.rec_b1.id}/', {'clicks': 9999}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cross_user_delete_blocked(self):
+        """7. User A cannot delete User B's analytics."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.analytics_url}{self.rec_b1.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_own_record(self):
+        """8. User A can update own record."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(f'{self.analytics_url}{self.rec_a1.id}/', {'clicks': 77}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['clicks'], 77)
+
+    def test_delete_own_record(self):
+        """9. User A can delete own record."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.analytics_url}{self.rec_a1.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SearchAnalyticsData.objects.filter(id=self.rec_a1.id).exists())
+
+    def test_filtering(self):
+        """10. Filtering by project, connection, date, query, page, country, device."""
+        self.client.force_authenticate(user=self.user_a)
+        
+        # Filter by project_id
+        res_proj = self.client.get(f'{self.analytics_url}?project_id={self.project_a.id}')
+        self.assertEqual(res_proj.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_proj.data), 1)
+
+        # Filter by connection_id
+        res_conn = self.client.get(f'{self.analytics_url}?connection_id={self.conn_a.id}')
+        self.assertEqual(res_conn.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_conn.data), 1)
+
+        # Filter by query
+        res_q = self.client.get(f'{self.analytics_url}?query=keyword')
+        self.assertEqual(res_q.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_q.data), 1)
+
+        # Filter by device
+        res_d = self.client.get(f'{self.analytics_url}?device=desktop')
+        self.assertEqual(res_d.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_d.data), 1)
+
+    def test_invalid_values_and_duplicates_rejected(self):
+        """11. Negative values and duplicates are rejected."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Negative clicks
+        res_neg = self.client.post(self.analytics_url, {
+            'connection': self.conn_a.id,
+            'date': str(self.today),
+            'query': 'another query',
+            'clicks': -1
+        }, format='json')
+        self.assertEqual(res_neg.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Duplicate observation
+        res_dup = self.client.post(self.analytics_url, {
+            'connection': self.conn_a.id,
+            'date': str(self.today),
+            'query': 'keyword rank test',
+            'page': 'https://proja.com/test',
+            'country': 'eth',
+            'device': 'desktop'
+        }, format='json')
+        self.assertEqual(res_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cascade_delete(self):
+        """12. Cascade delete when SearchConsoleConnection or Project is deleted."""
+        rec_id = self.rec_a1.id
+        self.project_a.delete()
+        self.assertFalse(SearchAnalyticsData.objects.filter(id=rec_id).exists())
+
 
 

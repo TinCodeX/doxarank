@@ -1,12 +1,12 @@
 from rest_framework import viewsets, permissions
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
-    SearchConsoleConnection
+    SearchConsoleConnection, SearchAnalyticsData
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
-    SearchConsoleConnectionSerializer
+    SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer
 )
 
 
@@ -138,5 +138,67 @@ class SearchConsoleConnectionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(project_id=project_id)
 
         return queryset
+
+
+class SearchAnalyticsViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for SearchAnalyticsData operations.
+    
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by `connection__project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports ownership-safe filtering by project_id, connection_id, date, start_date,
+       end_date, query, page, country, and device.
+    """
+    serializer_class = SearchAnalyticsDataSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only Search Analytics records belonging to connections owned by the authenticated user.
+        """
+        queryset = SearchAnalyticsData.objects.filter(
+            connection__project__owner=self.request.user
+        )
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(connection__project_id=project_id)
+
+        connection_id = self.request.query_params.get('connection_id')
+        if connection_id:
+            queryset = queryset.filter(connection_id=connection_id)
+
+        date_val = self.request.query_params.get('date')
+        if date_val:
+            queryset = queryset.filter(date=date_val)
+
+        start_date = self.request.query_params.get('start_date')
+        if start_date:
+            queryset = queryset.filter(date__gte=start_date)
+
+        end_date = self.request.query_params.get('end_date')
+        if end_date:
+            queryset = queryset.filter(date__lte=end_date)
+
+        query_param = self.request.query_params.get('query')
+        if query_param:
+            queryset = queryset.filter(query__icontains=query_param)
+
+        page_param = self.request.query_params.get('page')
+        if page_param:
+            queryset = queryset.filter(page__icontains=page_param)
+
+        country = self.request.query_params.get('country')
+        if country:
+            queryset = queryset.filter(country__iexact=country)
+
+        device = self.request.query_params.get('device')
+        if device:
+            queryset = queryset.filter(device__iexact=device)
+
+        return queryset
+
 
 

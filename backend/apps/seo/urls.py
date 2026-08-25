@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     KeywordViewSet, KeywordRankingViewSet,
     SiteAuditViewSet, AuditIssueViewSet,
-    SearchConsoleConnectionViewSet
+    SearchConsoleConnectionViewSet, SearchAnalyticsViewSet
 )
 
 app_name = 'seo'
@@ -14,6 +14,7 @@ router.register('rankings', KeywordRankingViewSet, basename='ranking')
 router.register('audits', SiteAuditViewSet, basename='siteaudit')
 router.register('issues', AuditIssueViewSet, basename='auditissue')
 router.register('search-console', SearchConsoleConnectionViewSet, basename='search-console')
+router.register('search-analytics', SearchAnalyticsViewSet, basename='search-analytics')
 
 urlpatterns = [
     path('', include(router.urls)),

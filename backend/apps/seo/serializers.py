@@ -3,7 +3,8 @@ from rest_framework import serializers
 from .models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
-    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus
+    SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
+    SearchAnalyticsData
 )
 from apps.projects.models import Project
 
@@ -310,5 +311,116 @@ class SearchConsoleConnectionSerializer(serializers.ModelSerializer):
                     'project': "A Search Console connection already exists for this project."
                 })
         return attrs
+
+
+class SearchAnalyticsDataSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SearchAnalyticsData model.
+    Validates ownership via connection.project.owner, validates metric boundaries,
+    and prevents duplicate observations.
+    """
+    project_id = serializers.IntegerField(source='connection.project.id', read_only=True)
+    project_name = serializers.CharField(source='connection.project.name', read_only=True)
+    property_url = serializers.CharField(source='connection.property_url', read_only=True)
+
+    class Meta:
+        model = SearchAnalyticsData
+        fields = (
+            'id',
+            'connection',
+            'project_id',
+            'project_name',
+            'property_url',
+            'date',
+            'query',
+            'page',
+            'country',
+            'device',
+            'clicks',
+            'impressions',
+            'ctr',
+            'position',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_id',
+            'project_name',
+            'property_url',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_connection(self, value):
+        """
+        Critical security boundary:
+        Ensure the target SearchConsoleConnection belongs to a project owned by the authenticated user.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.project.owner != request.user:
+                raise serializers.ValidationError(
+                    "You do not have permission to add Search Analytics data to a connection you do not own."
+                )
+        return value
+
+    def validate_clicks(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Clicks cannot be negative.")
+        return value
+
+    def validate_impressions(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Impressions cannot be negative.")
+        return value
+
+    def validate_ctr(self, value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("CTR must be between 0 and 100 (or 0.0 and 1.0).")
+        return value
+
+    def validate_position(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Average position cannot be negative.")
+        if value > 1000:
+            raise serializers.ValidationError("Average position cannot exceed 1000.")
+        return value
+
+    def validate(self, attrs):
+        connection = attrs.get('connection') or (self.instance.connection if self.instance else None)
+        date = attrs.get('date') or (self.instance.date if self.instance else None)
+        query = attrs.get('query') if 'query' in attrs else (self.instance.query if self.instance else '')
+        page = attrs.get('page') if 'page' in attrs else (self.instance.page if self.instance else '')
+        country = attrs.get('country') if 'country' in attrs else (self.instance.country if self.instance else '')
+        device = attrs.get('device') if 'device' in attrs else (self.instance.device if self.instance else '')
+
+        # Also validate clicks / impressions if both provided
+        clicks = attrs.get('clicks') if 'clicks' in attrs else (self.instance.clicks if self.instance else 0)
+        impressions = attrs.get('impressions') if 'impressions' in attrs else (self.instance.impressions if self.instance else 0)
+        if clicks < 0:
+            raise serializers.ValidationError({'clicks': "Clicks cannot be negative."})
+        if impressions < 0:
+            raise serializers.ValidationError({'impressions': "Impressions cannot be negative."})
+
+        # Check for duplicate observation
+        if connection and date:
+            qs = SearchAnalyticsData.objects.filter(
+                connection=connection,
+                date=date,
+                query=query,
+                page=page,
+                country=country,
+                device=device
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    "A Search Analytics record with this exact combination (connection, date, query, page, country, device) already exists."
+                )
+
+        return attrs
+
 
 

@@ -362,3 +362,100 @@ class SearchConsoleConnection(models.Model):
         return f"GSC: {self.property_url} ({self.project.name})"
 
 
+class SearchAnalyticsData(models.Model):
+    """
+    SearchAnalyticsData model representing historical Google Search Console performance data
+    (queries, pages, clicks, impressions, CTR, position, country, device by date).
+    Relationship: SearchConsoleConnection 1 ─────── * SearchAnalyticsData
+    Ownership follows: analytics.connection -> connection.project -> project.owner
+    """
+    connection = models.ForeignKey(
+        SearchConsoleConnection,
+        on_delete=models.CASCADE,
+        related_name='search_analytics',
+        help_text='The Search Console connection this analytics record belongs to.'
+    )
+    date = models.DateField(
+        db_index=True,
+        help_text='Observation date for this analytics row.'
+    )
+    query = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Search query / keyword string from Google Search Console.'
+    )
+    page = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Landing page URL from Google Search Console.'
+    )
+    country = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        help_text='Country code (e.g. "eth", "usa", "ET").'
+    )
+    device = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text='Device category (e.g. "desktop", "mobile", "tablet").'
+    )
+    clicks = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of clicks from organic search results.'
+    )
+    impressions = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of impressions in organic search results.'
+    )
+    ctr = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        default=0.0000,
+        help_text='Click-through rate (e.g. 0.0543 for 5.43% or raw decimal).'
+    )
+    position = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0.00,
+        help_text='Average ranking position in organic search results.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this record was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when this record was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_search_analytics_data'
+        verbose_name = 'Search Analytics record'
+        verbose_name_plural = 'Search Analytics data'
+        ordering = ['-date', '-clicks']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['connection', 'date', 'query', 'page', 'country', 'device'],
+                name='unique_search_analytics_observation'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['connection', '-date'], name='seo_analytics_conn_date_idx'),
+            models.Index(fields=['connection', 'date'], name='seo_analytics_c_d_asc_idx'),
+            models.Index(fields=['date'], name='seo_analytics_date_idx'),
+            models.Index(fields=['query'], name='seo_analytics_query_idx'),
+            models.Index(fields=['page'], name='seo_analytics_page_idx'),
+        ]
+
+    def __str__(self):
+        query_display = f"'{self.query}'" if self.query else "[all queries]"
+        return f"{query_display} on {self.date} ({self.clicks} clicks, pos {self.position})"
+
+
+

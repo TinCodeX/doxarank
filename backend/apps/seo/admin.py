@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
-    SearchConsoleConnection
+    SearchConsoleConnection, SearchAnalyticsData
 )
 
 
@@ -149,5 +149,43 @@ class SearchConsoleConnectionAdmin(admin.ModelAdmin):
     )
     readonly_fields = ('connected_at', 'created_at', 'updated_at')
     ordering = ('-created_at',)
+
+
+@admin.register(SearchAnalyticsData)
+class SearchAnalyticsDataAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'connection',
+        'date',
+        'query',
+        'page',
+        'country',
+        'device',
+        'clicks',
+        'impressions',
+        'ctr',
+        'position',
+        'created_at'
+    )
+    list_filter = (
+        'date',
+        'country',
+        'device',
+        'connection__project',
+        'created_at'
+    )
+    search_fields = (
+        'query',
+        'page',
+        'country',
+        'device',
+        'connection__property_url',
+        'connection__project__name',
+        'connection__project__owner__email'
+    )
+    date_hierarchy = 'date'
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-date', '-clicks')
+
 
 
