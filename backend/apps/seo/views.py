@@ -9,7 +9,8 @@ from .models import (
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
-    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
+    SEOContentDraft, DraftStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -18,13 +19,15 @@ from .serializers import (
     SearchConsoleSyncRequestSerializer,
     SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer,
     SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer,
-    SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer
+    SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
+    SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.seo_intelligence import SEOIntelligenceService
 from .services.ai_seo_agent import AISeoAgentService
 from .services.content_brief_service import SEOContentBriefService
-from .services.export_service import ContentBriefExportService
+from .services.content_writer_service import SEOContentWriterService
+from .services.export_service import ContentBriefExportService, ContentDraftExportService
 from apps.projects.models import Project
 
 
@@ -806,6 +809,117 @@ class SEOContentBriefViewSet(viewsets.ModelViewSet):
         response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{slug_safe}_brief.md"'
         return response
+
+
+class SEOContentDraftViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for AI-generated SEO Content Drafts.
+
+    Security & Ownership:
+    1. Requires authentication on all endpoints.
+    2. Queryset strictly isolated by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports filtering by project_id, content_brief_id, content_type, status.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action in ['update', 'partial_update']:
+            return SEOContentDraftUpdateSerializer
+        return SEOContentDraftSerializer
+
+    def get_queryset(self):
+        """
+        Return only content drafts belonging to projects owned by the authenticated user.
+        """
+        queryset = SEOContentDraft.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'brief', 'recommendation', 'insight')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        brief_id = self.request.query_params.get('content_brief_id') or self.request.query_params.get('brief_id')
+        if brief_id:
+            queryset = queryset.filter(brief_id=brief_id)
+
+        content_type = self.request.query_params.get('content_type')
+        if content_type:
+            queryset = queryset.filter(content_type=content_type)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        return queryset.order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Trigger AI content draft synthesis for an approved or completed content brief.
+        (POST /api/seo/ai/content-drafts/generate/)
+        """
+        serializer = SEOContentDraftGenerateRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        brief_id = serializer.validated_data['content_brief_id']
+        regenerate = serializer.validated_data.get('regenerate', False)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found or not owned by authenticated user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            brief = SEOContentBrief.objects.get(id=brief_id, project=project)
+        except SEOContentBrief.DoesNotExist:
+            return Response(
+                {"detail": "Content brief not found for this project."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        draft = SEOContentWriterService.generate_for_brief(
+            project=project,
+            brief=brief,
+            regenerate=regenerate
+        )
+        out_serializer = SEOContentDraftSerializer(draft)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='export')
+    def export(self, request, pk=None):
+        """
+        Export an SEO Content Draft in Markdown, HTML, or PDF format.
+        (GET /api/seo/ai/content-drafts/<id>/export/?export_format=markdown|html|pdf)
+        """
+        draft = self.get_object()  # Enforces project.owner == request.user
+        export_format = str(
+            request.query_params.get('export_format') or request.query_params.get('format') or 'markdown'
+        ).lower().strip()
+        slug_safe = draft.suggested_slug.strip('/').replace('/', '_') or f"draft_{draft.id}"
+
+        if export_format == 'html':
+            html_content = ContentDraftExportService.export_html(draft)
+            response = HttpResponse(html_content, content_type='text/html; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{slug_safe}_draft.html"'
+            return response
+
+        elif export_format == 'pdf':
+            pdf_bytes = ContentDraftExportService.export_pdf(draft)
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{slug_safe}_draft.pdf"'
+            return response
+
+        # Default Markdown
+        markdown_content = ContentDraftExportService.export_markdown(draft)
+        response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{slug_safe}_draft.md"'
+        return response
+
 
 
 

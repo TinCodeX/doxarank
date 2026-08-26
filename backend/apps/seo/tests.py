@@ -11,13 +11,15 @@ from apps.seo.models import (
     SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
-    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
+    SEOContentDraft, DraftStatus
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
 from apps.seo.services.ai_providers import MockAIProvider
 from apps.seo.services.ai_seo_agent import AISeoAgentService
 from apps.seo.services.content_brief_service import SEOContentBriefService
-from apps.seo.services.export_service import ContentBriefExportService
+from apps.seo.services.content_writer_service import SEOContentWriterService
+from apps.seo.services.export_service import ContentBriefExportService, ContentDraftExportService
 
 User = get_user_model()
 
@@ -2193,6 +2195,333 @@ class SEOContentBriefAPITests(TestCase):
         brief_id = self.brief_a.id
         self.project_a.delete()
         self.assertFalse(SEOContentBrief.objects.filter(id=brief_id).exists())
+
+
+class SEOContentDraftAPITests(TestCase):
+    """
+    Comprehensive test suite for SEO Content Drafts:
+    1. Unauthenticated rejection
+    2. Multi-tenant security isolation (User B cannot access User A drafts)
+    3. Cross-user generation rejection
+    4. Draft generation from Brief (blog_post archetype)
+    5. Draft generation for landing_page archetype
+    6. Draft generation for page_optimization archetype
+    7. Draft generation for technical_implementation archetype
+    8. Draft regeneration updates existing record (no duplicates)
+    9. In-place content editing recalculates word count and keyword coverage
+    10. Lifecycle status transitions
+    11. Export as Markdown (.md)
+    12. Export as HTML (.html)
+    13. Export as PDF (.pdf)
+    14. Filtering by project, brief, and status
+    15. Cascade delete brief removes associated drafts
+    16. Direct draft deletion (204 No Content)
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.drafts_url = '/api/seo/ai/content-drafts/'
+
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='draft_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Draft',
+            last_name='Author'
+        )
+        self.project_a = Project.objects.create(
+            name='Addis Tech Hub',
+            website_url='https://addis-tech.com',
+            owner=self.user_a
+        )
+
+        # User B & Project B (isolation target)
+        self.user_b = User.objects.create_user(
+            email='draft_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Competitor',
+            last_name='User'
+        )
+        self.project_b = Project.objects.create(
+            name='Competitor Portal',
+            website_url='https://competitor.com',
+            owner=self.user_b
+        )
+
+        # Setup Grounded Evidence for Project A
+        self.keyword_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='ethiopian coffee export guide',
+            search_engine='google',
+            country='ET',
+            language='en',
+            device='desktop'
+        )
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.keyword_a,
+            position=12,
+            ranking_url='https://addis-tech.com/coffee-guide',
+            search_engine='google',
+            country='ET',
+            language='en',
+            device='desktop',
+            recorded_at=timezone.now()
+        )
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Push "ethiopian coffee export guide" to Page 1',
+            description='Ranking at position 12 with strong baseline relevance.',
+            recommendation='Expand on-page content depth and add structured FAQ sections.',
+            related_keyword=self.keyword_a,
+            related_url='https://addis-tech.com/coffee-guide'
+        )
+        self.rec_a = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=self.insight_a,
+            recommendation_type=RecommendationType.PAGE_TWO_OPPORTUNITY,
+            priority=RecommendationPriority.HIGH,
+            title='Optimize ethiopian coffee export guide for Page 1',
+            summary='Topical expansion to capture page 1 search volume.',
+            explanation='High opportunity with minimal difficulty.',
+            recommended_action='Write an authoritative 1600-word guide.',
+            expected_impact='Increases organic click-through by 3.5x.',
+            affected_keyword='ethiopian coffee export guide',
+            affected_url='https://addis-tech.com/coffee-guide'
+        )
+        self.brief_a = SEOContentBrief.objects.create(
+            project=self.project_a,
+            recommendation=self.rec_a,
+            title='In-Depth Article Brief: Ethiopian Coffee Export Guide',
+            target_keyword='ethiopian coffee export guide',
+            secondary_keywords=['coffee export license ethiopia', 'yirgacheffe green coffee suppliers'],
+            search_intent=BriefSearchIntent.INFORMATIONAL,
+            content_type=BriefContentType.BLOG_POST,
+            recommended_title='The Ultimate Ethiopian Coffee Export Guide (2026)',
+            meta_description='Learn everything about ethiopian coffee export guide with practical licensing steps and supplier tips.',
+            suggested_slug='/blog/ethiopian-coffee-export-guide',
+            content_length_target=1600
+        )
+
+        # Pre-create a Draft for User A
+        self.draft_a = SEOContentWriterService.generate_for_brief(
+            project=self.project_a,
+            brief=self.brief_a
+        )
+
+        # Create Brief & Draft for User B
+        self.brief_b = SEOContentBrief.objects.create(
+            project=self.project_b,
+            title='Competitor Brief',
+            target_keyword='competitor seo keyword',
+            content_type=BriefContentType.BLOG_POST
+        )
+        self.draft_b = SEOContentWriterService.generate_for_brief(
+            project=self.project_b,
+            brief=self.brief_b
+        )
+
+    def test_unauthenticated_access_rejected(self):
+        """1. Unauthenticated users cannot list, generate, or export drafts."""
+        res_list = self.client.get(self.drafts_url)
+        self.assertEqual(res_list.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_gen = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': self.brief_a.id
+        })
+        self.assertEqual(res_gen.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_exp = self.client.get(f'{self.drafts_url}{self.draft_a.id}/export/')
+        self.assertEqual(res_exp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_isolation_cannot_access_other_user_draft(self):
+        """2. User B receives 404 when querying User A's draft directly."""
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.get(f'{self.drafts_url}{self.draft_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Patch also returns 404
+        res_patch = self.client.patch(f'{self.drafts_url}{self.draft_a.id}/', {'title': 'Hacked Title'})
+        self.assertEqual(res_patch.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_cannot_generate_draft_for_other_user_brief(self):
+        """3. User B cannot generate a draft using User A's brief_id."""
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': self.brief_a.id
+        })
+        self.assertIn(res.status_code, [status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND])
+
+    def test_generate_draft_from_brief_blog_post(self):
+        """4. Generate full SEOContentDraft for blog_post brief and verify all schema fields."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': self.brief_a.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data
+        self.assertEqual(data['project'], self.project_a.id)
+        self.assertEqual(data['brief'], self.brief_a.id)
+        self.assertEqual(data['content_type'], 'blog_post')
+        self.assertEqual(data['status'], 'generated')
+        self.assertTrue(len(data['title']) > 0)
+        self.assertTrue(len(data['introduction']) > 0)
+        self.assertTrue(len(data['content_body']) > 0)
+        self.assertTrue(data['word_count'] > 100)
+        self.assertIn('target_keyword', data['keyword_usage'])
+        self.assertIn('occurrences', data['keyword_usage']['target_keyword'])
+        self.assertTrue(isinstance(data['faq_section'], list))
+        self.assertEqual(data['schema_json_ld']['@type'], 'Article')
+
+    def test_generate_draft_landing_page(self):
+        """5. Generate landing page archetype draft with WebPage schema."""
+        landing_brief = SEOContentBrief.objects.create(
+            project=self.project_a,
+            title='Landing Page Brief',
+            target_keyword='enterprise coffee export platform',
+            content_type=BriefContentType.LANDING_PAGE,
+            search_intent=BriefSearchIntent.COMMERCIAL
+        )
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': landing_brief.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['content_type'], 'landing_page')
+        self.assertEqual(res.data['schema_json_ld']['@type'], 'WebPage')
+        self.assertIn('Why Modern Teams Choose', res.data['content_body'])
+
+    def test_generate_draft_page_optimization(self):
+        """6. Generate page optimization draft."""
+        opt_brief = SEOContentBrief.objects.create(
+            project=self.project_a,
+            title='Page Refresh Brief',
+            target_keyword='coffee export licensing regulations',
+            content_type=BriefContentType.PAGE_OPTIMIZATION
+        )
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': opt_brief.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['content_type'], 'page_optimization')
+        self.assertIn('Optimization Guide', res.data['title'])
+
+    def test_generate_draft_technical_implementation(self):
+        """7. Generate technical SEO implementation draft with TechArticle schema."""
+        tech_brief = SEOContentBrief.objects.create(
+            project=self.project_a,
+            title='Technical Bottleneck Brief',
+            target_keyword='xml sitemap indexation delay',
+            content_type=BriefContentType.TECHNICAL_IMPLEMENTATION
+        )
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': tech_brief.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['content_type'], 'technical_implementation')
+        self.assertEqual(res.data['schema_json_ld']['@type'], 'TechArticle')
+        self.assertIn('```nginx', res.data['content_body'])
+
+    def test_regenerate_draft_updates_existing_record(self):
+        """8. Regenerating draft for same brief updates existing record rather than duplicating."""
+        initial_id = self.draft_a.id
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.drafts_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': self.brief_a.id,
+            'regenerate': True
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['id'], initial_id)
+        self.assertEqual(SEOContentDraft.objects.filter(brief=self.brief_a).count(), 1)
+
+    def test_partial_update_content_body_recalculates_word_count(self):
+        """9. Human in-place editing of content_body recalculates exact word_count and keyword coverage."""
+        self.client.force_authenticate(user=self.user_a)
+        updated_text = "This is a new edited paragraph mentioning ethiopian coffee export guide clearly for human review."
+        res = self.client.patch(f'{self.drafts_url}{self.draft_a.id}/', {
+            'content_body': updated_text,
+            'title': 'Manually Reviewed Title'
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.draft_a.refresh_from_db()
+        self.assertEqual(self.draft_a.title, 'Manually Reviewed Title')
+        self.assertEqual(self.draft_a.word_count, len(updated_text.split()))
+        self.assertEqual(self.draft_a.keyword_usage['target_keyword']['occurrences'], 1)
+
+    def test_status_lifecycle_transitions(self):
+        """10. Test editorial status transitions (generated -> reviewed -> approved -> published -> archived)."""
+        self.client.force_authenticate(user=self.user_a)
+        for target_stat in ['reviewed', 'approved', 'published', 'archived']:
+            res = self.client.patch(f'{self.drafts_url}{self.draft_a.id}/', {'status': target_stat})
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            self.assertEqual(res.data['status'], target_stat)
+
+    def test_export_markdown_endpoint(self):
+        """11. Export draft as Markdown."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.drafts_url}{self.draft_a.id}/export/?export_format=markdown')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('text/markdown', res['Content-Type'])
+        self.assertIn('attachment; filename=', res['Content-Disposition'])
+        content = res.content.decode('utf-8')
+        self.assertTrue(content.startswith('---'))
+        self.assertIn('```json-ld', content)
+
+    def test_export_html_endpoint(self):
+        """12. Export draft as semantic HTML5 with schema."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.drafts_url}{self.draft_a.id}/export/?export_format=html')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('text/html', res['Content-Type'])
+        content = res.content.decode('utf-8')
+        self.assertIn('<!DOCTYPE html>', content)
+        self.assertIn('<script type="application/ld+json">', content)
+        self.assertIn(self.project_a.name, content)
+
+    def test_export_pdf_endpoint(self):
+        """13. Export draft as pure Python PDF 1.4."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.drafts_url}{self.draft_a.id}/export/?export_format=pdf')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'application/pdf')
+        self.assertTrue(res.content.startswith(b'%PDF-1.4'))
+        self.assertTrue(res.content.endswith(b'%%EOF\n'))
+
+    def test_filtering_by_project_brief_and_status(self):
+        """14. Test query filtering across project, brief, and status."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.drafts_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+
+        # Cross project query yields 0
+        res_cross = self.client.get(f'{self.drafts_url}?project_id={self.project_b.id}')
+        self.assertEqual(res_cross.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_cross.data), 0)
+
+    def test_cascade_delete_brief_removes_draft(self):
+        """15. Deleting content brief cascades to remove attached draft."""
+        draft_id = self.draft_a.id
+        self.brief_a.delete()
+        self.assertFalse(SEOContentDraft.objects.filter(id=draft_id).exists())
+
+    def test_delete_draft_endpoint(self):
+        """16. User can delete own draft directly."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.drafts_url}{self.draft_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SEOContentDraft.objects.filter(id=self.draft_a.id).exists())
+
 
 
 

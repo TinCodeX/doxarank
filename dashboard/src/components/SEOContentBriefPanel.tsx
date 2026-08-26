@@ -17,12 +17,14 @@ interface SEOContentBriefPanelProps {
   project: Project;
   selectedRecommendationId?: number | null;
   onClearSelectedRecId?: () => void;
+  onSelectBriefForDraft?: (briefId: number) => void;
 }
 
 export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
   project,
   selectedRecommendationId,
-  onClearSelectedRecId
+  onClearSelectedRecId,
+  onSelectBriefForDraft,
 }) => {
   const [briefs, setBriefs] = useState<SEOContentBrief[]>([]);
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
@@ -393,6 +395,30 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   }}
                 >
                   {isGenerating ? '🔄 Regenerating...' : '✨ Regenerate Brief'}
+                </button>
+              )}
+
+              {/* Generate Draft Button */}
+              {onSelectBriefForDraft && (
+                <button
+                  id={`create-draft-from-brief-${activeBrief.id}-btn`}
+                  onClick={() => onSelectBriefForDraft(activeBrief.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#10b981',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                  }}
+                >
+                  ✍️ Write SEO Draft
                 </button>
               )}
             </>

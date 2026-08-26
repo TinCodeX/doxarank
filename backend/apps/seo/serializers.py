@@ -1,3 +1,4 @@
+import re
 from django.utils import timezone
 from rest_framework import serializers
 from .models import (
@@ -7,7 +8,8 @@ from .models import (
     SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
-    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
+    SEOContentDraft, DraftStatus
 )
 from apps.projects.models import Project
 
@@ -725,6 +727,162 @@ class SEOContentBriefStatusUpdateSerializer(serializers.Serializer):
         choices=BriefStatus.choices,
         help_text="Target status: draft, in_progress, completed, or archived."
     )
+
+
+class SEOContentDraftSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOContentDraft model.
+    Enforces project and brief ownership and exposes relational and computed metadata.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    brief_title = serializers.CharField(source='brief.title', read_only=True)
+    content_type_display = serializers.CharField(source='get_content_type_display', read_only=True)
+    search_intent_display = serializers.CharField(source='get_search_intent_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = SEOContentDraft
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'brief',
+            'brief_title',
+            'recommendation',
+            'insight',
+            'title',
+            'target_keyword',
+            'secondary_keywords',
+            'search_intent',
+            'search_intent_display',
+            'target_url',
+            'content_type',
+            'content_type_display',
+            'introduction',
+            'content_body',
+            'outline_structure',
+            'word_count',
+            'keyword_usage',
+            'internal_links',
+            'external_links',
+            'faq_section',
+            'meta_title',
+            'meta_description',
+            'suggested_slug',
+            'schema_json_ld',
+            'generated_content',
+            'generation_metadata',
+            'status',
+            'status_display',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'brief_title',
+            'content_type_display',
+            'search_intent_display',
+            'status_display',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create drafts for this project.")
+        return value
+
+    def validate_brief(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.project.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to attach a draft to this brief.")
+        return value
+
+
+class SEOContentDraftGenerateRequestSerializer(serializers.Serializer):
+    """
+    Serializer for validating AI Content Draft generation requests.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the project the draft belongs to."
+    )
+    content_brief_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the SEOContentBrief to generate the draft from."
+    )
+    regenerate = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Whether to force regenerate existing draft record."
+    )
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        project_id = attrs.get('project_id')
+        brief_id = attrs.get('content_brief_id')
+
+        if request and request.user.is_authenticated:
+            try:
+                project = Project.objects.get(id=project_id, owner=request.user)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError({"project_id": "Project not found or not owned by user."})
+
+            try:
+                brief = SEOContentBrief.objects.get(id=brief_id, project=project)
+            except SEOContentBrief.DoesNotExist:
+                raise serializers.ValidationError({"content_brief_id": "Content brief not found for this project."})
+
+        return attrs
+
+
+class SEOContentDraftUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for in-place human editing and status transitions of SEO content drafts.
+    """
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = SEOContentDraft
+        fields = (
+            'id',
+            'title',
+            'meta_title',
+            'meta_description',
+            'suggested_slug',
+            'introduction',
+            'content_body',
+            'outline_structure',
+            'faq_section',
+            'internal_links',
+            'external_links',
+            'schema_json_ld',
+            'status',
+            'status_display',
+            'word_count',
+            'keyword_usage',
+            'updated_at'
+        )
+        read_only_fields = ('id', 'status_display', 'word_count', 'keyword_usage', 'updated_at')
+
+    def update(self, instance, validated_data):
+        # If content_body is updated, recalculate exact word count and keyword coverage
+        instance = super().update(instance, validated_data)
+        if 'content_body' in validated_data:
+            from apps.seo.services.content_writer_service import SEOContentWriterService
+            instance.word_count = len(re.findall(r'\b\w+\b', instance.content_body))
+            instance.keyword_usage = SEOContentWriterService.calculate_keyword_usage(
+                text_content=instance.content_body,
+                target_keyword=instance.target_keyword,
+                secondary_keywords=instance.secondary_keywords or []
+            )
+            instance.save(update_fields=['word_count', 'keyword_usage', 'updated_at'])
+        return instance
+
 
 
 

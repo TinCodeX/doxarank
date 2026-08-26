@@ -921,6 +921,193 @@ class SEOContentBrief(models.Model):
         return f"[{self.get_content_type_display()}] {self.title} ({self.project.name})"
 
 
+class DraftStatus(models.TextChoices):
+    DRAFT = 'draft', 'Draft'
+    GENERATING = 'generating', 'Generating'
+    GENERATED = 'generated', 'Generated'
+    REVIEWED = 'reviewed', 'Reviewed'
+    APPROVED = 'approved', 'Approved'
+    PUBLISHED = 'published', 'Published'
+    ARCHIVED = 'archived', 'Archived'
+
+
+class SEOContentDraft(models.Model):
+    """
+    SEOContentDraft model representing a fully articulated, publish-ready SEO content draft
+    synthesized from an SEOContentBrief and grounded in real ranking, GSC, and audit metrics.
+    Relationship: Project 1 ─────── * SEOContentDraft
+                  SEOContentBrief 1 ─────── * SEOContentDraft
+                  SEORecommendation 1 ─────── * SEOContentDraft (optional)
+                  SEOInsight 1 ─────── * SEOContentDraft (optional)
+    Ownership follows: draft.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='content_drafts',
+        help_text='The project this content draft belongs to.'
+    )
+    brief = models.ForeignKey(
+        SEOContentBrief,
+        on_delete=models.CASCADE,
+        related_name='content_drafts',
+        help_text='The source SEO content brief used to generate this draft.'
+    )
+    recommendation = models.ForeignKey(
+        SEORecommendation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='content_drafts',
+        help_text='Optional originating SEO recommendation.'
+    )
+    insight = models.ForeignKey(
+        SEOInsight,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='content_drafts',
+        help_text='Optional originating SEO insight.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Working title for the generated content draft.'
+    )
+    target_keyword = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Primary target search keyword.'
+    )
+    secondary_keywords = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of supporting / secondary keywords incorporated.'
+    )
+    search_intent = models.CharField(
+        max_length=50,
+        choices=BriefSearchIntent.choices,
+        default=BriefSearchIntent.INFORMATIONAL,
+        db_index=True,
+        help_text='Search intent category targeted by the draft.'
+    )
+    target_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Target canonical URL for the draft.'
+    )
+    content_type = models.CharField(
+        max_length=50,
+        choices=BriefContentType.choices,
+        default=BriefContentType.BLOG_POST,
+        db_index=True,
+        help_text='Content archetype (blog post, landing page, page optimization, technical implementation).'
+    )
+    introduction = models.TextField(
+        blank=True,
+        default='',
+        help_text='Engaging opening paragraph answering user search intent.'
+    )
+    content_body = models.TextField(
+        blank=True,
+        default='',
+        help_text='Complete articulated Markdown content body of the draft.'
+    )
+    outline_structure = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Structured outline sections with headings, levels, paragraphs, and key points.'
+    )
+    word_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Exact word count of the generated draft.'
+    )
+    keyword_usage = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Deterministic keyword density and occurrences tracking map.'
+    )
+    internal_links = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Internal links with anchor texts, URLs, and target section context.'
+    )
+    external_links = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Authoritative external reference citations.'
+    )
+    faq_section = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of FAQ items (question and answer) designed for FAQ schema.'
+    )
+    meta_title = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Recommended title tag for search engines.'
+    )
+    meta_description = models.TextField(
+        blank=True,
+        default='',
+        help_text='Recommended meta description snippet.'
+    )
+    suggested_slug = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Optimized URL slug path.'
+    )
+    schema_json_ld = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured JSON-LD schema markup (Article, FAQPage, WebPage, etc.).'
+    )
+    generated_content = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Raw structured response payload from the AI writer.'
+    )
+    generation_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Model name, grounded sources, and generation parameters.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=DraftStatus.choices,
+        default=DraftStatus.GENERATED,
+        db_index=True,
+        help_text='Editorial workflow status (draft, generating, generated, reviewed, approved, published, archived).'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the draft was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the draft was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_content_drafts'
+        verbose_name = 'SEO content draft'
+        verbose_name_plural = 'SEO content drafts'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_draft_proj_stat_idx'),
+            models.Index(fields=['project', 'content_type'], name='seo_draft_proj_type_idx'),
+            models.Index(fields=['brief', 'status'], name='seo_draft_brief_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_draft_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_status_display()}] {self.title} ({self.project.name})"
+
+
+
 
 
 

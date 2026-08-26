@@ -100,6 +100,60 @@ SCHEMA:
 }
 """
 
+CONTENT_DRAFT_SYSTEM_PROMPT = """You are DoxaRank's Senior AI SEO Content Writer and Managing Editor.
+Your objective is to generate an in-depth, publish-ready, highly-optimized SEO content draft based on a structured SEO Content Brief and real grounded SEO data.
+
+CRITICAL SAFETY & GROUNDING RULES:
+1. NEVER invent or fabricate search ranking metrics, clicks, impressions, or CTR figures.
+2. Clearly separate observed SEO facts from generated editorial copy.
+3. NEVER promise guaranteed rankings or conversions.
+4. Output MUST be strictly valid JSON conforming exactly to the required SCHEMA.
+
+SCHEMA:
+{
+  "title": "<Main Article / Page H1 Title>",
+  "meta_title": "<Recommended Meta Title (50-60 chars)>",
+  "meta_description": "<Compelling Meta Description with CTA (140-160 chars)>",
+  "slug": "<optimized-url-slug>",
+  "introduction": "<Comprehensive opening section establishing search intent relevance>",
+  "sections": [
+    {
+      "heading": "<Section H2 or H3 heading>",
+      "level": "H2" | "H3",
+      "content": "<Full articulated markdown paragraphs for this section with substantive depth, actionable steps, and natural keyword usage>",
+      "key_points": ["<Key takeaway 1>", "<Key takeaway 2>"]
+    }
+  ],
+  "faq": [
+    {
+      "question": "<FAQ question targeted for SERP Rich Snippets>",
+      "answer": "<Clear, concise 2-3 sentence answer directly answering the question>"
+    }
+  ],
+  "internal_links": [
+    {
+      "target_url": "/relevant-url",
+      "anchor_text": "contextual anchor text",
+      "context": "Where and why it is placed in the content"
+    }
+  ],
+  "external_links": [
+    {
+      "source": "Authoritative Reference",
+      "anchor_text": "descriptive anchor text",
+      "context": "Context of citation"
+    }
+  ],
+  "schema_json_ld": {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "<Title>",
+    "description": "<Meta Description>"
+  },
+  "word_count": 1600
+}
+"""
+
 
 class BaseAIProvider(ABC):
     """Abstract base class for AI LLM providers."""
@@ -113,6 +167,12 @@ class BaseAIProvider(ABC):
     def generate_content_brief(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate structured SEO content brief JSON based on recommendation context."""
         pass
+
+    @abstractmethod
+    def generate_content_draft(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate full publishable SEO content draft JSON based on brief context."""
+        pass
+
 
 
 class MockAIProvider(BaseAIProvider):
@@ -717,16 +777,6 @@ class MockAIProvider(BaseAIProvider):
                     "context": "Cite statistical proof points in the strategy section."
                 }
             ],
-            "faq_questions": [
-                {
-                    "question": f"How do I get started with {kw_clean}?",
-                    "answer_guidance": "Begin with a baseline audit, establish measurable goals, and follow the step-by-step implementation guide."
-                },
-                {
-                    "question": f"What are the most common mistakes in {kw_clean}?",
-                    "answer_guidance": "Failing to align with user intent, neglecting mobile performance, and ignoring analytical feedback."
-                }
-            ],
             "entities_topics": [
                 kw_clean,
                 "Content Marketing Strategy",
@@ -735,6 +785,292 @@ class MockAIProvider(BaseAIProvider):
                 "Digital Marketing Analytics"
             ],
             "content_length_target": 1600
+        }
+
+    def generate_content_draft(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        content_type = context.get('content_type') or 'blog_post'
+        target_keyword = context.get('target_keyword') or context.get('keyword') or 'SEO Content Strategy'
+        secondary_keywords = context.get('secondary_keywords') or []
+        rec_title = context.get('title') or context.get('recommended_title') or f"Complete Guide to {target_keyword}"
+        project_name = context.get('project_name') or 'DoxaRank'
+        slug = context.get('suggested_slug') or target_keyword.lower().replace(' ', '-').replace('/', '-')
+        target_url = context.get('target_url') or f"/{slug}"
+        audience = context.get('audience') or 'Industry professionals and decision makers'
+        content_angle = context.get('content_angle') or f"Actionable, data-driven approach to mastering {target_keyword}."
+
+        kw_clean = target_keyword.strip()
+        kw_title = kw_clean.title() if kw_clean else 'Target Topic'
+
+        if content_type == 'landing_page':
+            title = f"{kw_title} — Leading Enterprise Solutions | {project_name}"
+            meta_title = f"{kw_title} Solutions & Services | {project_name}"
+            meta_desc = f"Discover leading {kw_clean} solutions designed for scalable growth. Compare features, transparent pricing, and measurable ROI. Get started today."
+            intro = f"In today's fast-moving search and commercial landscape, achieving sustained growth requires a dedicated approach to {kw_clean}. Our enterprise-grade platform empowers your team with automated intelligence, real-time tracking, and verified results."
+            sections = [
+                {
+                    "heading": f"Why Modern Teams Choose Our {kw_title} Solutions",
+                    "level": "H2",
+                    "content": f"Navigating {kw_clean} demands precision and efficiency. Traditional workflows often suffer from fragmented data and slow execution cycles. Our specialized solution bridges these gaps by providing clear benchmarks, integrated performance metrics, and automated workflows that save your team dozens of hours each month.",
+                    "key_points": [
+                        "Eliminate manual bottlenecks with automated performance tracking",
+                        "Data-backed transparency across all key business touchpoints",
+                        "Seamless integration into existing enterprise workflows"
+                    ]
+                },
+                {
+                    "heading": "Core Features & Competitive Advantages",
+                    "level": "H2",
+                    "content": f"When evaluating solutions for {kw_clean}, capability and reliability are paramount. Our platform delivers high-accuracy insights, sub-second response times, and tailored recommendations that ensure you remain ahead of competitors. Every feature is engineered to provide immediate value without steep learning curves.",
+                    "key_points": [
+                        "Real-time diagnostic alerts and anomaly detection",
+                        "Customizable reporting dashboards tailored for executive leadership",
+                        "Dedicated support and comprehensive onboarding documentation"
+                    ]
+                },
+                {
+                    "heading": "How It Works: Simple 3-Step Implementation",
+                    "level": "H2",
+                    "content": f"Getting started with {kw_clean} is straightforward:\n\n1. **Connect & Audit:** Integrate your existing assets to establish baseline metrics.\n2. **Optimize & Execute:** Follow prioritized recommendations and automated briefs.\n3. **Measure & Scale:** Track ranking velocity and organic visibility gains over time.",
+                    "key_points": [
+                        "Setup takes less than 15 minutes",
+                        "Zero disruption to existing production environments"
+                    ]
+                },
+                {
+                    "heading": f"Ready to Transform Your {kw_title} Strategy?",
+                    "level": "H2",
+                    "content": f"Join hundreds of forward-thinking organizations using DoxaRank to unlock organic growth. Start your free trial today or request a custom demonstration with our product specialists.",
+                    "key_points": [
+                        "No long-term contracts required",
+                        "Full access to all platform features"
+                    ]
+                }
+            ]
+            faqs = [
+                {
+                    "question": f"How quickly can we implement {kw_clean}?",
+                    "answer": f"Standard onboarding and deployment for {kw_clean} is completed within 3 to 5 business days, with guided walkthroughs from our team."
+                },
+                {
+                    "question": f"What measurable results can we expect from {kw_clean}?",
+                    "answer": f"Organizations typically experience improved workflow efficiency, higher visibility on commercial search queries, and reduced manual overhead within the first month."
+                }
+            ]
+            schema_type = "WebPage"
+
+        elif content_type == 'page_optimization':
+            title = f"{kw_title}: Step-by-Step Practical Optimization Guide"
+            meta_title = f"{kw_title} Optimization Guide (2026 Updated)"
+            meta_desc = f"Master {kw_clean} with actionable tactics, updated frameworks, and real-world examples. Learn how to optimize on-page signals and search intent."
+            intro = f"Search algorithms and user expectations for {kw_clean} continue to evolve rapidly in 2026. This comprehensive optimization guide provides the exact frameworks, content adjustments, and technical checkpoints needed to elevate your page's organic search relevance."
+            sections = [
+                {
+                    "heading": f"Understanding Search Intent for {kw_title}",
+                    "level": "H2",
+                    "content": f"To optimize effectively for {kw_clean}, you must first align with search intent. Users searching for this query are looking for authoritative, direct, and actionable solutions. Ensuring your introductory section immediately answers the core query establishes high helpfulness scores and reduces bounce rates.",
+                    "key_points": [
+                        "Address the primary query within the first 100 words",
+                        "Incorporate clear visual breakdowns and structured subheadings",
+                        "Eliminate fluff and outdated references"
+                    ]
+                },
+                {
+                    "heading": "Step-by-Step On-Page Optimization Framework",
+                    "level": "H2",
+                    "content": f"Follow this prioritized checklist to refresh existing content:\n\n- **Header Hierarchy:** Ensure H1 contains '{kw_clean}' and H2s incorporate secondary variations naturally.\n- **Depth & Originality:** Add first-party examples, data points, or workflows.\n- **Internal Links:** Connect relevant cluster pages with contextual anchor text.\n- **Schema Markup:** Validate Article and FAQPage structured data.",
+                    "key_points": [
+                        "Refresh stale statistics with 2026 benchmarks",
+                        "Add practical bullet points for quick skimmers"
+                    ]
+                },
+                {
+                    "heading": "Measuring Post-Optimization Impact",
+                    "level": "H2",
+                    "content": f"After publishing optimizations for {kw_clean}, monitor Search Console click-through rate and impression trends over a 14-day window. Re-crawling can be accelerated via Google Search Console URL inspection.",
+                    "key_points": [
+                        "Track ranking position shifts weekly in DoxaRank",
+                        "Inspect engagement metrics and bounce rates"
+                    ]
+                }
+            ]
+            faqs = [
+                {
+                    "question": f"Why is optimizing for {kw_clean} essential in 2026?",
+                    "answer": f"Search engines prioritize fresh, highly-helpful content that directly satisfies query intent without unnecessary filler."
+                },
+                {
+                    "question": f"How often should {kw_clean} pages be updated?",
+                    "answer": "Pages targeting competitive search terms should be reviewed every 6 months to maintain topical relevance and freshness signals."
+                }
+            ]
+            schema_type = "Article"
+
+        elif content_type == 'technical_implementation':
+            title = f"Technical Implementation Spec: Resolving {kw_title} Bottlenecks"
+            meta_title = f"Technical SEO Spec: {kw_title} Fix & Implementation"
+            meta_desc = f"Developer execution guide for {kw_clean}. Step-by-step code snippets, server headers, configuration changes, and validation tests."
+            intro = f"This technical specification provides the engineering requirements, architectural considerations, and code configurations necessary to resolve {kw_clean} bottlenecks on production endpoints."
+            sections = [
+                {
+                    "heading": "Issue Summary & Root Cause Analysis",
+                    "level": "H2",
+                    "content": f"An automated audit identified performance or indexing anomalies relating to {kw_clean}. Left unresolved, these issues consume unnecessary crawl budget and introduce indexation delays. Below is the diagnostic overview of observed response codes and affected templates.",
+                    "key_points": [
+                        "Identified latency and header misconfigurations",
+                        "Impacts mobile crawl budget and page speed indices",
+                        "High priority for engineering remediation"
+                    ]
+                },
+                {
+                    "heading": "Required Configuration & Code Changes",
+                    "level": "H2",
+                    "content": f"Apply the following configuration changes across the application and CDN layer:\n\n```nginx\n# Example Nginx Header Configuration for {kw_clean}\nlocation / {{\n    add_header X-Content-Type-Options nosniff;\n    add_header Cache-Control \"public, max-age=31536000, immutable\";\n}}\n```\n\nEnsure canonical tags on all responding URLs strictly match the primary HTTPS host.",
+                    "key_points": [
+                        "Enforce HTTPS and clean 301 canonical redirects",
+                        "Configure proper cache headers for static assets",
+                        "Embed valid JSON-LD structured data in document head"
+                    ]
+                },
+                {
+                    "heading": "Testing & Verification Protocol",
+                    "level": "H2",
+                    "content": f"Execute automated curl verification commands to inspect headers and response times:\n\n```bash\ncurl -I -L https://example.com{target_url}\n```\n\nVerify that the response returns HTTP 200 with no redirect loops, and run a site audit re-scan in DoxaRank.",
+                    "key_points": [
+                        "Validate with Google Rich Results Test tool",
+                        "Confirm zero 4xx/5xx status codes in server access logs"
+                    ]
+                }
+            ]
+            faqs = [
+                {
+                    "question": f"What is the impact of resolving {kw_clean}?",
+                    "answer": f"Resolving technical bottlenecks ensures optimal crawl efficiency, rapid indexation of new URLs, and improved Core Web Vitals."
+                }
+            ]
+            schema_type = "TechArticle"
+
+        else: # Default blog_post
+            title = f"The Ultimate Guide to {kw_title} (2026 Edition)"
+            meta_title = f"The Complete Guide to {kw_title} | {project_name}"
+            meta_desc = f"Learn everything you need to know about {kw_clean}. Discover actionable strategies, expert insights, and step-by-step best practices."
+            intro = f"Mastering {kw_clean} has become one of the most vital imperatives for modern digital growth. Whether you are looking to build authority, capture search intent, or improve execution efficiency, this comprehensive guide delivers the foundational knowledge and advanced frameworks needed to succeed."
+            sections = [
+                {
+                    "heading": f"What is {kw_title} and Why Does It Matter?",
+                    "level": "H2",
+                    "content": f"{kw_title} refers to the systematic approach of optimizing visibility, quality, and engagement for target audiences. By aligning editorial depth with real user search intent, organizations can establish lasting topical authority and outperform thin summaries across competitive search landscapes.",
+                    "key_points": [
+                        f"Foundational definition and relevance of {kw_clean}",
+                        "Key search intent dynamics and user expectations",
+                        "Long-term compounding value of high-quality content"
+                    ]
+                },
+                {
+                    "heading": f"Key Strategies for Mastering {kw_title}",
+                    "level": "H2",
+                    "content": f"Achieving standout results with {kw_clean} requires three core pillars:\n\n1. **Evidence-Based Grounding:** Base every strategy on observed performance data rather than guesswork.\n2. **Structured Editorial Architecture:** Organize information with clear heading hierarchies and concise summaries.\n3. **Continuous Iteration:** Use analytical feedback to refine and expand high-performing sections.",
+                    "key_points": [
+                        "Prioritize actionable takeaways over generic theory",
+                        "Incorporate supporting secondary keywords naturally throughout subheadings",
+                        "Maintain high readability with short paragraphs and bulleted lists"
+                    ]
+                },
+                {
+                    "heading": "Common Mistakes to Avoid",
+                    "level": "H2",
+                    "content": f"Many teams struggle with {kw_clean} due to avoidable missteps:\n\n- **Keyword Stuffing:** Always prioritize natural readability and semantic clarity.\n- **Ignoring Search Intent:** Ensure the content matches whether the user wants information, comparison, or direct action.\n- **Neglecting Technical Foundations:** Slow page speeds and missing schema can undermine great content.",
+                    "key_points": [
+                        "Audit existing content before publishing new duplicates",
+                        "Keep user satisfaction as the primary metric of success"
+                    ]
+                },
+                {
+                    "heading": "Conclusion & Actionable Next Steps",
+                    "level": "H2",
+                    "content": f"Building sustainable search visibility around {kw_clean} is an ongoing journey. Start by implementing the core recommendations outlined in this guide, monitor your rank progression with DoxaRank, and continue updating your content as market trends evolve.",
+                    "key_points": [
+                        "Execute foundational optimizations today",
+                        "Track keyword positions and click-through rates regularly"
+                    ]
+                }
+            ]
+            faqs = [
+                {
+                    "question": f"How do I get started with {kw_clean}?",
+                    "answer": f"Begin with a baseline audit, identify primary and secondary keywords, and structure your content with clear H1/H2 headings."
+                },
+                {
+                    "question": f"What are the best practices for {kw_clean}?",
+                    "answer": "Focus on answering user search intent in depth, maintaining high readability, adding schema markup, and refreshing content regularly."
+                }
+            ]
+            schema_type = "Article"
+
+        # Build full markdown content body
+        body_parts = [f"# {title}", "", intro, ""]
+        for sec in sections:
+            body_parts.append(f"## {sec['heading']}")
+            body_parts.append("")
+            body_parts.append(sec['content'])
+            body_parts.append("")
+        if faqs:
+            body_parts.append("## Frequently Asked Questions")
+            body_parts.append("")
+            for f in faqs:
+                body_parts.append(f"**Q: {f['question']}**")
+                body_parts.append(f"{f['answer']}")
+                body_parts.append("")
+
+        full_body = "\n".join(body_parts)
+        words = len(full_body.split())
+
+        schema_json_ld = {
+            "@context": "https://schema.org",
+            "@type": schema_type,
+            "headline": title,
+            "description": meta_desc,
+            "author": {
+                "@type": "Organization",
+                "name": project_name
+            }
+        }
+        if faqs:
+            schema_json_ld["mainEntity"] = [
+                {
+                    "@type": "Question",
+                    "name": f["question"],
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": f["answer"]
+                    }
+                }
+                for f in faqs
+            ]
+
+        return {
+            "title": title,
+            "meta_title": meta_title,
+            "meta_description": meta_desc,
+            "slug": slug,
+            "introduction": intro,
+            "sections": sections,
+            "faq": faqs,
+            "internal_links": [
+                {
+                    "target_url": "/services",
+                    "anchor_text": f"explore {kw_clean} solutions",
+                    "context": "Contextual link in strategy section."
+                }
+            ],
+            "external_links": [
+                {
+                    "source": "Official Industry Guide",
+                    "anchor_text": "industry benchmark data",
+                    "context": "Cited in foundational overview section."
+                }
+            ],
+            "schema_json_ld": schema_json_ld,
+            "word_count": words
         }
 
 
@@ -829,6 +1165,47 @@ class OpenAIProvider(BaseAIProvider):
             logger.error(f"OpenAI API content brief generation failed: {e}. Falling back to MockAIProvider.")
             return MockAIProvider().generate_content_brief(context)
 
+    def generate_content_draft(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.api_key:
+            logger.warning("OPENAI_API_KEY is not configured; falling back to MockAIProvider.")
+            return MockAIProvider().generate_content_draft(context)
+
+        try:
+            import urllib.request
+            import urllib.error
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": CONTENT_DRAFT_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Generate a complete, high-quality, publish-ready SEO Content Draft for the following brief context:\n{json.dumps(context, indent=2)}"
+                    }
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.3
+            }
+
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=json.dumps(payload).encode('utf-8'),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}"
+                }
+            )
+
+            with urllib.request.urlopen(req, timeout=35) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                content_str = res_data['choices'][0]['message']['content']
+                parsed = json.loads(content_str)
+                return parsed
+
+        except Exception as e:
+            logger.error(f"OpenAI API content draft generation failed: {e}. Falling back to MockAIProvider.")
+            return MockAIProvider().generate_content_draft(context)
+
 
 def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:
     """
@@ -842,4 +1219,5 @@ def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:
         return OpenAIProvider(api_key=api_key)
 
     return MockAIProvider()
+
 

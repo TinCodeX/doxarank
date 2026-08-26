@@ -15,6 +15,7 @@ import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalytic
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
+import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 export const Dashboard: React.FC = () => {
@@ -59,6 +60,9 @@ export const Dashboard: React.FC = () => {
 
   // Content Brief state
   const [briefTargetRecId, setBriefTargetRecId] = useState<number | null>(null);
+
+  // Content Draft state
+  const [draftTargetBriefId, setDraftTargetBriefId] = useState<number | null>(null);
 
   // Load user projects on initial mount
   const fetchUserProjects = async () => {
@@ -728,10 +732,26 @@ export const Dashboard: React.FC = () => {
             project={selectedProject}
             selectedRecommendationId={briefTargetRecId}
             onClearSelectedRecId={() => setBriefTargetRecId(null)}
+            onSelectBriefForDraft={(briefId) => {
+              setDraftTargetBriefId(briefId);
+              const draftElem = document.getElementById('seo-content-drafts-section');
+              if (draftElem) {
+                draftElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 
-        {/* SECTION 9: PROJECTS MANAGEMENT */}
+        {/* SECTION 9: AI SEO CONTENT DRAFT WRITER (Visible when a project is selected) */}
+        {selectedProject && (
+          <SEOContentDraftPanel
+            currentProject={selectedProject}
+            targetBriefId={draftTargetBriefId}
+            onClearTargetBrief={() => setDraftTargetBriefId(null)}
+          />
+        )}
+
+        {/* SECTION 10: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
