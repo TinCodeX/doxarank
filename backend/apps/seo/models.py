@@ -616,5 +616,132 @@ class SEOInsight(models.Model):
         return f"[{self.severity.upper()}] {self.title} ({self.project.name})"
 
 
+class RecommendationType(models.TextChoices):
+    META_TITLE = 'meta_title', 'Meta Title'
+    META_DESCRIPTION = 'meta_description', 'Meta Description'
+    CONTENT_UPDATE = 'content_update', 'Content Update'
+    KEYWORD_OPTIMIZATION = 'keyword_optimization', 'Keyword Optimization'
+    INTERNAL_LINKING = 'internal_linking', 'Internal Linking'
+    TECHNICAL_SEO = 'technical_seo', 'Technical SEO'
+    RANKING_RECOVERY = 'ranking_recovery', 'Ranking Recovery'
+    CTR_OPTIMIZATION = 'ctr_optimization', 'CTR Optimization'
+    PAGE_TWO_OPPORTUNITY = 'page_two_opportunity', 'Page Two Opportunity'
+    GENERAL_SEO = 'general_seo', 'General SEO'
+
+
+class RecommendationPriority(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    HIGH = 'high', 'High'
+    MEDIUM = 'medium', 'Medium'
+    LOW = 'low', 'Low'
+
+
+class RecommendationStatus(models.TextChoices):
+    PENDING_REVIEW = 'pending_review', 'Pending Review'
+    REVIEWED = 'reviewed', 'Reviewed'
+    APPLIED = 'applied', 'Applied'
+    DISMISSED = 'dismissed', 'Dismissed'
+
+
+class SEORecommendation(models.Model):
+    """
+    SEORecommendation model representing an AI-generated, explainable,
+    and structured action proposal based on an originating SEOInsight.
+    Relationship: Project 1 ─────── * SEORecommendation
+                  SEOInsight 1 ─────── * SEORecommendation
+    Ownership follows: rec.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='recommendations',
+        help_text='The project this AI recommendation belongs to.'
+    )
+    insight = models.ForeignKey(
+        SEOInsight,
+        on_delete=models.CASCADE,
+        related_name='recommendations',
+        help_text='The originating SEO insight this recommendation addresses.'
+    )
+    recommendation_type = models.CharField(
+        max_length=50,
+        choices=RecommendationType.choices,
+        default=RecommendationType.GENERAL_SEO,
+        db_index=True,
+        help_text='Type of SEO optimization recommended.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Concise title summarizing the recommendation.'
+    )
+    summary = models.TextField(
+        help_text='High-level summary of the issue and rationale.'
+    )
+    explanation = models.TextField(
+        help_text='In-depth explanation of the observed SEO evidence and causal factors.'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=RecommendationPriority.choices,
+        default=RecommendationPriority.HIGH,
+        db_index=True,
+        help_text='Execution priority.'
+    )
+    recommended_action = models.TextField(
+        help_text='Concrete step-by-step instructions for the user/developer.'
+    )
+    expected_impact = models.TextField(
+        help_text='Estimated realistic SEO impact without false certainty.'
+    )
+    affected_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Target URL for applying the recommendation.'
+    )
+    affected_keyword = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Target keyword query associated with this recommendation.'
+    )
+    generated_content = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured copy proposals (e.g. proposed title, meta description, copy outlines).'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RecommendationStatus.choices,
+        default=RecommendationStatus.PENDING_REVIEW,
+        db_index=True,
+        help_text='Workflow approval status of this recommendation.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the recommendation was generated.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the recommendation was last modified.'
+    )
+
+    class Meta:
+        db_table = 'seo_recommendations'
+        verbose_name = 'SEO recommendation'
+        verbose_name_plural = 'SEO recommendations'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_rec_proj_stat_idx'),
+            models.Index(fields=['project', 'priority'], name='seo_rec_proj_prio_idx'),
+            models.Index(fields=['insight', 'status'], name='seo_rec_ins_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_rec_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.priority.upper()}] {self.title} ({self.project.name})"
+
+
+
 
 

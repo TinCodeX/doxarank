@@ -5,7 +5,8 @@ from .models import (
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
     SearchAnalyticsData,
-    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
 )
 from apps.projects.models import Project
 
@@ -525,6 +526,82 @@ class SEOInsightStatusUpdateSerializer(serializers.Serializer):
         choices=InsightStatus.choices,
         help_text="Target status: open, dismissed, or resolved."
     )
+
+
+class SEORecommendationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEORecommendation model.
+    Enforces project ownership and exposes rich context from the originating insight.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    insight_title = serializers.CharField(source='insight.title', read_only=True)
+    insight_severity = serializers.CharField(source='insight.severity', read_only=True)
+    insight_type = serializers.CharField(source='insight.insight_type', read_only=True)
+
+    class Meta:
+        model = SEORecommendation
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'insight',
+            'insight_title',
+            'insight_severity',
+            'insight_type',
+            'recommendation_type',
+            'title',
+            'summary',
+            'explanation',
+            'priority',
+            'recommended_action',
+            'expected_impact',
+            'affected_url',
+            'affected_keyword',
+            'generated_content',
+            'status',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'insight_title',
+            'insight_severity',
+            'insight_type',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create recommendations for this project.")
+        return value
+
+
+class SEORecommendationGenerateRequestSerializer(serializers.Serializer):
+    """
+    Serializer for triggering AI recommendation generation for a project or specific insights.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the project to generate AI recommendations for."
+    )
+    insight_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+        help_text="Optional list of specific insight IDs to generate recommendations for."
+    )
+
+    def validate_project_id(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if not Project.objects.filter(id=value, owner=request.user).exists():
+                raise serializers.ValidationError("Project does not exist or you do not have permission to access it.")
+        return value
+
 
 
 

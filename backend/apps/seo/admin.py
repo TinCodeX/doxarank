@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
-    SEOInsight
+    SEOInsight, SEORecommendation
 )
 
 
@@ -224,6 +224,40 @@ class SEOInsightAdmin(admin.ModelAdmin):
     )
     readonly_fields = ('created_at', 'updated_at')
     ordering = ('-detected_at',)
+
+
+@admin.register(SEORecommendation)
+class SEORecommendationAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'priority',
+        'recommendation_type',
+        'title',
+        'status',
+        'affected_keyword',
+        'created_at'
+    )
+    list_filter = (
+        'priority',
+        'status',
+        'recommendation_type',
+        'created_at'
+    )
+    search_fields = (
+        'title',
+        'summary',
+        'explanation',
+        'recommended_action',
+        'expected_impact',
+        'project__name',
+        'project__owner__email',
+        'affected_keyword',
+        'affected_url'
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+
 
 
 

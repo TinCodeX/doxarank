@@ -9,9 +9,12 @@ from apps.seo.models import (
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
     SearchAnalyticsData,
-    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
+from apps.seo.services.ai_providers import MockAIProvider
+from apps.seo.services.ai_seo_agent import AISeoAgentService
 
 User = get_user_model()
 
@@ -1600,6 +1603,323 @@ class SEOInsightAPITests(TestCase):
         self.assertEqual(res.data['open_total'], 1)
         self.assertEqual(res.data['resolved_total'], 1)
         self.assertEqual(res.data['total'], 2)
+
+
+class AIProviderTests(TestCase):
+    def setUp(self):
+        self.provider = MockAIProvider()
+
+    def test_ranking_drop_mock_recommendation(self):
+        """Mock provider generates tailored ranking recovery plan."""
+        context = {
+            "insight_type": "ranking_drop",
+            "severity": "critical",
+            "title": "Ranking Drop for 'best seo tools'",
+            "keyword": "best seo tools",
+            "url": "https://example.com/tools",
+            "metadata": {"previous_position": 4, "current_position": 14, "position_drop": 10}
+        }
+        rec = self.provider.generate_recommendation(context)
+        self.assertEqual(rec['recommendation_type'], 'ranking_recovery')
+        self.assertEqual(rec['priority'], 'critical')
+        self.assertIn('best seo tools', rec['title'])
+        self.assertIn('proposed_title', rec['generated_content'])
+        self.assertIn('action_checklist', rec['generated_content'])
+
+    def test_page_two_mock_recommendation(self):
+        """Mock provider generates page 2 push plan."""
+        context = {
+            "insight_type": "page_two_keyword",
+            "severity": "opportunity",
+            "keyword": "addis fintech",
+            "url": "https://example.com/fintech",
+            "metadata": {"current_position": 14}
+        }
+        rec = self.provider.generate_recommendation(context)
+        self.assertEqual(rec['recommendation_type'], 'page_two_opportunity')
+        self.assertEqual(rec['priority'], 'high')
+        self.assertIn('Page 2', rec['title'])
+
+    def test_high_impressions_low_ctr_mock_recommendation(self):
+        """Mock provider generates CTR optimization proposals."""
+        context = {
+            "insight_type": "high_impressions_low_ctr",
+            "severity": "opportunity",
+            "keyword": "top ethiopian banks",
+            "metadata": {"impressions": 1200, "clicks": 12, "ctr_percent": 1.0}
+        }
+        rec = self.provider.generate_recommendation(context)
+        self.assertEqual(rec['recommendation_type'], 'ctr_optimization')
+        self.assertIn('proposed_meta_description', rec['generated_content'])
+
+
+class AISeoAgentServiceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='agent_tester@doxarank.com',
+            password='Password123!',
+            first_name='Agent',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Agent Test Project',
+            website_url='https://agenttest.com'
+        )
+        self.kw = Keyword.objects.create(
+            project=self.project,
+            keyword='seo software'
+        )
+        self.insight = SEOInsight.objects.create(
+            project=self.project,
+            fingerprint='test:agent_insight',
+            insight_type=InsightType.RANKING_DROP,
+            severity=InsightSeverity.WARNING,
+            title='Ranking Drop for "seo software"',
+            description='Dropped from #3 to #11',
+            recommendation='Audit landing page',
+            status=InsightStatus.OPEN,
+            source=InsightSource.RANKING,
+            related_keyword=self.kw,
+            related_url='https://agenttest.com/software',
+            metadata={'previous_position': 3, 'current_position': 11, 'position_drop': 8}
+        )
+        self.service = AISeoAgentService(self.project, provider=MockAIProvider())
+
+    def test_generate_for_insight_persists_recommendation(self):
+        """Service generates and saves structured recommendation."""
+        rec = self.service.generate_for_insight(self.insight)
+        self.assertIsNotNone(rec.id)
+        self.assertEqual(rec.project, self.project)
+        self.assertEqual(rec.insight, self.insight)
+        self.assertEqual(rec.recommendation_type, RecommendationType.RANKING_RECOVERY)
+        self.assertEqual(rec.priority, RecommendationPriority.HIGH)
+        self.assertEqual(rec.status, RecommendationStatus.PENDING_REVIEW)
+        self.assertIn('seo software', rec.title)
+        self.assertIn('action_checklist', rec.generated_content)
+
+    def test_repeated_generation_updates_pending_recommendation(self):
+        """Repeated generation updates existing pending recommendation without duplicates."""
+        rec1 = self.service.generate_for_insight(self.insight)
+        rec2 = self.service.generate_for_insight(self.insight)
+
+        self.assertEqual(rec1.id, rec2.id)
+        self.assertEqual(SEORecommendation.objects.filter(project=self.project).count(), 1)
+
+    def test_batch_generation_for_open_insights(self):
+        """Service generates recommendations for all open insights."""
+        # Create second open insight
+        SEOInsight.objects.create(
+            project=self.project,
+            fingerprint='test:agent_insight_2',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Page 2 for "analytics"',
+            description='Ranking #13',
+            status=InsightStatus.OPEN,
+            source=InsightSource.RANKING
+        )
+        recs = self.service.generate_batch()
+        self.assertEqual(len(recs), 2)
+        self.assertEqual(SEORecommendation.objects.filter(project=self.project).count(), 2)
+
+    def test_cross_project_insight_rejected(self):
+        """Service rejects generating recommendation for another project's insight."""
+        other_proj = Project.objects.create(
+            owner=self.user,
+            name='Other Project',
+            website_url='https://other.com'
+        )
+        other_insight = SEOInsight.objects.create(
+            project=other_proj,
+            fingerprint='test:other_ins',
+            insight_type=InsightType.RANKING_DROP,
+            title='Other Insight',
+            description='Test'
+        )
+        with self.assertRaises(ValueError):
+            self.service.generate_for_insight(other_insight)
+
+
+class SEORecommendationAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.recs_url = '/api/seo/ai/recommendations/'
+        self.generate_url = '/api/seo/ai/recommendations/generate/'
+        self.summary_url = '/api/seo/ai/recommendations/summary/'
+
+        self.user_a = User.objects.create_user(
+            email='rec_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Rec',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='rec_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Rec',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Project A Recs',
+            website_url='https://proja-recs.com'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Project B Recs',
+            website_url='https://projb-recs.com'
+        )
+
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='test:rec_ins_a',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Page 2 for "tech ethiopia"',
+            description='Ranking #14',
+            status=InsightStatus.OPEN
+        )
+        self.insight_b = SEOInsight.objects.create(
+            project=self.project_b,
+            fingerprint='test:rec_ins_b',
+            insight_type=InsightType.TECHNICAL_SEO_ISSUE,
+            severity=InsightSeverity.CRITICAL,
+            title='Broken Links on B',
+            description='404 errors',
+            status=InsightStatus.OPEN
+        )
+
+        self.rec_a1 = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=self.insight_a,
+            recommendation_type=RecommendationType.PAGE_TWO_OPPORTUNITY,
+            title='Push "tech ethiopia" to Page 1',
+            summary='Keyword on page 2',
+            explanation='Topical baseline exists',
+            priority=RecommendationPriority.HIGH,
+            recommended_action='Update headers and internal links',
+            expected_impact='Higher CTR',
+            status=RecommendationStatus.PENDING_REVIEW
+        )
+        self.rec_b1 = SEORecommendation.objects.create(
+            project=self.project_b,
+            insight=self.insight_b,
+            recommendation_type=RecommendationType.TECHNICAL_SEO,
+            title='Fix 404 Links',
+            summary='Resolve dead URLs',
+            explanation='Crawl budget waste',
+            priority=RecommendationPriority.CRITICAL,
+            recommended_action='Redirect 404s',
+            expected_impact='Unblock crawler',
+            status=RecommendationStatus.PENDING_REVIEW
+        )
+
+    def test_unauthenticated_requests_rejected(self):
+        """1. Unauthenticated requests rejected (401)."""
+        res = self.client.get(self.recs_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_post = self.client.post(self.generate_url, {'project_id': self.project_a.id})
+        self.assertEqual(res_post.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_can_only_list_own_recommendations(self):
+        """2. User A can list own recommendations and cannot see User B's."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.recs_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        ids = [r['id'] for r in res.data]
+        self.assertIn(self.rec_a1.id, ids)
+        self.assertNotIn(self.rec_b1.id, ids)
+
+    def test_filter_by_priority_and_status(self):
+        """3. Filtering by priority and status works properly."""
+        self.client.force_authenticate(user=self.user_a)
+
+        res = self.client.get(f'{self.recs_url}?priority=high&status=pending_review')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['id'], self.rec_a1.id)
+
+    def test_cannot_access_or_patch_another_users_recommendation(self):
+        """4. User A cannot access or update User B's recommendation (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.recs_url}{self.rec_b1.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_patch = self.client.patch(
+            f'{self.recs_url}{self.rec_b1.id}/',
+            {'status': 'reviewed'},
+            format='json'
+        )
+        self.assertEqual(res_patch.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cannot_generate_for_another_users_project(self):
+        """5. User A cannot generate recommendations for User B's project (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(self.generate_url, {'project_id': self.project_b.id}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_generate_endpoint_for_own_project(self):
+        """6. User A can generate recommendations for own project."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(
+            self.generate_url,
+            {'project_id': self.project_a.id, 'insight_ids': [self.insight_a.id]},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['insight'], self.insight_a.id)
+
+    def test_recommendation_status_lifecycle_updates(self):
+        """7. Status transitions (pending_review -> reviewed -> applied -> dismissed)."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Pending -> Reviewed
+        res1 = self.client.patch(
+            f'{self.recs_url}{self.rec_a1.id}/',
+            {'status': 'reviewed'},
+            format='json'
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res1.data['status'], 'reviewed')
+
+        # Reviewed -> Applied
+        res2 = self.client.patch(
+            f'{self.recs_url}{self.rec_a1.id}/',
+            {'status': 'applied'},
+            format='json'
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res2.data['status'], 'applied')
+
+        # Applied -> Dismissed
+        res3 = self.client.patch(
+            f'{self.recs_url}{self.rec_a1.id}/',
+            {'status': 'dismissed'},
+            format='json'
+        )
+        self.assertEqual(res3.status_code, status.HTTP_200_OK)
+        self.assertEqual(res3.data['status'], 'dismissed')
+
+    def test_summary_endpoint(self):
+        """8. Summary endpoint returns accurate priority and status counts."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.summary_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['high'], 1)
+        self.assertEqual(res.data['pending_review'], 1)
+        self.assertEqual(res.data['total'], 1)
+
+    def test_cascade_delete(self):
+        """9. Deleting project cascades and deletes recommendations."""
+        rec_id = self.rec_a1.id
+        self.project_a.delete()
+        self.assertFalse(SEORecommendation.objects.filter(id=rec_id).exists())
+
 
 
 

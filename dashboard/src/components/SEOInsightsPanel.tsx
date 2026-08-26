@@ -15,18 +15,22 @@ import {
   deleteSEOInsight,
   getSEOInsightsSummary
 } from '../api/seoInsights';
+import { generateSEORecommendations } from '../api/aiRecommendations';
 
 interface SEOInsightsPanelProps {
   project: Project;
+  onRecommendationGenerated?: () => void;
 }
 
-export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project }) => {
+export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onRecommendationGenerated }) => {
   const [insights, setInsights] = useState<SEOInsight[]>([]);
   const [summaryCounts, setSummaryCounts] = useState<SEOInsightSummaryCounts | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [generatingInsightId, setGeneratingInsightId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analyzeResult, setAnalyzeResult] = useState<SEOInsightAnalyzeSummary | null>(null);
+
 
   // Filters
   const [selectedSeverity, setSelectedSeverity] = useState<'all' | InsightSeverity>('all');
@@ -81,6 +85,22 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project }) =
   };
 
   // Status transition handlers
+  const handleGenerateRecommendationForInsight = async (insightId: number) => {
+    if (!project?.id || generatingInsightId) return;
+    setGeneratingInsightId(insightId);
+    setError(null);
+    try {
+      await generateSEORecommendations({ project_id: project.id, insight_ids: [insightId] });
+      if (onRecommendationGenerated) {
+        onRecommendationGenerated();
+      }
+    } catch (err: any) {
+      setError(err?.data?.detail || 'Failed to generate AI recommendation for this insight.');
+    } finally {
+      setGeneratingInsightId(null);
+    }
+  };
+
   const handleStatusChange = async (id: number, newStatus: InsightStatus) => {
     try {
       const updated = await updateSEOInsightStatus(id, newStatus);
@@ -804,7 +824,30 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project }) =
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Generate AI Recommendation Button */}
+                    <button
+                      id={`generate-rec-insight-${insight.id}`}
+                      onClick={() => handleGenerateRecommendationForInsight(insight.id)}
+                      disabled={generatingInsightId === insight.id}
+                      style={{
+                        backgroundColor: '#f5f3ff',
+                        color: '#7c3aed',
+                        border: '1px solid #ddd6fe',
+                        padding: '5px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: generatingInsightId === insight.id ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {generatingInsightId === insight.id ? '✨ Synthesizing...' : '✨ AI Recommendation'}
+                    </button>
+
                     {insight.status !== 'resolved' ? (
                       <button
                         id={`resolve-insight-${insight.id}`}

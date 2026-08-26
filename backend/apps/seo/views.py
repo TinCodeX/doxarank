@@ -6,17 +6,20 @@ from rest_framework.response import Response
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
-    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
     SearchConsoleSyncRequestSerializer,
-    SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer
+    SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer,
+    SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.seo_intelligence import SEOIntelligenceService
+from .services.ai_seo_agent import AISeoAgentService
 from apps.projects.models import Project
 
 
@@ -592,6 +595,108 @@ class SEOInsightViewSet(viewsets.ModelViewSet):
             'total': base_qs.count()
         }
         return Response(counts, status=status.HTTP_200_OK)
+
+
+class SEORecommendationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for AI-generated SEO Recommendations.
+    
+    Security & Ownership:
+    1. Requires authentication on all endpoints.
+    2. Queryset strictly isolated by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports filtering by project_id, insight_id, status, priority, recommendation_type.
+    """
+    serializer_class = SEORecommendationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only recommendations belonging to projects owned by the authenticated user.
+        """
+        queryset = SEORecommendation.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'insight')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        insight_id = self.request.query_params.get('insight_id')
+        if insight_id:
+            queryset = queryset.filter(insight_id=insight_id)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
+
+        rec_type = self.request.query_params.get('recommendation_type')
+        if rec_type:
+            queryset = queryset.filter(recommendation_type=rec_type)
+
+        return queryset.order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Trigger AI recommendation generation for specified insights or all open insights of a project.
+        """
+        serializer = SEORecommendationGenerateRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        insight_ids = serializer.validated_data.get('insight_ids', [])
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found or not owned by authenticated user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        agent = AISeoAgentService(project=project)
+        recs = agent.generate_batch(insight_ids=insight_ids if insight_ids else None)
+        out_serializer = SEORecommendationSerializer(recs, many=True)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """
+        Get aggregated counts for project recommendations by priority and status.
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        base_qs = SEORecommendation.objects.filter(project=project)
+        counts = {
+            'critical': base_qs.filter(priority=RecommendationPriority.CRITICAL, status=RecommendationStatus.PENDING_REVIEW).count(),
+            'high': base_qs.filter(priority=RecommendationPriority.HIGH, status=RecommendationStatus.PENDING_REVIEW).count(),
+            'medium': base_qs.filter(priority=RecommendationPriority.MEDIUM, status=RecommendationStatus.PENDING_REVIEW).count(),
+            'low': base_qs.filter(priority=RecommendationPriority.LOW, status=RecommendationStatus.PENDING_REVIEW).count(),
+            'pending_review': base_qs.filter(status=RecommendationStatus.PENDING_REVIEW).count(),
+            'reviewed': base_qs.filter(status=RecommendationStatus.REVIEWED).count(),
+            'applied': base_qs.filter(status=RecommendationStatus.APPLIED).count(),
+            'dismissed': base_qs.filter(status=RecommendationStatus.DISMISSED).count(),
+            'total': base_qs.count()
+        }
+        return Response(counts, status=status.HTTP_200_OK)
+
 
 
 

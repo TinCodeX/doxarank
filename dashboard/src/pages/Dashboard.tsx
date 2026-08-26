@@ -13,6 +13,7 @@ import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { SearchConsolePanel } from '../components/SearchConsolePanel';
 import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalyticsPanel';
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
+import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 export const Dashboard: React.FC = () => {
@@ -703,7 +704,14 @@ export const Dashboard: React.FC = () => {
           />
         )}
 
-        {/* SECTION 7: PROJECTS MANAGEMENT */}
+        {/* SECTION 7: AI SEO AGENT & RECOMMENDATIONS (Visible when a project is selected) */}
+        {selectedProject && (
+          <AIRecommendationsPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 8: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
