@@ -742,6 +742,186 @@ class SEORecommendation(models.Model):
         return f"[{self.priority.upper()}] {self.title} ({self.project.name})"
 
 
+class BriefContentType(models.TextChoices):
+    BLOG_POST = 'blog_post', 'Blog / Article'
+    LANDING_PAGE = 'landing_page', 'Landing Page'
+    PAGE_OPTIMIZATION = 'page_optimization', 'Existing-Page Optimization'
+    TECHNICAL_IMPLEMENTATION = 'technical_implementation', 'Technical SEO Implementation'
+
+
+class BriefSearchIntent(models.TextChoices):
+    INFORMATIONAL = 'informational', 'Informational'
+    TRANSACTIONAL = 'transactional', 'Transactional'
+    COMMERCIAL = 'commercial', 'Commercial Investigation'
+    NAVIGATIONAL = 'navigational', 'Navigational'
+
+
+class BriefStatus(models.TextChoices):
+    DRAFT = 'draft', 'Draft'
+    IN_PROGRESS = 'in_progress', 'In Progress'
+    COMPLETED = 'completed', 'Completed'
+    ARCHIVED = 'archived', 'Archived'
+
+
+class SEOContentBrief(models.Model):
+    """
+    SEOContentBrief model representing an actionable, highly-structured SEO content brief
+    generated from an AI recommendation and grounded in real SEO/GSC metrics.
+    Relationship: Project 1 ─────── * SEOContentBrief
+                  SEORecommendation 1 ─────── * SEOContentBrief
+    Ownership follows: brief.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='content_briefs',
+        help_text='The project this content brief belongs to.'
+    )
+    recommendation = models.ForeignKey(
+        SEORecommendation,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='content_briefs',
+        help_text='The originating SEO recommendation this brief was synthesized from.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Working title for the content brief.'
+    )
+    target_keyword = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Primary target search keyword.'
+    )
+    secondary_keywords = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of supporting / secondary keywords.'
+    )
+    search_intent = models.CharField(
+        max_length=50,
+        choices=BriefSearchIntent.choices,
+        default=BriefSearchIntent.INFORMATIONAL,
+        db_index=True,
+        help_text='Dominant search intent category.'
+    )
+    target_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Target URL / existing URL to optimize or create.'
+    )
+    content_type = models.CharField(
+        max_length=50,
+        choices=BriefContentType.choices,
+        default=BriefContentType.BLOG_POST,
+        db_index=True,
+        help_text='Type of content asset (blog, landing page, page optimization, technical).'
+    )
+    recommended_title = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Optimized meta / H1 title proposition.'
+    )
+    meta_description = models.TextField(
+        blank=True,
+        default='',
+        help_text='Recommended meta description (140-160 characters).'
+    )
+    suggested_slug = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Recommended URL slug hierarchy.'
+    )
+    content_angle = models.TextField(
+        blank=True,
+        default='',
+        help_text='Unique value proposition, editorial angle, or competitive differentiation.'
+    )
+    audience = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Target reader or buyer persona.'
+    )
+    outline = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Structured outline items with heading levels, section titles, and talking points.'
+    )
+    key_points = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Essential arguments, facts, or concepts that must be included.'
+    )
+    internal_link_suggestions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Recommended internal link targets and anchor texts.'
+    )
+    external_link_suggestions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Authoritative external reference suggestions.'
+    )
+    faq_questions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Frequently asked questions to target SERP features (PPA/FAQ schema).'
+    )
+    entities_topics = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Topical entities and semantic concepts to establish topical authority.'
+    )
+    content_length_target = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        default=1500,
+        help_text='Recommended word count target.'
+    )
+    generated_content = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Full structured brief JSON as returned by the AI provider.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=BriefStatus.choices,
+        default=BriefStatus.DRAFT,
+        db_index=True,
+        help_text='Workflow status of this brief.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the brief was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the brief was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_content_briefs'
+        verbose_name = 'SEO content brief'
+        verbose_name_plural = 'SEO content briefs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_brief_proj_stat_idx'),
+            models.Index(fields=['project', 'content_type'], name='seo_brief_proj_type_idx'),
+            models.Index(fields=['recommendation', 'status'], name='seo_brief_rec_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_brief_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_content_type_display()}] {self.title} ({self.project.name})"
+
+
+
 
 
 

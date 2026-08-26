@@ -14,6 +14,7 @@ import { SearchConsolePanel } from '../components/SearchConsolePanel';
 import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalyticsPanel';
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
+import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 export const Dashboard: React.FC = () => {
@@ -55,6 +56,9 @@ export const Dashboard: React.FC = () => {
   const [editingRanking, setEditingRanking] = useState<Ranking | null>(null);
   const [deletingRanking, setDeletingRanking] = useState<Ranking | null>(null);
   const [isDeletingRanking, setIsDeletingRanking] = useState(false);
+
+  // Content Brief state
+  const [briefTargetRecId, setBriefTargetRecId] = useState<number | null>(null);
 
   // Load user projects on initial mount
   const fetchUserProjects = async () => {
@@ -708,10 +712,26 @@ export const Dashboard: React.FC = () => {
         {selectedProject && (
           <AIRecommendationsPanel
             project={selectedProject}
+            onGenerateBrief={(recId) => {
+              setBriefTargetRecId(recId);
+              const briefElem = document.getElementById('seo-content-briefs-section');
+              if (briefElem) {
+                briefElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 
-        {/* SECTION 8: PROJECTS MANAGEMENT */}
+        {/* SECTION 8: AI SEO CONTENT BRIEFS & EXPORT ENGINE (Visible when a project is selected) */}
+        {selectedProject && (
+          <SEOContentBriefPanel
+            project={selectedProject}
+            selectedRecommendationId={briefTargetRecId}
+            onClearSelectedRecId={() => setBriefTargetRecId(null)}
+          />
+        )}
+
+        {/* SECTION 9: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>

@@ -18,11 +18,13 @@ import {
 interface AIRecommendationsPanelProps {
   project: Project;
   onRefreshInsights?: () => void;
+  onGenerateBrief?: (recommendationId: number) => void;
 }
 
 export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   project,
-  onRefreshInsights
+  onRefreshInsights,
+  onGenerateBrief
 }) => {
   const [recommendations, setRecommendations] = useState<SEORecommendation[]>([]);
   const [summaryCounts, setSummaryCounts] = useState<SEORecommendationSummaryCounts | null>(null);
@@ -950,7 +952,29 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {onGenerateBrief && (
+                      <button
+                        id={`generate-brief-rec-${rec.id}`}
+                        onClick={() => onGenerateBrief(rec.id)}
+                        style={{
+                          backgroundColor: '#f0f9ff',
+                          color: '#0369a1',
+                          border: '1px solid #bae6fd',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        📋 Brief
+                      </button>
+                    )}
+
                     {rec.status === 'pending_review' && (
                       <button
                         id={`review-rec-${rec.id}`}

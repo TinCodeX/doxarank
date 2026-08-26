@@ -6,7 +6,8 @@ from .models import (
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
     SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
-    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
 )
 from apps.projects.models import Project
 
@@ -601,6 +602,130 @@ class SEORecommendationGenerateRequestSerializer(serializers.Serializer):
             if not Project.objects.filter(id=value, owner=request.user).exists():
                 raise serializers.ValidationError("Project does not exist or you do not have permission to access it.")
         return value
+
+
+class SEOContentBriefSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOContentBrief model.
+    Enforces project and recommendation ownership validation and exposes relational metadata.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    recommendation_title = serializers.CharField(source='recommendation.title', read_only=True, default='')
+    recommendation_priority = serializers.CharField(source='recommendation.priority', read_only=True, default='')
+    content_type_display = serializers.CharField(source='get_content_type_display', read_only=True)
+    search_intent_display = serializers.CharField(source='get_search_intent_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = SEOContentBrief
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'recommendation',
+            'recommendation_title',
+            'recommendation_priority',
+            'title',
+            'target_keyword',
+            'secondary_keywords',
+            'search_intent',
+            'search_intent_display',
+            'target_url',
+            'content_type',
+            'content_type_display',
+            'recommended_title',
+            'meta_description',
+            'suggested_slug',
+            'content_angle',
+            'audience',
+            'outline',
+            'key_points',
+            'internal_link_suggestions',
+            'external_link_suggestions',
+            'faq_questions',
+            'entities_topics',
+            'content_length_target',
+            'generated_content',
+            'status',
+            'status_display',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'recommendation_title',
+            'recommendation_priority',
+            'content_type_display',
+            'search_intent_display',
+            'status_display',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create content briefs for this project.")
+        return value
+
+    def validate_recommendation(self, value):
+        if value is not None:
+            request = self.context.get('request')
+            if request and request.user.is_authenticated:
+                if value.project.owner != request.user:
+                    raise serializers.ValidationError("You do not have permission to attach a brief to this recommendation.")
+        return value
+
+
+class SEOContentBriefGenerateRequestSerializer(serializers.Serializer):
+    """
+    Serializer for validating AI Content Brief generation requests.
+    Supports generation from recommendation_id, optional insight_id, project_id, and optional content_type override.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the project the brief belongs to."
+    )
+    recommendation_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the SEORecommendation to generate the brief from."
+    )
+    content_type = serializers.ChoiceField(
+        choices=BriefContentType.choices,
+        required=False,
+        help_text="Optional override for target content brief type."
+    )
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        project_id = attrs.get('project_id')
+        rec_id = attrs.get('recommendation_id')
+
+        if request and request.user.is_authenticated:
+            try:
+                project = Project.objects.get(id=project_id, owner=request.user)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError({"project_id": "Project not found or not owned by user."})
+
+            try:
+                rec = SEORecommendation.objects.get(id=rec_id, project=project)
+            except SEORecommendation.DoesNotExist:
+                raise serializers.ValidationError({"recommendation_id": "Recommendation not found for this project."})
+
+        return attrs
+
+
+class SEOContentBriefStatusUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for updating content brief workflow status.
+    """
+    status = serializers.ChoiceField(
+        choices=BriefStatus.choices,
+        help_text="Target status: draft, in_progress, completed, or archived."
+    )
+
 
 
 

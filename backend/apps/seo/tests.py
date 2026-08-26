@@ -10,11 +10,14 @@ from apps.seo.models import (
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
     SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
-    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
 from apps.seo.services.ai_providers import MockAIProvider
 from apps.seo.services.ai_seo_agent import AISeoAgentService
+from apps.seo.services.content_brief_service import SEOContentBriefService
+from apps.seo.services.export_service import ContentBriefExportService
 
 User = get_user_model()
 
@@ -1919,6 +1922,278 @@ class SEORecommendationAPITests(TestCase):
         rec_id = self.rec_a1.id
         self.project_a.delete()
         self.assertFalse(SEORecommendation.objects.filter(id=rec_id).exists())
+
+
+class SEOContentBriefAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.briefs_url = '/api/seo/ai/content-briefs/'
+        self.generate_url = '/api/seo/ai/content-briefs/generate/'
+
+        self.user_a = User.objects.create_user(
+            email='brief_user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='brief_user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Media',
+            website_url='https://shega.co'
+        )
+
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='fp_brief_a1',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Push "ethiopian coffee export" to Page 1',
+            description='Keyword ranks #14 with high search volume.',
+            recommendation='Update H1 headers and add comprehensive brewing guide.',
+            related_url='https://addisinsight.net/ethiopian-coffee'
+        )
+        self.insight_b = SEOInsight.objects.create(
+            project=self.project_b,
+            fingerprint='fp_brief_b1',
+            insight_type=InsightType.TECHNICAL_SEO_ISSUE,
+            severity=InsightSeverity.CRITICAL,
+            title='Fix Missing Canonicals',
+            description='Multiple duplicate pages found.',
+            recommendation='Add rel=canonical tags site-wide.'
+        )
+
+        self.rec_a = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=self.insight_a,
+            recommendation_type=RecommendationType.PAGE_TWO_OPPORTUNITY,
+            priority=RecommendationPriority.HIGH,
+            title='Optimize Content for "ethiopian coffee export"',
+            summary='Push keyword from #14 into top 10 rankings.',
+            explanation='Topical authority gap identified.',
+            recommended_action='Draft comprehensive expert guide.',
+            expected_impact='Higher organic click-through rate.',
+            affected_url='https://addisinsight.net/ethiopian-coffee',
+            affected_keyword='ethiopian coffee export'
+        )
+        self.rec_b = SEORecommendation.objects.create(
+            project=self.project_b,
+            insight=self.insight_b,
+            recommendation_type=RecommendationType.TECHNICAL_SEO,
+            priority=RecommendationPriority.CRITICAL,
+            title='Resolve Canonical URL Errors',
+            summary='Duplicate URLs indexed by Googlebot.',
+            explanation='Crawl budget wastage.',
+            recommended_action='Fix canonical headers in CMS.',
+            expected_impact='Clean indexation state.'
+        )
+
+        self.brief_a = SEOContentBrief.objects.create(
+            project=self.project_a,
+            recommendation=self.rec_a,
+            title='In-Depth Article Brief: Ethiopian Coffee Export Guide',
+            target_keyword='ethiopian coffee export',
+            secondary_keywords=['yirgacheffe beans', 'sidama coffee export', 'direct trade ethiopia'],
+            search_intent=BriefSearchIntent.INFORMATIONAL,
+            target_url='https://addisinsight.net/ethiopian-coffee',
+            content_type=BriefContentType.BLOG_POST,
+            recommended_title='The Ultimate Guide to Ethiopian Coffee Export (2026)',
+            meta_description='Comprehensive overview of Ethiopian coffee varieties, trade regulations, and export practices.',
+            suggested_slug='/blog/ethiopian-coffee-export',
+            content_angle='Expert supply-chain perspective with 2026 customs data.',
+            audience='Global importers, green bean buyers, and coffee enthusiasts.',
+            outline=[
+                {'heading': 'The Ethiopian Coffee Landscape', 'level': 'H1', 'key_points': ['Origins', 'Varieties']},
+                {'heading': 'Regulatory & Export Framework', 'level': 'H2', 'key_points': ['ECX Process', 'Certifications']}
+            ],
+            key_points=['Explain regional bean flavor profiles.', 'Highlight 2026 export regulations.'],
+            internal_link_suggestions=[{'target_url': '/blog/agri-trade', 'anchor_text': 'agricultural trade', 'context': 'Intro'}],
+            external_link_suggestions=[{'source': 'ICO Statistics', 'anchor_text': 'International Coffee Organization', 'context': 'Data'}],
+            faq_questions=[{'question': 'What are the main export regions?', 'answer_guidance': 'Sidama, Yirgacheffe, Guji, Harrar.'}],
+            entities_topics=['Arabica', 'Washed Coffee', 'Specialty Coffee Association', 'Direct Trade'],
+            content_length_target=1800,
+            status=BriefStatus.DRAFT
+        )
+
+        self.brief_b = SEOContentBrief.objects.create(
+            project=self.project_b,
+            recommendation=self.rec_b,
+            title='Technical SEO Specification: Canonical Link Tags',
+            target_keyword='fix canonical tags',
+            search_intent=BriefSearchIntent.INFORMATIONAL,
+            content_type=BriefContentType.TECHNICAL_IMPLEMENTATION,
+            recommended_title='Technical Spec: Canonical Header Deployment',
+            meta_description='Developer instructions for rel=canonical tags.',
+            status=BriefStatus.IN_PROGRESS
+        )
+
+    def test_unauthenticated_access_rejected(self):
+        """1. Unauthenticated request to content briefs is rejected (401)."""
+        res = self.client.get(self.briefs_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_a_can_list_own_content_briefs(self):
+        """2. User A can list their own content briefs."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.briefs_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [b['id'] for b in res.data]
+        self.assertIn(self.brief_a.id, ids)
+        self.assertNotIn(self.brief_b.id, ids)
+
+    def test_user_a_cannot_see_user_b_brief(self):
+        """3. User A cannot see User B's content briefs."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.briefs_url}{self.brief_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_a_cannot_modify_user_b_brief(self):
+        """4. User A cannot modify User B's content brief (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(
+            f'{self.briefs_url}{self.brief_b.id}/',
+            {'title': 'Hacked Brief Title'},
+            format='json'
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.brief_b.refresh_from_db()
+        self.assertNotEqual(self.brief_b.title, 'Hacked Brief Title')
+
+    def test_user_a_cannot_delete_user_b_brief(self):
+        """5. User A cannot delete User B's content brief (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.briefs_url}{self.brief_b.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(SEOContentBrief.objects.filter(id=self.brief_b.id).exists())
+
+    def test_generate_content_brief_for_recommendation(self):
+        """6. User can trigger AI content brief generation for a valid recommendation."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project_id': self.project_a.id,
+            'recommendation_id': self.rec_a.id
+        }
+        res = self.client.post(self.generate_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['project'], self.project_a.id)
+        self.assertEqual(res.data['recommendation'], self.rec_a.id)
+        self.assertIn('outline', res.data)
+        self.assertIn('faq_questions', res.data)
+        self.assertIn('internal_link_suggestions', res.data)
+        self.assertIn('secondary_keywords', res.data)
+
+    def test_generate_content_brief_with_content_type_override(self):
+        """7. Generate content brief with explicit content_type override."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project_id': self.project_a.id,
+            'recommendation_id': self.rec_a.id,
+            'content_type': 'landing_page'
+        }
+        res = self.client.post(self.generate_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['content_type'], 'landing_page')
+        self.assertEqual(res.data['search_intent'], 'commercial')
+
+    def test_cannot_generate_brief_for_another_users_recommendation(self):
+        """8. Cross-tenant generation request is rejected."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project_id': self.project_a.id,
+            'recommendation_id': self.rec_b.id  # Belongs to User B's project!
+        }
+        res = self.client.post(self.generate_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_status_lifecycle_updates(self):
+        """9. Status transitions (draft -> in_progress -> completed -> archived)."""
+        self.client.force_authenticate(user=self.user_a)
+        
+        # draft -> in_progress
+        res1 = self.client.patch(
+            f'{self.briefs_url}{self.brief_a.id}/',
+            {'status': 'in_progress'},
+            format='json'
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res1.data['status'], 'in_progress')
+
+        # in_progress -> completed
+        res2 = self.client.patch(
+            f'{self.briefs_url}{self.brief_a.id}/',
+            {'status': 'completed'},
+            format='json'
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res2.data['status'], 'completed')
+
+    def test_export_markdown_endpoint(self):
+        """10. Export brief as Markdown format."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.briefs_url}{self.brief_a.id}/export/?export_format=markdown')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'text/markdown; charset=utf-8')
+        content = res.content.decode('utf-8')
+        self.assertIn('# SEO Content Brief:', content)
+        self.assertIn('Ethiopian Coffee Export', content)
+        self.assertIn('## 1. Brief Overview & Strategy', content)
+
+    def test_export_csv_endpoint(self):
+        """11. Export brief as CSV format."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.briefs_url}{self.brief_a.id}/export/?export_format=csv')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'text/csv; charset=utf-8')
+        content = res.content.decode('utf-8')
+        self.assertIn('Section,Property / Heading', content)
+        self.assertIn('Primary Keyword', content)
+        self.assertIn('ethiopian coffee export', content)
+
+    def test_export_pdf_endpoint(self):
+        """12. Export brief as PDF format."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.briefs_url}{self.brief_a.id}/export/?export_format=pdf')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res['Content-Type'], 'application/pdf')
+        self.assertTrue(res.content.startswith(b'%PDF-1.4'))
+        self.assertTrue(res.content.endswith(b'%%EOF\n'))
+
+    def test_filtering_by_project_and_content_type(self):
+        """13. Query parameters filter briefs accurately without cross-project leakage."""
+        self.client.force_authenticate(user=self.user_a)
+        
+        # Filter by project
+        res = self.client.get(f'{self.briefs_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+
+        # Cross project filter returns empty
+        res_cross = self.client.get(f'{self.briefs_url}?project_id={self.project_b.id}')
+        self.assertEqual(res_cross.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_cross.data), 0)
+
+        # Filter by content_type
+        res_type = self.client.get(f'{self.briefs_url}?content_type=blog_post')
+        self.assertEqual(res_type.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_type.data), 1)
+
+    def test_cascade_delete_project_removes_brief(self):
+        """14. Deleting parent project cascades to remove associated content briefs."""
+        brief_id = self.brief_a.id
+        self.project_a.delete()
+        self.assertFalse(SEOContentBrief.objects.filter(id=brief_id).exists())
+
 
 
 

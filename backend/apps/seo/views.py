@@ -1,4 +1,5 @@
 from django.db.models import Sum, Avg, Count, F
+from django.http import HttpResponse
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,7 +8,8 @@ from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
-    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus
+    SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
+    SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -15,11 +17,14 @@ from .serializers import (
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
     SearchConsoleSyncRequestSerializer,
     SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer,
-    SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer
+    SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer,
+    SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.seo_intelligence import SEOIntelligenceService
 from .services.ai_seo_agent import AISeoAgentService
+from .services.content_brief_service import SEOContentBriefService
+from .services.export_service import ContentBriefExportService
 from apps.projects.models import Project
 
 
@@ -696,6 +701,112 @@ class SEORecommendationViewSet(viewsets.ModelViewSet):
             'total': base_qs.count()
         }
         return Response(counts, status=status.HTTP_200_OK)
+
+
+class SEOContentBriefViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for AI-generated SEO Content Briefs.
+    
+    Security & Ownership:
+    1. Requires authentication on all endpoints.
+    2. Queryset strictly isolated by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports filtering by project_id, recommendation_id, content_type, status.
+    """
+    serializer_class = SEOContentBriefSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only content briefs belonging to projects owned by the authenticated user.
+        """
+        queryset = SEOContentBrief.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'recommendation')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        recommendation_id = self.request.query_params.get('recommendation_id')
+        if recommendation_id:
+            queryset = queryset.filter(recommendation_id=recommendation_id)
+
+        content_type = self.request.query_params.get('content_type')
+        if content_type:
+            queryset = queryset.filter(content_type=content_type)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        return queryset.order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Trigger AI content brief synthesis for a specific recommendation.
+        """
+        serializer = SEOContentBriefGenerateRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        rec_id = serializer.validated_data['recommendation_id']
+        content_type = serializer.validated_data.get('content_type')
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found or not owned by authenticated user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            recommendation = SEORecommendation.objects.get(id=rec_id, project=project)
+        except SEORecommendation.DoesNotExist:
+            return Response(
+                {"detail": "Recommendation not found for this project."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        service = SEOContentBriefService(project=project)
+        brief = service.generate_for_recommendation(
+            recommendation=recommendation,
+            content_type_override=content_type
+        )
+        out_serializer = SEOContentBriefSerializer(brief)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='export')
+    def export(self, request, pk=None):
+        """
+        Export a content brief in Markdown, CSV, or PDF format.
+        (GET /api/seo/ai/content-briefs/<id>/export/?export_format=markdown|csv|pdf)
+        """
+        brief = self.get_object()  # Enforces project.owner == request.user
+        export_format = str(
+            request.query_params.get('export_format') or request.query_params.get('format') or 'markdown'
+        ).lower().strip()
+        slug_safe = brief.suggested_slug.strip('/').replace('/', '_') or f"brief_{brief.id}"
+
+        if export_format == 'csv':
+            csv_content = ContentBriefExportService.export_csv(brief)
+            response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{slug_safe}_brief.csv"'
+            return response
+
+        elif export_format == 'pdf':
+            pdf_bytes = ContentBriefExportService.export_pdf(brief)
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{slug_safe}_brief.pdf"'
+            return response
+
+        # Default Markdown
+        markdown_content = ContentBriefExportService.export_markdown(brief)
+        response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{slug_safe}_brief.md"'
+        return response
+
 
 
 
