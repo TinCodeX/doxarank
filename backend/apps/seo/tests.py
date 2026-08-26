@@ -8,8 +8,10 @@ from apps.seo.models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
-    SearchAnalyticsData
+    SearchAnalyticsData,
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
 )
+from apps.seo.services.seo_intelligence import SEOIntelligenceService
 
 User = get_user_model()
 
@@ -1220,6 +1222,385 @@ class SearchAnalyticsAPITests(TestCase):
         rec_id = self.rec_a1.id
         self.project_a.delete()
         self.assertFalse(SearchAnalyticsData.objects.filter(id=rec_id).exists())
+
+
+class SEOIntelligenceServiceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='intelligence_user@doxarank.com',
+            password='Password123!',
+            first_name='Intelligence',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Intelligence Test Site',
+            website_url='https://inteltest.com'
+        )
+        self.now = timezone.now()
+
+    def test_ranking_drop_rule_detected(self):
+        """Rule A: Detects ranking drop (>= 3 positions)."""
+        kw = Keyword.objects.create(
+            project=self.project,
+            keyword='best seo tools'
+        )
+        # Previous position: 4, Current position: 11 (drop of 7)
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=4,
+            recorded_at=self.now - timezone.timedelta(days=2)
+        )
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=11,
+            recorded_at=self.now
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        self.assertEqual(summary['created'], 2)  # Ranking drop + Page two (pos 11 is also on page 2)
+        drop_insight = SEOInsight.objects.get(project=self.project, insight_type=InsightType.RANKING_DROP)
+        self.assertEqual(drop_insight.severity, InsightSeverity.WARNING)
+        self.assertEqual(drop_insight.related_keyword, kw)
+        self.assertEqual(drop_insight.metadata['position_drop'], 7)
+        self.assertEqual(drop_insight.metadata['previous_position'], 4)
+        self.assertEqual(drop_insight.metadata['current_position'], 11)
+
+    def test_ranking_improvement_rule_detected(self):
+        """Rule B: Detects ranking improvement (>= 3 positions)."""
+        kw = Keyword.objects.create(
+            project=self.project,
+            keyword='organic search growth'
+        )
+        # Previous: 18, Current: 7 (Gain of 11)
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=18,
+            recorded_at=self.now - timezone.timedelta(days=3)
+        )
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=7,
+            recorded_at=self.now
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        gain_insight = SEOInsight.objects.get(project=self.project, insight_type=InsightType.RANKING_IMPROVEMENT)
+        self.assertEqual(gain_insight.severity, InsightSeverity.OPPORTUNITY)
+        self.assertEqual(gain_insight.metadata['position_gain'], 11)
+
+    def test_page_two_keyword_opportunity_detected(self):
+        """Rule C: Detects keywords ranking between positions 11 and 20."""
+        kw = Keyword.objects.create(
+            project=self.project,
+            keyword='page two ranking test'
+        )
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=14,
+            recorded_at=self.now
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        p2_insight = SEOInsight.objects.get(project=self.project, insight_type=InsightType.PAGE_TWO_KEYWORD)
+        self.assertEqual(p2_insight.severity, InsightSeverity.OPPORTUNITY)
+        self.assertIn('14', p2_insight.title)
+        self.assertEqual(p2_insight.metadata['current_position'], 14)
+
+    def test_high_impressions_low_ctr_detected(self):
+        """Rule D: Detects GSC queries with high impressions but low CTR (< 3%)."""
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url='https://inteltest.com/',
+            is_connected=True
+        )
+        # Query with 200 impressions and 2 clicks (1.0% CTR)
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            date=self.now.date(),
+            query='free audit tool',
+            impressions=200,
+            clicks=2,
+            ctr=0.0100,
+            position=8.5
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        insight = SEOInsight.objects.get(project=self.project, insight_type=InsightType.HIGH_IMPRESSIONS_LOW_CTR)
+        self.assertEqual(insight.severity, InsightSeverity.OPPORTUNITY)
+        self.assertEqual(insight.source, InsightSource.SEARCH_CONSOLE)
+        self.assertEqual(insight.metadata['impressions'], 200)
+        self.assertEqual(insight.metadata['clicks'], 2)
+
+    def test_declining_gsc_performance_detected(self):
+        """Rule E: Detects decline in search clicks and impressions (>= 15%)."""
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url='https://inteltest.com/',
+            is_connected=True
+        )
+        # Prior period: 100 clicks, 1000 impressions
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            date=self.now.date() - timezone.timedelta(days=10),
+            query='historical query',
+            impressions=1000,
+            clicks=100,
+            ctr=0.10,
+            position=3.0
+        )
+        # Recent period: 50 clicks (50% drop), 500 impressions (50% drop)
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            date=self.now.date(),
+            query='historical query',
+            impressions=500,
+            clicks=50,
+            ctr=0.10,
+            position=5.0
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        click_decline = SEOInsight.objects.filter(project=self.project, insight_type=InsightType.DECLINING_CLICKS)
+        self.assertTrue(click_decline.exists())
+        self.assertEqual(click_decline.first().severity, InsightSeverity.CRITICAL)  # 50% >= 30% is critical
+
+        imp_decline = SEOInsight.objects.filter(project=self.project, insight_type=InsightType.DECLINING_IMPRESSIONS)
+        self.assertTrue(imp_decline.exists())
+
+    def test_technical_seo_audit_issues_detected(self):
+        """Rule F: Converts unresolved critical/warning audit issues to insights."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=72
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type='broken_links',
+            severity=IssueSeverity.CRITICAL,
+            title='Found 12 broken 404 links',
+            description='Multiple critical pages return HTTP 404 response.',
+            page_url='https://inteltest.com/products',
+            recommendation='Fix or 301 redirect dead link paths.'
+        )
+
+        service = SEOIntelligenceService(self.project)
+        summary = service.analyze()
+
+        insight = SEOInsight.objects.get(project=self.project, insight_type=InsightType.TECHNICAL_SEO_ISSUE)
+        self.assertEqual(insight.severity, InsightSeverity.CRITICAL)
+        self.assertEqual(insight.source, InsightSource.SITE_AUDIT)
+        self.assertIn('Found 12 broken 404 links', insight.title)
+
+    def test_analysis_deduplication_and_idempotency(self):
+        """Deduplication: Repeated analysis runs do not create duplicate insights."""
+        kw = Keyword.objects.create(
+            project=self.project,
+            keyword='dedup keyword test'
+        )
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=15,
+            recorded_at=self.now
+        )
+
+        service = SEOIntelligenceService(self.project)
+
+        # First run: creates insight
+        summary1 = service.analyze()
+        self.assertEqual(summary1['created'], 1)
+        self.assertEqual(summary1['updated'], 0)
+        self.assertEqual(SEOInsight.objects.filter(project=self.project).count(), 1)
+
+        # Second run: updates existing, 0 created
+        summary2 = service.analyze()
+        self.assertEqual(summary2['created'], 0)
+        self.assertEqual(summary2['updated'], 1)
+        self.assertEqual(SEOInsight.objects.filter(project=self.project).count(), 1)
+
+
+class SEOInsightAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.insights_url = '/api/seo/insights/'
+        self.analyze_url = '/api/seo/insights/analyze/'
+        self.summary_url = '/api/seo/insights/summary/'
+
+        self.user_a = User.objects.create_user(
+            email='insight_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Insight',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='insight_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Insight',
+            last_name='B'
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Project A Analytics',
+            website_url='https://proja-seo.com'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Project B Analytics',
+            website_url='https://projb-seo.com'
+        )
+
+        self.insight_a1 = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='test:insight_a1',
+            insight_type=InsightType.RANKING_DROP,
+            severity=InsightSeverity.WARNING,
+            title='Ranking Drop for Project A',
+            description='Dropped from #3 to #9',
+            status=InsightStatus.OPEN,
+            source=InsightSource.RANKING
+        )
+        self.insight_a2 = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='test:insight_a2',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Page 2 Keyword for Project A',
+            description='Position #14',
+            status=InsightStatus.RESOLVED,
+            source=InsightSource.RANKING
+        )
+        self.insight_b1 = SEOInsight.objects.create(
+            project=self.project_b,
+            fingerprint='test:insight_b1',
+            insight_type=InsightType.TECHNICAL_SEO_ISSUE,
+            severity=InsightSeverity.CRITICAL,
+            title='Critical Audit Issue for Project B',
+            description='Site down',
+            status=InsightStatus.OPEN,
+            source=InsightSource.SITE_AUDIT
+        )
+
+    def test_unauthenticated_requests_rejected(self):
+        """1. Unauthenticated requests are rejected (401)."""
+        res = self.client.get(self.insights_url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_post = self.client.post(self.analyze_url, {'project_id': self.project_a.id})
+        self.assertEqual(res_post.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_can_only_list_own_project_insights(self):
+        """2. User A can list own insights and cannot see User B's insights."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(self.insights_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        ids = [item['id'] for item in res.data]
+        self.assertIn(self.insight_a1.id, ids)
+        self.assertIn(self.insight_a2.id, ids)
+        self.assertNotIn(self.insight_b1.id, ids)
+
+    def test_filter_by_severity_and_status(self):
+        """3. Filtering by severity and status works properly."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Filter by severity=warning
+        res_sev = self.client.get(f'{self.insights_url}?severity=warning')
+        self.assertEqual(res_sev.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_sev.data), 1)
+        self.assertEqual(res_sev.data[0]['id'], self.insight_a1.id)
+
+        # Filter by status=resolved
+        res_stat = self.client.get(f'{self.insights_url}?status=resolved')
+        self.assertEqual(res_stat.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_stat.data), 1)
+        self.assertEqual(res_stat.data[0]['id'], self.insight_a2.id)
+
+    def test_cannot_access_or_modify_another_users_insight(self):
+        """4. User A cannot access or edit User B's insight (404)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.insights_url}{self.insight_b1.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_patch = self.client.patch(
+            f'{self.insights_url}{self.insight_b1.id}/',
+            {'status': 'resolved'},
+            format='json'
+        )
+        self.assertEqual(res_patch.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cannot_analyze_another_users_project(self):
+        """5. User A cannot trigger intelligence analysis on User B's project (400)."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(self.analyze_url, {'project_id': self.project_b.id}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_analyze_endpoint_for_own_project(self):
+        """6. User A can trigger intelligence analysis for own project."""
+        kw = Keyword.objects.create(project=self.project_a, keyword='analytics query')
+        KeywordRanking.objects.create(keyword=kw, position=12, recorded_at=timezone.now())
+
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(self.analyze_url, {'project_id': self.project_a.id}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('created', res.data)
+        self.assertIn('total_open', res.data)
+
+    def test_insight_status_lifecycle_updates(self):
+        """7. Status updates (open -> resolved -> dismissed -> open) update resolved_at."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Open -> Resolved
+        res1 = self.client.patch(
+            f'{self.insights_url}{self.insight_a1.id}/',
+            {'status': 'resolved'},
+            format='json'
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res1.data['status'], 'resolved')
+        self.assertIsNotNone(res1.data['resolved_at'])
+
+        # Resolved -> Dismissed
+        res2 = self.client.patch(
+            f'{self.insights_url}{self.insight_a1.id}/',
+            {'status': 'dismissed'},
+            format='json'
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res2.data['status'], 'dismissed')
+
+        # Dismissed -> Open
+        res3 = self.client.patch(
+            f'{self.insights_url}{self.insight_a1.id}/',
+            {'status': 'open'},
+            format='json'
+        )
+        self.assertEqual(res3.status_code, status.HTTP_200_OK)
+        self.assertEqual(res3.data['status'], 'open')
+        self.assertIsNone(res3.data['resolved_at'])
+
+    def test_summary_endpoint(self):
+        """8. Summary endpoint returns accurate severity and status breakdown."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.summary_url}?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['warning'], 1)
+        self.assertEqual(res.data['opportunity'], 0)  # insight_a2 is resolved
+        self.assertEqual(res.data['open_total'], 1)
+        self.assertEqual(res.data['resolved_total'], 1)
+        self.assertEqual(res.data['total'], 2)
+
 
 
 

@@ -11,7 +11,9 @@ import { KeywordFormModal } from '../components/KeywordFormModal';
 import { RankingFormModal } from '../components/RankingFormModal';
 import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { SearchConsolePanel } from '../components/SearchConsolePanel';
-import { SearchAnalyticsPanel } from '../components/SearchAnalyticsPanel';
+import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalyticsPanel';
+import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
+import type { SearchConsoleConnection } from '../types/searchConsole';
 
 export const Dashboard: React.FC = () => {
 
@@ -20,6 +22,7 @@ export const Dashboard: React.FC = () => {
   // Project state
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [gscConnection, setGscConnection] = useState<SearchConsoleConnection | null>(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
   const [projectError, setProjectError] = useState<string | null>(null);
 
@@ -679,15 +682,28 @@ export const Dashboard: React.FC = () => {
 
         {/* SECTION 4: GOOGLE SEARCH CONSOLE (Visible when a project is selected) */}
         {selectedProject && (
-          <SearchConsolePanel project={selectedProject} />
+          <SearchConsolePanel
+            project={selectedProject}
+            onConnectionChange={setGscConnection}
+          />
         )}
 
         {/* SECTION 5: SEARCH CONSOLE SEARCH ANALYTICS (Visible when a project is selected) */}
         {selectedProject && (
-          <SearchAnalyticsPanel project={selectedProject} />
+          <SearchConsoleAnalyticsPanel
+            project={selectedProject}
+            connection={gscConnection}
+          />
         )}
 
-        {/* SECTION 6: PROJECTS MANAGEMENT */}
+        {/* SECTION 6: SEO INTELLIGENCE & INSIGHTS (Visible when a project is selected) */}
+        {selectedProject && (
+          <SEOInsightsPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 7: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>

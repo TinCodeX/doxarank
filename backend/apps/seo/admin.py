@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
-    SearchConsoleConnection, SearchAnalyticsData
+    SearchConsoleConnection, SearchAnalyticsData,
+    SEOInsight
 )
 
 
@@ -189,6 +190,41 @@ class SearchAnalyticsDataAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
     readonly_fields = ('created_at', 'updated_at')
     ordering = ('-date', '-clicks')
+
+
+@admin.register(SEOInsight)
+class SEOInsightAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'severity',
+        'insight_type',
+        'title',
+        'status',
+        'source',
+        'related_keyword',
+        'detected_at'
+    )
+    list_filter = (
+        'severity',
+        'status',
+        'source',
+        'insight_type',
+        'detected_at',
+        'created_at'
+    )
+    search_fields = (
+        'title',
+        'description',
+        'recommendation',
+        'project__name',
+        'project__owner__email',
+        'related_keyword__keyword',
+        'related_url'
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-detected_at',)
+
 
 
 

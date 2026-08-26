@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from apps.projects.models import Project
 
 
@@ -462,6 +463,158 @@ class SearchAnalyticsData(models.Model):
     def __str__(self):
         query_display = f"'{self.query}'" if self.query else "[all queries]"
         return f"{query_display} on {self.date} ({self.clicks} clicks, pos {self.position})"
+
+
+class InsightSeverity(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    WARNING = 'warning', 'Warning'
+    OPPORTUNITY = 'opportunity', 'Opportunity'
+    INFO = 'info', 'Info'
+
+
+class InsightStatus(models.TextChoices):
+    OPEN = 'open', 'Open'
+    DISMISSED = 'dismissed', 'Dismissed'
+    RESOLVED = 'resolved', 'Resolved'
+
+
+class InsightSource(models.TextChoices):
+    RANKING = 'ranking', 'Ranking'
+    SEARCH_CONSOLE = 'search_console', 'Search Console'
+    SITE_AUDIT = 'site_audit', 'Site Audit'
+    COMBINED = 'combined', 'Combined'
+
+
+class InsightType(models.TextChoices):
+    RANKING_DROP = 'ranking_drop', 'Ranking Drop'
+    RANKING_IMPROVEMENT = 'ranking_improvement', 'Ranking Improvement'
+    PAGE_TWO_KEYWORD = 'page_two_keyword', 'Page Two Opportunity'
+    HIGH_IMPRESSIONS_LOW_CTR = 'high_impressions_low_ctr', 'High Impressions Low CTR'
+    DECLINING_CLICKS = 'declining_clicks', 'Declining Clicks'
+    DECLINING_IMPRESSIONS = 'declining_impressions', 'Declining Impressions'
+    LOW_CTR = 'low_ctr', 'Low CTR'
+    HIGH_POSITION_OPPORTUNITY = 'high_position_opportunity', 'High Position Opportunity'
+    TECHNICAL_SEO_ISSUE = 'technical_seo_issue', 'Technical SEO Issue'
+    KEYWORD_CANNIBALIZATION = 'keyword_cannibalization', 'Keyword Cannibalization'
+    CONTENT_OPPORTUNITY = 'content_opportunity', 'Content Opportunity'
+
+
+class SEOInsight(models.Model):
+    """
+    SEOInsight model representing actionable, structured insights generated
+    from raw SEO data (rankings, Google Search Console, site audits).
+    Relationship: Project 1 ─────── * SEOInsight
+    Ownership follows: insight.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='insights',
+        help_text='The project this SEO insight belongs to.'
+    )
+    fingerprint = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text='Deterministic unique fingerprint for deduplication across analysis runs.'
+    )
+    insight_type = models.CharField(
+        max_length=50,
+        choices=InsightType.choices,
+        db_index=True,
+        help_text='Category / rule type of the insight.'
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=InsightSeverity.choices,
+        default=InsightSeverity.INFO,
+        db_index=True,
+        help_text='Severity level of the insight.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Concise summary of the insight.'
+    )
+    description = models.TextField(
+        help_text='Detailed explanation of observed SEO behavior or metric change.'
+    )
+    recommendation = models.TextField(
+        blank=True,
+        default='',
+        help_text='Actionable recommendation to address or capitalize on this insight.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=InsightStatus.choices,
+        default=InsightStatus.OPEN,
+        db_index=True,
+        help_text='Workflow status of this insight.'
+    )
+    source = models.CharField(
+        max_length=30,
+        choices=InsightSource.choices,
+        default=InsightSource.RANKING,
+        db_index=True,
+        help_text='Data source where this insight was derived from.'
+    )
+    related_keyword = models.ForeignKey(
+        Keyword,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='insights',
+        help_text='Specific keyword tracked in DoxaRank associated with this insight.'
+    )
+    related_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Landing page URL associated with this insight.'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Arbitrary structured metadata (metrics, comparisons, delta values).'
+    )
+    detected_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when the insight condition was first or most recently detected.'
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when this insight was marked resolved.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this insight record was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when this insight record was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_insights'
+        verbose_name = 'SEO insight'
+        verbose_name_plural = 'SEO insights'
+        ordering = ['-detected_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'fingerprint'],
+                name='unique_project_insight_fingerprint'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_ins_proj_stat_idx'),
+            models.Index(fields=['project', 'severity'], name='seo_ins_proj_sev_idx'),
+            models.Index(fields=['project', 'insight_type'], name='seo_ins_proj_type_idx'),
+            models.Index(fields=['project', '-detected_at'], name='seo_ins_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.severity.upper()}] {self.title} ({self.project.name})"
+
 
 
 

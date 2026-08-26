@@ -5,15 +5,19 @@ from rest_framework.response import Response
 
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
-    SearchConsoleConnection, SearchAnalyticsData
+    SearchConsoleConnection, SearchAnalyticsData,
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
-    SearchConsoleSyncRequestSerializer
+    SearchConsoleSyncRequestSerializer,
+    SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
+from .services.seo_intelligence import SEOIntelligenceService
+from apps.projects.models import Project
 
 
 class KeywordViewSet(viewsets.ModelViewSet):
@@ -489,6 +493,106 @@ class SearchAnalyticsViewSet(viewsets.ModelViewSet):
             for item in results
         ]
         return Response(data)
+
+
+class SEOInsightViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for SEO Insights operations.
+    
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports filtering by project_id, severity, status, insight_type, source.
+    """
+    serializer_class = SEOInsightSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only SEO insights belonging to projects owned by the authenticated user.
+        """
+        queryset = SEOInsight.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'related_keyword')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        severity = self.request.query_params.get('severity')
+        if severity:
+            queryset = queryset.filter(severity=severity)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        insight_type = self.request.query_params.get('insight_type')
+        if insight_type:
+            queryset = queryset.filter(insight_type=insight_type)
+
+        source = self.request.query_params.get('source')
+        if source:
+            queryset = queryset.filter(source=source)
+
+        return queryset.order_by('-detected_at')
+
+    @action(detail=False, methods=['post'], url_path='analyze')
+    def analyze(self, request):
+        """
+        Execute deterministic SEO intelligence rules for the specified project.
+        Returns summary of created, updated, and total open insights.
+        """
+        serializer = SEOInsightAnalyzeRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found or not owned by authenticated user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        service = SEOIntelligenceService(project=project)
+        result = service.analyze()
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """
+        Get aggregated counts for project insights by severity and status.
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        base_qs = SEOInsight.objects.filter(project=project)
+        counts = {
+            'critical': base_qs.filter(severity=InsightSeverity.CRITICAL, status=InsightStatus.OPEN).count(),
+            'warning': base_qs.filter(severity=InsightSeverity.WARNING, status=InsightStatus.OPEN).count(),
+            'opportunity': base_qs.filter(severity=InsightSeverity.OPPORTUNITY, status=InsightStatus.OPEN).count(),
+            'info': base_qs.filter(severity=InsightSeverity.INFO, status=InsightStatus.OPEN).count(),
+            'open_total': base_qs.filter(status=InsightStatus.OPEN).count(),
+            'resolved_total': base_qs.filter(status=InsightStatus.RESOLVED).count(),
+            'dismissed_total': base_qs.filter(status=InsightStatus.DISMISSED).count(),
+            'total': base_qs.count()
+        }
+        return Response(counts, status=status.HTTP_200_OK)
+
 
 
 

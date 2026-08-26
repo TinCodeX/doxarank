@@ -12,10 +12,12 @@ import {
   updateSearchConsoleConnection,
   deleteSearchConsoleConnection,
 } from '../api/searchConsole';
+import { syncSearchConsole } from '../api/searchConsoleAnalytics';
 import { SearchConsoleFormModal } from './SearchConsoleFormModal';
 
 interface SearchConsolePanelProps {
   project: Project;
+  onConnectionChange?: (connection: SearchConsoleConnection | null) => void;
 }
 
 const PERMISSION_LABELS: Record<SearchConsolePermission, string> = {
@@ -25,9 +27,11 @@ const PERMISSION_LABELS: Record<SearchConsolePermission, string> = {
   siteUnverifiedUser: 'Unverified User',
 };
 
-export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project }) => {
+export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project, onConnectionChange }) => {
   const [connection, setConnection] = useState<SearchConsoleConnection | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Modal states
@@ -45,23 +49,27 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
       const data = await getSearchConsoleConnections(projectId);
       if (data && data.length > 0) {
         setConnection(data[0]);
+        onConnectionChange?.(data[0]);
       } else {
         setConnection(null);
+        onConnectionChange?.(null);
       }
     } catch (err: any) {
       setError(err?.data?.detail || 'Failed to load Search Console connection for this project.');
+      onConnectionChange?.(null);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [onConnectionChange]);
 
   useEffect(() => {
     if (project?.id) {
       fetchConnection(project.id);
     } else {
       setConnection(null);
+      onConnectionChange?.(null);
     }
-  }, [project?.id, fetchConnection]);
+  }, [project?.id, fetchConnection, onConnectionChange]);
 
   // Handlers
   const handleOpenConnectModal = () => {
@@ -70,6 +78,22 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
 
   const handleOpenEditModal = () => {
     setIsModalOpen(true);
+  };
+
+  const handleSyncNow = async () => {
+    if (!project?.id || isSyncing) return;
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    setError(null);
+    try {
+      const res = await syncSearchConsole({ project_id: project.id });
+      setSyncFeedback(`Sync complete! Created ${res.records_created}, updated ${res.records_updated} records.`);
+      await fetchConnection(project.id);
+    } catch (err: any) {
+      setError(err?.data?.detail || 'Sync failed.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSaveConnection = async (
@@ -81,11 +105,13 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
         payload as UpdateSearchConsoleConnectionPayload
       );
       setConnection(updated);
+      onConnectionChange?.(updated);
     } else {
       const created = await createSearchConsoleConnection(
         payload as CreateSearchConsoleConnectionPayload
       );
       setConnection(created);
+      onConnectionChange?.(created);
     }
   };
 
@@ -96,6 +122,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
     try {
       await deleteSearchConsoleConnection(connection.id);
       setConnection(null);
+      onConnectionChange?.(null);
       setIsDisconnectModalOpen(false);
     } catch (err: any) {
       setDisconnectError(err?.data?.detail || 'Failed to disconnect Google Search Console.');
@@ -134,6 +161,14 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
         {connection && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
+              id="gsc-header-sync-btn"
+              onClick={handleSyncNow}
+              disabled={isSyncing || !connection.is_connected}
+              style={{ ...primaryAddBtnStyle, backgroundColor: '#2563eb' }}
+            >
+              {isSyncing ? 'Syncing...' : '⚡ Sync'}
+            </button>
+            <button
               id="edit-gsc-connection-button"
               onClick={handleOpenEditModal}
               style={secondaryActionBtnStyle}
@@ -150,6 +185,13 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project 
           </div>
         )}
       </div>
+
+      {/* Sync Feedback Toast */}
+      {syncFeedback && (
+        <div style={{ ...errorAlertStyle, backgroundColor: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46', marginBottom: '16px' }}>
+          ✅ {syncFeedback}
+        </div>
+      )}
 
       {/* Global Error Banner */}
       {error && (

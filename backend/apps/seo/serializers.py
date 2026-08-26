@@ -4,7 +4,8 @@ from .models import (
     Keyword, KeywordRanking, SearchEngine, Country, Language, Device,
     SiteAudit, AuditIssue, AuditStatus, IssueSeverity,
     SearchConsoleConnection, SearchConsolePermission, SearchConsoleSyncStatus,
-    SearchAnalyticsData
+    SearchAnalyticsData,
+    SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
 )
 from apps.projects.models import Project
 
@@ -441,6 +442,90 @@ class SearchConsoleSyncRequestSerializer(serializers.Serializer):
         if start_date and end_date and start_date > end_date:
             raise serializers.ValidationError("start_date cannot be after end_date.")
         return attrs
+
+
+class SEOInsightSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOInsight model.
+    Enforces project ownership and handles lifecycle status timestamps.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    related_keyword_name = serializers.CharField(source='related_keyword.keyword', read_only=True, default=None)
+
+    class Meta:
+        model = SEOInsight
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'fingerprint',
+            'insight_type',
+            'severity',
+            'title',
+            'description',
+            'recommendation',
+            'status',
+            'source',
+            'related_keyword',
+            'related_keyword_name',
+            'related_url',
+            'metadata',
+            'detected_at',
+            'resolved_at',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'related_keyword_name',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to attach insights to this project.")
+        return value
+
+    def update(self, instance, validated_data):
+        new_status = validated_data.get('status', instance.status)
+        if new_status == InsightStatus.RESOLVED and instance.status != InsightStatus.RESOLVED:
+            validated_data['resolved_at'] = timezone.now()
+        elif new_status != InsightStatus.RESOLVED and instance.status == InsightStatus.RESOLVED:
+            validated_data['resolved_at'] = None
+
+        return super().update(instance, validated_data)
+
+
+class SEOInsightAnalyzeRequestSerializer(serializers.Serializer):
+    """
+    Serializer for validating SEO Intelligence analysis requests.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the project to run SEO intelligence analysis on."
+    )
+
+    def validate_project_id(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if not Project.objects.filter(id=value, owner=request.user).exists():
+                raise serializers.ValidationError("Project does not exist or you do not have permission to analyze it.")
+        return value
+
+
+class SEOInsightStatusUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for updating insight lifecycle status.
+    """
+    status = serializers.ChoiceField(
+        choices=InsightStatus.choices,
+        help_text="Target status: open, dismissed, or resolved."
+    )
+
 
 
 
