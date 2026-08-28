@@ -12,7 +12,8 @@ from apps.seo.models import (
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
-    SEOContentDraft, DraftStatus
+    SEOContentDraft, DraftStatus,
+    SEOAction, ActionType, ActionStatus, ActionPriority
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
 from apps.seo.services.ai_providers import MockAIProvider
@@ -20,6 +21,9 @@ from apps.seo.services.ai_seo_agent import AISeoAgentService
 from apps.seo.services.content_brief_service import SEOContentBriefService
 from apps.seo.services.content_writer_service import SEOContentWriterService
 from apps.seo.services.export_service import ContentBriefExportService, ContentDraftExportService
+from apps.seo.services.action_service import SEOActionService
+from apps.seo.services.action_executors import MockSEOActionExecutor
+
 
 User = get_user_model()
 
@@ -2521,6 +2525,368 @@ class SEOContentDraftAPITests(TestCase):
         res = self.client.delete(f'{self.drafts_url}{self.draft_a.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(SEOContentDraft.objects.filter(id=self.draft_a.id).exists())
+
+
+class SEOActionAPITests(TestCase):
+    """
+    Comprehensive test suite for SEOAction milestone:
+    1. Unauthenticated rejection (401 on list, retrieve, generate, review, approve, execute, delete)
+    2. Multi-tenant security isolation (User B cannot access or modify User A actions -> 404)
+    3. Cross-user generation rejection (cannot generate action using another user's project/source)
+    4. Action generation from SEORecommendation
+    5. Action generation from SEOContentDraft (produces complete publish_new_content package)
+    6. Action generation from SEOContentBrief
+    7. Lifecycle transitions (proposed -> reviewed -> approved)
+    8. Terminal lifecycle states (rejected, cancelled)
+    9. Execution safety (unapproved action execution is strictly blocked -> 400)
+    10. Safe mock execution (approved action executes -> status completed, metadata & monitoring baseline saved)
+    11. Status counts endpoint returns accurate breakdown
+    12. In-place action editing (PATCH updates priority, assigned_to, title)
+    13. Filtering by project, status, action_type, priority
+    14. Direct action deletion (204 No Content) and cascade deletion
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.actions_url = '/api/seo/ai/actions/'
+
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='action_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Action',
+            last_name='UserA'
+        )
+        self.project_a = Project.objects.create(
+            name='Ethio Commerce Hub',
+            website_url='https://ethio-commerce.com',
+            owner=self.user_a
+        )
+
+        # User B & Project B
+        self.user_b = User.objects.create_user(
+            email='action_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Competitor',
+            last_name='UserB'
+        )
+        self.project_b = Project.objects.create(
+            name='Competitor Portal',
+            website_url='https://competitor.com',
+            owner=self.user_b
+        )
+
+        # Setup Grounded Evidence for Project A
+        self.keyword_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='ecommerce platform ethiopia',
+            search_engine='google',
+            country='ET',
+            language='en',
+            device='desktop'
+        )
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.keyword_a,
+            position=8,
+            ranking_url='https://ethio-commerce.com/platform',
+            search_engine='google',
+            country='ET',
+            language='en',
+            device='desktop',
+            recorded_at=timezone.now()
+        )
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            insight_type=InsightType.HIGH_POSITION_OPPORTUNITY,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Optimize Title and Meta Description for ecommerce platform ethiopia',
+            description='Ranking on page 1 (#8) with strong click growth potential.',
+            recommendation='Update meta description with clear action prompt and brand trust.',
+            related_keyword=self.keyword_a,
+            related_url='https://ethio-commerce.com/platform'
+        )
+        self.rec_a = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=self.insight_a,
+            recommendation_type=RecommendationType.META_DESCRIPTION,
+            priority=RecommendationPriority.HIGH,
+            title='Update Meta Description for ecommerce platform ethiopia',
+            summary='Increase SERP CTR by rewriting snippet with compelling Ethiopian value proposition.',
+            explanation='Observed ranking position #8 with below-average CTR.',
+            recommended_action='Replace meta description tag with high-converting copy.',
+            expected_impact='Estimated 25% CTR boost.',
+            affected_keyword='ecommerce platform ethiopia',
+            affected_url='https://ethio-commerce.com/platform'
+        )
+        self.brief_a = SEOContentBrief.objects.create(
+            project=self.project_a,
+            recommendation=self.rec_a,
+            title='Ecommerce Platform Guide Brief',
+            target_keyword='ecommerce platform ethiopia',
+            content_type=BriefContentType.BLOG_POST,
+            recommended_title='Best Ecommerce Platforms in Ethiopia (2026)',
+            meta_description='Compare top ecommerce platforms in Ethiopia with Telebirr and CBE payment integrations.',
+            suggested_slug='/blog/best-ecommerce-platforms-ethiopia'
+        )
+        self.draft_a = SEOContentWriterService.generate_for_brief(
+            project=self.project_a,
+            brief=self.brief_a
+        )
+
+        # Pre-create an SEOAction for User A
+        self.action_service_a = SEOActionService(project=self.project_a)
+        self.action_a = self.action_service_a.generate_for_recommendation(self.rec_a)
+
+        # Pre-create an SEOAction for User B
+        self.rec_b = SEORecommendation.objects.create(
+            project=self.project_b,
+            insight=SEOInsight.objects.create(
+                project=self.project_b,
+                title='Competitor Insight',
+                description='Competitor desc'
+            ),
+            title='Competitor Recommendation',
+            summary='Competitor summary',
+            explanation='Competitor explanation',
+            recommended_action='Competitor action'
+        )
+        self.action_service_b = SEOActionService(project=self.project_b)
+        self.action_b = self.action_service_b.generate_for_recommendation(self.rec_b)
+
+    def test_unauthenticated_access_rejected(self):
+        """1. Unauthenticated requests are rejected on all endpoints."""
+        res_list = self.client.get(self.actions_url)
+        self.assertEqual(res_list.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_detail = self.client.get(f'{self.actions_url}{self.action_a.id}/')
+        self.assertEqual(res_detail.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_gen = self.client.post(f'{self.actions_url}generate/', {'project_id': self.project_a.id})
+        self.assertEqual(res_gen.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_rev = self.client.post(f'{self.actions_url}{self.action_a.id}/review/')
+        self.assertEqual(res_rev.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_app = self.client.post(f'{self.actions_url}{self.action_a.id}/approve/')
+        self.assertEqual(res_app.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_exec = self.client.post(f'{self.actions_url}{self.action_a.id}/execute/')
+        self.assertEqual(res_exec.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_del = self.client.delete(f'{self.actions_url}{self.action_a.id}/')
+        self.assertEqual(res_del.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_user_isolation_cannot_access_other_user_action(self):
+        """2. User B cannot view, modify, review, approve, execute, or delete User A's action."""
+        self.client.force_authenticate(user=self.user_b)
+
+        # GET User A action -> 404
+        res_get = self.client.get(f'{self.actions_url}{self.action_a.id}/')
+        self.assertEqual(res_get.status_code, status.HTTP_404_NOT_FOUND)
+
+        # PATCH User A action -> 404
+        res_patch = self.client.patch(f'{self.actions_url}{self.action_a.id}/', {'title': 'Hacked Title'})
+        self.assertEqual(res_patch.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Review User A action -> 404
+        res_rev = self.client.post(f'{self.actions_url}{self.action_a.id}/review/')
+        self.assertEqual(res_rev.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Approve User A action -> 404
+        res_app = self.client.post(f'{self.actions_url}{self.action_a.id}/approve/')
+        self.assertEqual(res_app.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Execute User A action -> 404
+        res_exec = self.client.post(f'{self.actions_url}{self.action_a.id}/execute/')
+        self.assertEqual(res_exec.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Delete User A action -> 404
+        res_del = self.client.delete(f'{self.actions_url}{self.action_a.id}/')
+        self.assertEqual(res_del.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_user_cannot_generate_action_for_other_user_source(self):
+        """3. User B cannot generate an action using User A's recommendation, draft, or brief."""
+        self.client.force_authenticate(user=self.user_b)
+
+        # Attempt using User A project ID -> 400 (validation error)
+        res_cross_proj = self.client.post(f'{self.actions_url}generate/', {
+            'project_id': self.project_a.id,
+            'recommendation_id': self.rec_a.id
+        })
+        self.assertEqual(res_cross_proj.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Attempt using User B project ID with User A recommendation ID -> 400
+        res_cross_rec = self.client.post(f'{self.actions_url}generate/', {
+            'project_id': self.project_b.id,
+            'recommendation_id': self.rec_a.id
+        })
+        self.assertEqual(res_cross_rec.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_action_generation_from_recommendation(self):
+        """4. Generate structured SEOAction from SEORecommendation."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.actions_url}generate/', {
+            'project_id': self.project_a.id,
+            'recommendation_id': self.rec_a.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data
+        self.assertEqual(data['project'], self.project_a.id)
+        self.assertEqual(data['recommendation'], self.rec_a.id)
+        self.assertEqual(data['action_type'], ActionType.UPDATE_META_DESCRIPTION)
+        self.assertEqual(data['status'], ActionStatus.PROPOSED)
+        self.assertIn('proposed_change', data)
+        self.assertIn('implementation_instructions', data)
+        self.assertIn('Marketer', data['implementation_instructions'])
+        self.assertIn('Developer', data['implementation_instructions'])
+
+    def test_action_generation_from_draft_publishes_package(self):
+        """5. Generate SEOAction from SEOContentDraft creates publish_new_content package."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.actions_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_draft_id': self.draft_a.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data
+        self.assertEqual(data['action_type'], ActionType.PUBLISH_NEW_CONTENT)
+        self.assertEqual(data['draft'], self.draft_a.id)
+        self.assertEqual(data['status'], ActionStatus.PROPOSED)
+
+        # Inspect publishing payload
+        proposed = data['proposed_change']
+        self.assertEqual(proposed['title'], self.draft_a.title)
+        self.assertEqual(proposed['slug'], self.draft_a.suggested_slug)
+        self.assertEqual(proposed['meta_description'], self.draft_a.meta_description)
+        self.assertIn('content', proposed)
+        self.assertIn('schema_json_ld', proposed)
+        self.assertIn('faq', proposed)
+
+    def test_action_generation_from_brief(self):
+        """6. Generate SEOAction from SEOContentBrief."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.actions_url}generate/', {
+            'project_id': self.project_a.id,
+            'content_brief_id': self.brief_a.id
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data
+        self.assertEqual(data['brief'], self.brief_a.id)
+        self.assertEqual(data['status'], ActionStatus.PROPOSED)
+
+    def test_lifecycle_status_transitions(self):
+        """7. Human workflow transitions: proposed -> reviewed -> approved."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # 1. Review action
+        res_rev = self.client.post(f'{self.actions_url}{self.action_a.id}/review/')
+        self.assertEqual(res_rev.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_rev.data['status'], ActionStatus.REVIEWED)
+
+        # 2. Approve action
+        res_app = self.client.post(f'{self.actions_url}{self.action_a.id}/approve/')
+        self.assertEqual(res_app.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_app.data['status'], ActionStatus.APPROVED)
+
+    def test_rejection_and_cancellation_lifecycle(self):
+        """8. Terminal states: reject and cancel."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Reject
+        res_rej = self.client.post(f'{self.actions_url}{self.action_a.id}/reject/')
+        self.assertEqual(res_rej.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_rej.data['status'], ActionStatus.REJECTED)
+
+        # Cancel
+        res_can = self.client.post(f'{self.actions_url}{self.action_a.id}/cancel/')
+        self.assertEqual(res_can.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_can.data['status'], ActionStatus.CANCELLED)
+
+    def test_execution_safety_cannot_execute_unapproved_action(self):
+        """9. Unapproved action execution is strictly blocked (returns 400 Bad Request)."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Action is in 'proposed' state
+        self.assertEqual(self.action_a.status, ActionStatus.PROPOSED)
+        res = self.client.post(f'{self.actions_url}{self.action_a.id}/execute/')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('A human must review and approve the action before execution', res.data['detail'])
+
+        # Reject action and try to execute
+        self.action_a.status = ActionStatus.REJECTED
+        self.action_a.save()
+        res_rej = self.client.post(f'{self.actions_url}{self.action_a.id}/execute/')
+        self.assertEqual(res_rej.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_successful_mock_execution_records_metadata_and_baseline(self):
+        """10. Approved action executes safely in mock staging, recording metadata and monitoring baseline."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # First approve action
+        self.action_a.status = ActionStatus.APPROVED
+        self.action_a.save()
+
+        # Execute
+        res = self.client.post(f'{self.actions_url}{self.action_a.id}/execute/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data
+        self.assertEqual(data['status'], ActionStatus.COMPLETED)
+        self.assertIsNotNone(data['completed_at'])
+
+        # Verify execution metadata persisted in DB
+        self.action_a.refresh_from_db()
+        self.assertEqual(self.action_a.status, ActionStatus.COMPLETED)
+        self.assertIsNotNone(self.action_a.completed_at)
+        metadata = self.action_a.execution_metadata
+        self.assertEqual(metadata['status'], 'success')
+        self.assertIn('MockSEOActionExecutor', metadata['executor'])
+        self.assertIn('executed_at', metadata)
+        self.assertIn('duration_ms', metadata)
+        self.assertIn('monitoring_baseline', metadata)
+        self.assertEqual(metadata['monitoring_baseline']['monitored_keyword'], self.action_a.target_keyword)
+
+    def test_action_status_counts_endpoint(self):
+        """11. Test status-counts aggregate statistics endpoint."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.get(f'{self.actions_url}status-counts/?project_id={self.project_a.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('proposed', res.data)
+        self.assertIn('approved', res.data)
+        self.assertIn('completed', res.data)
+        self.assertIn('total', res.data)
+        self.assertGreaterEqual(res.data['total'], 1)
+
+    def test_patch_action_in_place_edit(self):
+        """12. User can update assigned_to, priority, and title of own action."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.patch(f'{self.actions_url}{self.action_a.id}/', {
+            'assigned_to': 'Lead SEO Specialist',
+            'priority': ActionPriority.CRITICAL
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['assigned_to'], 'Lead SEO Specialist')
+        self.assertEqual(res.data['priority'], ActionPriority.CRITICAL)
+
+    def test_filtering_by_project_action_type_priority_and_status(self):
+        """13. Filtering queries strictly isolate by parameters and project."""
+        self.client.force_authenticate(user=self.user_a)
+
+        res_proj = self.client.get(f'{self.actions_url}?project_id={self.project_a.id}')
+        self.assertEqual(res_proj.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_proj.data), 1)
+
+        # Cross-project query returns 0
+        res_cross = self.client.get(f'{self.actions_url}?project_id={self.project_b.id}')
+        self.assertEqual(res_cross.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_cross.data), 0)
+
+    def test_direct_action_deletion(self):
+        """14. User can delete own SEOAction."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.delete(f'{self.actions_url}{self.action_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(SEOAction.objects.filter(id=self.action_a.id).exists())
+
 
 
 

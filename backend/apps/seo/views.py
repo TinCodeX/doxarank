@@ -10,7 +10,8 @@ from .models import (
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
-    SEOContentDraft, DraftStatus
+    SEOContentDraft, DraftStatus,
+    SEOAction, ActionType, ActionStatus, ActionPriority
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -20,7 +21,8 @@ from .serializers import (
     SEOInsightSerializer, SEOInsightAnalyzeRequestSerializer, SEOInsightStatusUpdateSerializer,
     SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer,
     SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
-    SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer
+    SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer,
+    SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.seo_intelligence import SEOIntelligenceService
@@ -28,7 +30,10 @@ from .services.ai_seo_agent import AISeoAgentService
 from .services.content_brief_service import SEOContentBriefService
 from .services.content_writer_service import SEOContentWriterService
 from .services.export_service import ContentBriefExportService, ContentDraftExportService
+from .services.action_service import SEOActionService
+from .services.action_executors import get_action_executor
 from apps.projects.models import Project
+
 
 
 class KeywordViewSet(viewsets.ModelViewSet):
@@ -919,6 +924,224 @@ class SEOContentDraftViewSet(viewsets.ModelViewSet):
         response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{slug_safe}_draft.md"'
         return response
+
+
+class SEOActionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for AI-generated and human-approved SEO Actions.
+
+    Security & Ownership:
+    1. Requires authentication on all endpoints.
+    2. Queryset strictly isolated by `project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports filtering by project_id, recommendation_id, content_draft_id, content_brief_id, action_type, priority, status.
+    5. Human review & approval endpoints: review, approve, reject, cancel.
+    6. Safe mock execution endpoint: execute (rejects unapproved actions).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action in ['update', 'partial_update']:
+            return SEOActionUpdateSerializer
+        return SEOActionSerializer
+
+    def get_queryset(self):
+        """
+        Return only SEO actions belonging to projects owned by the authenticated user.
+        """
+        queryset = SEOAction.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'recommendation', 'brief', 'draft')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        recommendation_id = self.request.query_params.get('recommendation_id')
+        if recommendation_id:
+            queryset = queryset.filter(recommendation_id=recommendation_id)
+
+        draft_id = self.request.query_params.get('content_draft_id') or self.request.query_params.get('draft_id')
+        if draft_id:
+            queryset = queryset.filter(draft_id=draft_id)
+
+        brief_id = self.request.query_params.get('content_brief_id') or self.request.query_params.get('brief_id')
+        if brief_id:
+            queryset = queryset.filter(brief_id=brief_id)
+
+        action_type = self.request.query_params.get('action_type')
+        if action_type:
+            queryset = queryset.filter(action_type=action_type)
+
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        return queryset.order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Synthesize an executable SEOAction from an SEORecommendation, SEOContentDraft, or SEOContentBrief.
+        (POST /api/seo/ai/actions/generate/)
+        """
+        serializer = SEOActionGenerateRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        rec_id = serializer.validated_data.get('recommendation_id')
+        draft_id = serializer.validated_data.get('content_draft_id')
+        brief_id = serializer.validated_data.get('content_brief_id')
+        action_type_override = serializer.validated_data.get('action_type')
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {"detail": "Project not found or not owned by authenticated user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        service = SEOActionService(project=project)
+
+        if draft_id:
+            try:
+                draft = SEOContentDraft.objects.get(id=draft_id, project=project)
+            except SEOContentDraft.DoesNotExist:
+                return Response({"detail": "Content draft not found for this project."}, status=status.HTTP_404_NOT_FOUND)
+            action = service.generate_for_draft(draft)
+
+        elif brief_id:
+            try:
+                brief = SEOContentBrief.objects.get(id=brief_id, project=project)
+            except SEOContentBrief.DoesNotExist:
+                return Response({"detail": "Content brief not found for this project."}, status=status.HTTP_404_NOT_FOUND)
+            action = service.generate_for_brief(brief)
+
+        elif rec_id:
+            try:
+                rec = SEORecommendation.objects.get(id=rec_id, project=project)
+            except SEORecommendation.DoesNotExist:
+                return Response({"detail": "Recommendation not found for this project."}, status=status.HTTP_404_NOT_FOUND)
+            action = service.generate_for_recommendation(rec, action_type_override=action_type_override)
+        else:
+            return Response(
+                {"detail": "Must provide recommendation_id, content_draft_id, or content_brief_id."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        out_serializer = SEOActionSerializer(action)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='review')
+    def review(self, request, pk=None):
+        """
+        Transition an SEOAction to REVIEWED status.
+        (POST /api/seo/ai/actions/<id>/review/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        action_obj.status = ActionStatus.REVIEWED
+        action_obj.save(update_fields=['status', 'updated_at'])
+        serializer = SEOActionSerializer(action_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        """
+        Human approves the SEOAction, making it ready to execute.
+        (POST /api/seo/ai/actions/<id>/approve/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        action_obj.status = ActionStatus.APPROVED
+        action_obj.save(update_fields=['status', 'updated_at'])
+        serializer = SEOActionSerializer(action_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='reject')
+    def reject(self, request, pk=None):
+        """
+        Human rejects the proposed SEOAction.
+        (POST /api/seo/ai/actions/<id>/reject/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        action_obj.status = ActionStatus.REJECTED
+        action_obj.save(update_fields=['status', 'updated_at'])
+        serializer = SEOActionSerializer(action_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel(self, request, pk=None):
+        """
+        Cancel an existing SEOAction.
+        (POST /api/seo/ai/actions/<id>/cancel/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        action_obj.status = ActionStatus.CANCELLED
+        action_obj.save(update_fields=['status', 'updated_at'])
+        serializer = SEOActionSerializer(action_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='execute')
+    def execute(self, request, pk=None):
+        """
+        Execute an approved SEOAction through the safe execution engine.
+        Guarantees that unapproved actions cannot be executed.
+        (POST /api/seo/ai/actions/<id>/execute/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+
+        if action_obj.status not in [ActionStatus.APPROVED, ActionStatus.READY_TO_EXECUTE]:
+            return Response(
+                {
+                    "detail": (
+                        f"Cannot execute action #{action_obj.id}. Current status is '{action_obj.get_status_display()}'. "
+                        "A human must review and approve the action before execution."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        executor = get_action_executor()
+        try:
+            result = executor.execute(action_obj)
+            serializer = SEOActionSerializer(action_obj)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"detail": f"Execution error: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='status-counts')
+    def status_counts(self, request):
+        """
+        Return action status counts for the selected project.
+        (GET /api/seo/ai/actions/status-counts/?project_id=<id>)
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        base_qs = SEOAction.objects.filter(project=project)
+        counts = {
+            'proposed': base_qs.filter(status=ActionStatus.PROPOSED).count(),
+            'reviewed': base_qs.filter(status=ActionStatus.REVIEWED).count(),
+            'approved': base_qs.filter(status=ActionStatus.APPROVED).count(),
+            'completed': base_qs.filter(status=ActionStatus.COMPLETED).count(),
+            'rejected': base_qs.filter(status=ActionStatus.REJECTED).count(),
+            'cancelled': base_qs.filter(status=ActionStatus.CANCELLED).count(),
+            'total': base_qs.count()
+        }
+        return Response(counts, status=status.HTTP_200_OK)
+
 
 
 

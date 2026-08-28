@@ -19,12 +19,14 @@ interface SEOContentDraftPanelProps {
   currentProject: Project | null;
   targetBriefId?: number | null;
   onClearTargetBrief?: () => void;
+  onCreateAction?: (draftId: number) => void;
 }
 
 export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
   currentProject,
   targetBriefId,
   onClearTargetBrief,
+  onCreateAction,
 }) => {
   const [drafts, setDrafts] = useState<SEOContentDraft[]>([]);
   const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
@@ -386,8 +388,32 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   📄 PDF
                 </button>
               </div>
+
+              {/* Create SEO Action Button */}
+              {onCreateAction && (
+                <button
+                  id="create-action-from-draft-btn"
+                  onClick={() => onCreateAction(activeDraft.id)}
+                  style={{
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    padding: '7px 14px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  ⚡ Create SEO Action
+                </button>
+              )}
             </>
           )}
+
         </div>
       </div>
 

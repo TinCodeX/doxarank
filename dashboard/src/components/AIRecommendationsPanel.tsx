@@ -19,12 +19,14 @@ interface AIRecommendationsPanelProps {
   project: Project;
   onRefreshInsights?: () => void;
   onGenerateBrief?: (recommendationId: number) => void;
+  onCreateAction?: (recommendationId: number) => void;
 }
 
 export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   project,
   onRefreshInsights,
-  onGenerateBrief
+  onGenerateBrief,
+  onCreateAction
 }) => {
   const [recommendations, setRecommendations] = useState<SEORecommendation[]>([]);
   const [summaryCounts, setSummaryCounts] = useState<SEORecommendationSummaryCounts | null>(null);
@@ -974,6 +976,29 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         📋 Brief
                       </button>
                     )}
+
+                    {onCreateAction && (
+                      <button
+                        id={`create-action-rec-${rec.id}`}
+                        onClick={() => onCreateAction(rec.id)}
+                        style={{
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        ⚡ Action
+                      </button>
+                    )}
+
 
                     {rec.status === 'pending_review' && (
                       <button

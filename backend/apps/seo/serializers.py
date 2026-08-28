@@ -9,9 +9,11 @@ from .models import (
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType,
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
-    SEOContentDraft, DraftStatus
+    SEOContentDraft, DraftStatus,
+    SEOAction, ActionType, ActionStatus, ActionPriority
 )
 from apps.projects.models import Project
+
 
 
 
@@ -882,6 +884,177 @@ class SEOContentDraftUpdateSerializer(serializers.ModelSerializer):
             )
             instance.save(update_fields=['word_count', 'keyword_usage', 'updated_at'])
         return instance
+
+
+class SEOActionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOAction model.
+    Represents structured executable SEO tasks with human-in-the-loop lifecycle.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    recommendation_title = serializers.CharField(source='recommendation.title', read_only=True, allow_null=True)
+    brief_title = serializers.CharField(source='brief.title', read_only=True, allow_null=True)
+    draft_title = serializers.CharField(source='draft.title', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SEOAction
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'recommendation',
+            'recommendation_title',
+            'brief',
+            'brief_title',
+            'draft',
+            'draft_title',
+            'title',
+            'description',
+            'action_type',
+            'action_type_display',
+            'target_url',
+            'target_keyword',
+            'current_state',
+            'proposed_change',
+            'implementation_instructions',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'assigned_to',
+            'execution_metadata',
+            'completed_at',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'project_website_url',
+            'action_type_display',
+            'status_display',
+            'priority_display',
+            'recommendation_title',
+            'brief_title',
+            'draft_title',
+            'execution_metadata',
+            'completed_at',
+            'created_at',
+            'updated_at'
+        )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create actions for this project.")
+        return value
+
+
+class SEOActionUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for editing and updating SEOAction details.
+    """
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+
+    class Meta:
+        model = SEOAction
+        fields = (
+            'id',
+            'title',
+            'description',
+            'action_type',
+            'action_type_display',
+            'target_url',
+            'target_keyword',
+            'current_state',
+            'proposed_change',
+            'implementation_instructions',
+            'priority',
+            'priority_display',
+            'status',
+            'status_display',
+            'assigned_to',
+            'updated_at'
+        )
+        read_only_fields = ('id', 'status_display', 'action_type_display', 'priority_display', 'updated_at')
+
+
+class SEOActionGenerateRequestSerializer(serializers.Serializer):
+    """
+    Serializer for validating AI SEO Action generation requests.
+    Supports generating from SEORecommendation, SEOContentDraft, or SEOContentBrief.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text="ID of the project the action belongs to."
+    )
+    recommendation_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Optional ID of the SEORecommendation to generate action from."
+    )
+    content_draft_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Optional ID of the SEOContentDraft to generate action from."
+    )
+    content_brief_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Optional ID of the SEOContentBrief to generate action from."
+    )
+    action_type = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Optional action_type override."
+    )
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        project_id = attrs.get('project_id')
+        rec_id = attrs.get('recommendation_id')
+        draft_id = attrs.get('content_draft_id')
+        brief_id = attrs.get('content_brief_id')
+
+        if not rec_id and not draft_id and not brief_id:
+            raise serializers.ValidationError(
+                "At least one source ID (recommendation_id, content_draft_id, or content_brief_id) must be provided."
+            )
+
+        if request and request.user.is_authenticated:
+            try:
+                project = Project.objects.get(id=project_id, owner=request.user)
+            except Project.DoesNotExist:
+                raise serializers.ValidationError({"project_id": "Project not found or not owned by user."})
+
+            if rec_id:
+                try:
+                    SEORecommendation.objects.get(id=rec_id, project=project)
+                except SEORecommendation.DoesNotExist:
+                    raise serializers.ValidationError({"recommendation_id": "Recommendation not found for this project."})
+
+            if draft_id:
+                try:
+                    SEOContentDraft.objects.get(id=draft_id, project=project)
+                except SEOContentDraft.DoesNotExist:
+                    raise serializers.ValidationError({"content_draft_id": "Content draft not found for this project."})
+
+            if brief_id:
+                try:
+                    SEOContentBrief.objects.get(id=brief_id, project=project)
+                except SEOContentBrief.DoesNotExist:
+                    raise serializers.ValidationError({"content_brief_id": "Content brief not found for this project."})
+
+        return attrs
+
 
 
 

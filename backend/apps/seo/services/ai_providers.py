@@ -154,8 +154,45 @@ SCHEMA:
 }
 """
 
+ACTION_SYSTEM_PROMPT = """You are DoxaRank's Senior SEO Operations & Publishing Specialist.
+Your objective is to convert approved SEO recommendations, content briefs, or content drafts into precise, executable SEO action proposals for human review and safe execution.
+
+CRITICAL SAFETY & GROUNDING RULES:
+1. NEVER invent fake URLs, hallucinated metrics, or imaginary keywords. Use only the provided context.
+2. Produce structured proposed changes and role-specific implementation instructions (for Marketer, SEO Specialist, and Developer).
+3. Output MUST be valid JSON strictly adhering to the schema.
+
+SCHEMA:
+{
+  "title": "<Executable Action Title>",
+  "description": "<Detailed rationale and expected impact>",
+  "action_type": "update_title" | "update_meta_description" | "update_slug" | "optimize_existing_content" | "publish_new_content" | "add_internal_links" | "add_structured_data" | "technical_seo_fix" | "content_refresh",
+  "priority": "critical" | "high" | "medium" | "low",
+  "target_url": "<Target website URL or path>",
+  "target_keyword": "<Target search query>",
+  "current_state": {
+    "summary": "<Current state summary>",
+    "existing_title": "<Existing title if any>",
+    "existing_meta_description": "<Existing meta description if any>",
+    "observed_position": "<Current rank if any>"
+  },
+  "proposed_change": {
+    "title": "<New title tag>",
+    "meta_title": "<Meta title>",
+    "meta_description": "<Meta description>",
+    "slug": "<Slug path>",
+    "content_summary": "<Content body or summary>",
+    "schema_json_ld": {},
+    "internal_links": [],
+    "faq": []
+  },
+  "implementation_instructions": "<Step-by-step instructions with Marketer, SEO Specialist, and Developer roles>"
+}
+"""
+
 
 class BaseAIProvider(ABC):
+
     """Abstract base class for AI LLM providers."""
 
     @abstractmethod
@@ -172,6 +209,12 @@ class BaseAIProvider(ABC):
     def generate_content_draft(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate full publishable SEO content draft JSON based on brief context."""
         pass
+
+    @abstractmethod
+    def generate_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate structured executable SEO action task JSON based on recommendation or draft context."""
+        pass
+
 
 
 
@@ -1073,6 +1116,147 @@ class MockAIProvider(BaseAIProvider):
             "word_count": words
         }
 
+    def generate_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        source_type = context.get('source_type', 'recommendation')
+        action_type = context.get('action_type') or 'optimize_existing_content'
+        priority = context.get('priority', 'high')
+        target_url = context.get('target_url') or ''
+        target_keyword = context.get('target_keyword') or ''
+        current_state = context.get('current_state') or {}
+        proposed_payload = context.get('proposed_payload') or {}
+        rec_title = context.get('title') or 'SEO Action'
+
+        # Build deterministic realistic action proposal based on action_type
+        if action_type == 'publish_new_content' or source_type == 'draft':
+            draft_title = proposed_payload.get('title') or rec_title or f"Publish: {target_keyword.title()}"
+            slug = proposed_payload.get('slug') or f"/blog/{target_keyword.replace(' ', '-') if target_keyword else 'new-guide'}"
+            meta_title = proposed_payload.get('meta_title') or f"{draft_title} | Comprehensive Guide"
+            meta_desc = proposed_payload.get('meta_description') or f"Explore in-depth analysis and expert recommendations on {target_keyword}."
+
+            return {
+                "title": f"Publish New SEO Content: \"{draft_title}\"",
+                "description": f"Deploy approved, high-authority content package targeting '{target_keyword}' to capture targeted search traffic and establish topical relevance.",
+                "action_type": "publish_new_content",
+                "priority": priority,
+                "target_url": target_url or slug,
+                "target_keyword": target_keyword,
+                "current_state": {
+                    "status": "unpublished",
+                    "existing_url": target_url or "None (New Asset)",
+                    "target_query": target_keyword
+                },
+                "proposed_change": {
+                    "title": draft_title,
+                    "slug": slug,
+                    "meta_title": meta_title,
+                    "meta_description": meta_desc,
+                    "content": proposed_payload.get('content') or f"# {draft_title}\n\nComprehensive content for {target_keyword}.",
+                    "faq": proposed_payload.get('faq') or [],
+                    "internal_links": proposed_payload.get('internal_links') or [],
+                    "schema_json_ld": proposed_payload.get('schema_json_ld') or {
+                        "@context": "https://schema.org",
+                        "@type": "Article",
+                        "headline": draft_title,
+                        "description": meta_desc
+                    }
+                },
+                "implementation_instructions": (
+                    "### Implementation Instructions\n\n"
+                    "**1. Marketer / Editor Review:**\n"
+                    f"- Verify content tone and branding for '{draft_title}'.\n"
+                    "- Confirm target audience and value proposition alignment.\n\n"
+                    "**2. SEO Specialist Verification:**\n"
+                    f"- Confirm primary keyword '{target_keyword}' is present in H1, first 100 words, and meta tags.\n"
+                    f"- Validate slug structure: `{slug}`.\n"
+                    "- Ensure Schema JSON-LD Article/FAQ markup is valid.\n\n"
+                    "**3. Developer / CMS Deployment:**\n"
+                    "- Create new CMS entry with the provided Markdown/HTML payload.\n"
+                    "- Configure canonical URL and publish status.\n"
+                    "- Submit newly published URL to Google Search Console for indexing."
+                )
+            }
+
+        elif action_type == 'update_meta_description':
+            proposed_meta = proposed_payload.get('meta_description') or f"Discover top insights and actionable solutions for {target_keyword}. Explore comprehensive expert analysis."
+            return {
+                "title": f"Update Meta Description for \"{target_keyword or target_url}\"",
+                "description": f"Revise meta description on {target_url} to improve organic click-through rate (CTR) for search query '{target_keyword}'.",
+                "action_type": "update_meta_description",
+                "priority": priority,
+                "target_url": target_url,
+                "target_keyword": target_keyword,
+                "current_state": {
+                    "existing_meta_description": current_state.get('existing_meta_description', 'Missing or outdated meta description'),
+                    "observed_ctr": current_state.get('observed_ctr', 'Below SERP average')
+                },
+                "proposed_change": {
+                    "meta_description": proposed_meta,
+                    "character_count": len(proposed_meta),
+                    "target_keyword_included": target_keyword.lower() in proposed_meta.lower() if target_keyword else True
+                },
+                "implementation_instructions": (
+                    "### Implementation Instructions\n\n"
+                    "**1. Marketer / Copywriter:**\n"
+                    f"- Review proposed copy for clarity and compelling CTA: \"{proposed_meta}\"\n\n"
+                    "**2. SEO Specialist:**\n"
+                    f"- Verify length is within 140-160 characters (currently {len(proposed_meta)} chars).\n\n"
+                    "**3. Developer:**\n"
+                    f"- Update `<meta name=\"description\" content=\"{proposed_meta}\">` tag on `{target_url}`."
+                )
+            }
+
+        elif action_type == 'update_title':
+            proposed_title = proposed_payload.get('title') or proposed_payload.get('meta_title') or f"{target_keyword.title() if target_keyword else 'Target Page'} | Expert Guide"
+            return {
+                "title": f"Update Title Tag for \"{target_keyword or target_url}\"",
+                "description": f"Optimize title tag on {target_url} to strengthen relevance for primary search query '{target_keyword}'.",
+                "action_type": "update_title",
+                "priority": priority,
+                "target_url": target_url,
+                "target_keyword": target_keyword,
+                "current_state": {
+                    "existing_title": current_state.get('existing_title', 'Generic Title'),
+                    "target_query": target_keyword
+                },
+                "proposed_change": {
+                    "title": proposed_title,
+                    "character_count": len(proposed_title)
+                },
+                "implementation_instructions": (
+                    "### Implementation Instructions\n\n"
+                    "**1. Marketer / Copywriter:**\n"
+                    f"- Confirm brand suffix and clear value proposition in \"{proposed_title}\".\n\n"
+                    "**2. SEO Specialist:**\n"
+                    "- Ensure target keyword is front-loaded and under 60 characters.\n\n"
+                    "**3. Developer:**\n"
+                    f"- Update `<title>` and `og:title` on `{target_url}`."
+                )
+            }
+
+        else:
+            return {
+                "title": f"Execute SEO Action: {rec_title}",
+                "description": f"Apply evidence-grounded SEO optimizations for '{target_keyword}' on {target_url or 'project landing page'}.",
+                "action_type": action_type,
+                "priority": priority,
+                "target_url": target_url,
+                "target_keyword": target_keyword,
+                "current_state": current_state or {"target_query": target_keyword, "target_url": target_url},
+                "proposed_change": proposed_payload or {
+                    "action_summary": f"Apply SEO improvements for {target_keyword}",
+                    "guidance": "Follow the structured checklist below."
+                },
+                "implementation_instructions": (
+                    "### Implementation Instructions\n\n"
+                    "**1. Marketer / Content Lead:**\n"
+                    f"- Review changes to ensure message consistency for '{target_keyword}'.\n\n"
+                    "**2. SEO Specialist:**\n"
+                    f"- Verify keyword placement, internal links, and search intent alignment on `{target_url}`.\n\n"
+                    "**3. Developer / Webmaster:**\n"
+                    "- Implement on-page changes, verify canonical configuration, and deploy update."
+                )
+            }
+
 
 class OpenAIProvider(BaseAIProvider):
     """
@@ -1206,6 +1390,47 @@ class OpenAIProvider(BaseAIProvider):
             logger.error(f"OpenAI API content draft generation failed: {e}. Falling back to MockAIProvider.")
             return MockAIProvider().generate_content_draft(context)
 
+    def generate_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.api_key:
+            logger.warning("OPENAI_API_KEY is not configured; falling back to MockAIProvider.")
+            return MockAIProvider().generate_action(context)
+
+        try:
+            import urllib.request
+            import urllib.error
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": ACTION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Generate a complete, structured executable SEO action for the following context:\n{json.dumps(context, indent=2)}"
+                    }
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.3
+            }
+
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=json.dumps(payload).encode('utf-8'),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}"
+                }
+            )
+
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                content_str = res_data['choices'][0]['message']['content']
+                parsed = json.loads(content_str)
+                return parsed
+
+        except Exception as e:
+            logger.error(f"OpenAI API action generation failed: {e}. Falling back to MockAIProvider.")
+            return MockAIProvider().generate_action(context)
+
 
 def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:
     """
@@ -1219,5 +1444,3 @@ def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:
         return OpenAIProvider(api_key=api_key)
 
     return MockAIProvider()
-
-

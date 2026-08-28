@@ -2,8 +2,11 @@ from django.contrib import admin
 from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
-    SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft
+    SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
+    SEOAction
 )
+
+
 
 
 @admin.register(Keyword)
@@ -318,4 +321,39 @@ class SEOContentDraftAdmin(admin.ModelAdmin):
     )
     readonly_fields = ('created_at', 'updated_at')
     ordering = ('-created_at',)
+
+
+@admin.register(SEOAction)
+class SEOActionAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'action_type',
+        'title',
+        'priority',
+        'status',
+        'target_keyword',
+        'assigned_to',
+        'completed_at',
+        'created_at'
+    )
+    list_filter = (
+        'action_type',
+        'priority',
+        'status',
+        'created_at',
+        'completed_at'
+    )
+    search_fields = (
+        'title',
+        'description',
+        'target_keyword',
+        'target_url',
+        'assigned_to',
+        'project__name',
+        'project__owner__email'
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+
 

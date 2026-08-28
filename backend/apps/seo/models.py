@@ -1107,6 +1107,175 @@ class SEOContentDraft(models.Model):
         return f"[{self.get_status_display()}] {self.title} ({self.project.name})"
 
 
+class ActionType(models.TextChoices):
+    UPDATE_TITLE = 'update_title', 'Update Title'
+    UPDATE_META_DESCRIPTION = 'update_meta_description', 'Update Meta Description'
+    UPDATE_SLUG = 'update_slug', 'Update Slug'
+    OPTIMIZE_EXISTING_CONTENT = 'optimize_existing_content', 'Optimize Existing Content'
+    PUBLISH_NEW_CONTENT = 'publish_new_content', 'Publish New Content'
+    ADD_INTERNAL_LINKS = 'add_internal_links', 'Add Internal Links'
+    ADD_STRUCTURED_DATA = 'add_structured_data', 'Add Structured Data'
+    TECHNICAL_SEO_FIX = 'technical_seo_fix', 'Technical SEO Fix'
+    CONTENT_REFRESH = 'content_refresh', 'Content Refresh'
+
+
+class ActionStatus(models.TextChoices):
+    PROPOSED = 'proposed', 'Proposed'
+    REVIEWED = 'reviewed', 'Reviewed'
+    APPROVED = 'approved', 'Approved'
+    READY_TO_EXECUTE = 'ready_to_execute', 'Ready to Execute'
+    EXECUTING = 'executing', 'Executing'
+    COMPLETED = 'completed', 'Completed'
+    REJECTED = 'rejected', 'Rejected'
+    FAILED = 'failed', 'Failed'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class ActionPriority(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    HIGH = 'high', 'High'
+    MEDIUM = 'medium', 'Medium'
+    LOW = 'low', 'Low'
+
+
+class SEOAction(models.Model):
+    """
+    SEOAction model representing an actionable, executable SEO task derived from
+    an existing recommendation, content brief, or content draft.
+    Includes human-in-the-loop review/approval lifecycle and safe execution tracking.
+    Relationship: Project 1 ─────── * SEOAction
+                  SEORecommendation 1 ─────── * SEOAction (optional)
+                  SEOContentBrief 1 ─────── * SEOAction (optional)
+                  SEOContentDraft 1 ─────── * SEOAction (optional)
+    Ownership follows: action.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='actions',
+        help_text='The project this SEO action belongs to.'
+    )
+    recommendation = models.ForeignKey(
+        SEORecommendation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        help_text='Optional originating SEO recommendation.'
+    )
+    brief = models.ForeignKey(
+        SEOContentBrief,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        help_text='Optional originating SEO content brief.'
+    )
+    draft = models.ForeignKey(
+        SEOContentDraft,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        help_text='Optional originating SEO content draft.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Concise title for the executable SEO task.'
+    )
+    description = models.TextField(
+        help_text='Detailed explanation of why this action is required and expected SEO impact.'
+    )
+    action_type = models.CharField(
+        max_length=50,
+        choices=ActionType.choices,
+        default=ActionType.OPTIMIZE_EXISTING_CONTENT,
+        db_index=True,
+        help_text='Type of SEO task (title, meta description, publishing, structured data, etc.).'
+    )
+    target_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Target URL on the project website where the action will be applied.'
+    )
+    target_keyword = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Primary target search keyword query.'
+    )
+    current_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Snapshot of existing website metadata, metrics, or content before applying the action.'
+    )
+    proposed_change = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured proposal of changes to apply (e.g. new title, meta description, publishing package, schema markup).'
+    )
+    implementation_instructions = models.TextField(
+        help_text='Step-by-step instructions for marketers, SEO specialists, or developers.'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=ActionPriority.choices,
+        default=ActionPriority.HIGH,
+        db_index=True,
+        help_text='Execution priority level.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ActionStatus.choices,
+        default=ActionStatus.PROPOSED,
+        db_index=True,
+        help_text='Human approval workflow status (proposed, reviewed, approved, ready_to_execute, executing, completed, rejected, failed, cancelled).'
+    )
+    assigned_to = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Person or team responsible for executing or reviewing this action.'
+    )
+    execution_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Safe execution execution logs, timestamps, target endpoints, monitoring baselines, and results.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the action was completed or executed.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the action was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the action was last modified.'
+    )
+
+    class Meta:
+        db_table = 'seo_actions'
+        verbose_name = 'SEO action'
+        verbose_name_plural = 'SEO actions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_act_proj_stat_idx'),
+            models.Index(fields=['project', 'action_type'], name='seo_act_proj_type_idx'),
+            models.Index(fields=['project', 'priority'], name='seo_act_proj_prio_idx'),
+            models.Index(fields=['recommendation', 'status'], name='seo_act_rec_stat_idx'),
+            models.Index(fields=['draft', 'status'], name='seo_act_draft_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_act_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_action_type_display()}] {self.title} ({self.get_status_display()})"
+
+
+
 
 
 

@@ -16,7 +16,9 @@ import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
+import { SEOActionsPanel } from '../components/SEOActionsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
+
 
 export const Dashboard: React.FC = () => {
 
@@ -63,6 +65,12 @@ export const Dashboard: React.FC = () => {
 
   // Content Draft state
   const [draftTargetBriefId, setDraftTargetBriefId] = useState<number | null>(null);
+
+  // SEO Action state
+  const [actionTargetRecId, setActionTargetRecId] = useState<number | null>(null);
+  const [actionTargetDraftId, setActionTargetDraftId] = useState<number | null>(null);
+  const [actionTargetBriefId, setActionTargetBriefId] = useState<number | null>(null);
+
 
   // Load user projects on initial mount
   const fetchUserProjects = async () => {
@@ -723,6 +731,13 @@ export const Dashboard: React.FC = () => {
                 briefElem.scrollIntoView({ behavior: 'smooth' });
               }
             }}
+            onCreateAction={(recId) => {
+              setActionTargetRecId(recId);
+              const actElem = document.getElementById('seo-actions-section');
+              if (actElem) {
+                actElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 
@@ -739,6 +754,13 @@ export const Dashboard: React.FC = () => {
                 draftElem.scrollIntoView({ behavior: 'smooth' });
               }
             }}
+            onCreateAction={(briefId) => {
+              setActionTargetBriefId(briefId);
+              const actElem = document.getElementById('seo-actions-section');
+              if (actElem) {
+                actElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 
@@ -748,11 +770,34 @@ export const Dashboard: React.FC = () => {
             currentProject={selectedProject}
             targetBriefId={draftTargetBriefId}
             onClearTargetBrief={() => setDraftTargetBriefId(null)}
+            onCreateAction={(draftId) => {
+              setActionTargetDraftId(draftId);
+              const actElem = document.getElementById('seo-actions-section');
+              if (actElem) {
+                actElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 
-        {/* SECTION 10: PROJECTS MANAGEMENT */}
+        {/* SECTION 10: SEO ACTION & PUBLISHING ENGINE (Visible when a project is selected) */}
+        {selectedProject && (
+          <SEOActionsPanel
+            project={selectedProject}
+            targetRecommendationId={actionTargetRecId}
+            targetDraftId={actionTargetDraftId}
+            targetBriefId={actionTargetBriefId}
+            onClearTargets={() => {
+              setActionTargetRecId(null);
+              setActionTargetDraftId(null);
+              setActionTargetBriefId(null);
+            }}
+          />
+        )}
+
+        {/* SECTION 11: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>

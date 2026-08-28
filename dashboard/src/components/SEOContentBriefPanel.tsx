@@ -18,6 +18,7 @@ interface SEOContentBriefPanelProps {
   selectedRecommendationId?: number | null;
   onClearSelectedRecId?: () => void;
   onSelectBriefForDraft?: (briefId: number) => void;
+  onCreateAction?: (briefId: number) => void;
 }
 
 export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
@@ -25,6 +26,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
   selectedRecommendationId,
   onClearSelectedRecId,
   onSelectBriefForDraft,
+  onCreateAction,
 }) => {
   const [briefs, setBriefs] = useState<SEOContentBrief[]>([]);
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
@@ -421,6 +423,30 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   ✍️ Write SEO Draft
                 </button>
               )}
+
+              {/* Create SEO Action Button */}
+              {onCreateAction && (
+                <button
+                  id={`create-action-from-brief-${activeBrief.id}-btn`}
+                  onClick={() => onCreateAction(activeBrief.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    border: '1px solid #bfdbfe',
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚡ Create SEO Action
+                </button>
+              )}
+
             </>
           )}
         </div>
