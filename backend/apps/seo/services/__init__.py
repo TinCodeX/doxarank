@@ -7,6 +7,11 @@ from .content_writer_service import SEOContentWriterService
 from .export_service import ContentBriefExportService, ContentDraftExportService
 from .action_service import SEOActionService
 from .action_executors import BaseSEOActionExecutor, MockSEOActionExecutor, get_action_executor
+from .tool_registry import (
+    ToolCategory, AgentToolDefinition, ToolRegistry,
+    get_tool_registry, create_default_tool_registry
+)
+from .agent_orchestrator import AgentOrchestrator
 
 __all__ = [
     'GoogleSearchConsoleService',
@@ -24,5 +29,11 @@ __all__ = [
     'SEOActionService',
     'BaseSEOActionExecutor',
     'MockSEOActionExecutor',
-    'get_action_executor'
+    'get_action_executor',
+    'ToolCategory',
+    'AgentToolDefinition',
+    'ToolRegistry',
+    'get_tool_registry',
+    'create_default_tool_registry',
+    'AgentOrchestrator'
 ]

@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.db import transaction, IntegrityError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -13,7 +14,8 @@ from apps.seo.models import (
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
     SEOContentDraft, DraftStatus,
-    SEOAction, ActionType, ActionStatus, ActionPriority
+    SEOAction, ActionType, ActionStatus, ActionPriority,
+    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
 from apps.seo.services.ai_providers import MockAIProvider
@@ -23,6 +25,11 @@ from apps.seo.services.content_writer_service import SEOContentWriterService
 from apps.seo.services.export_service import ContentBriefExportService, ContentDraftExportService
 from apps.seo.services.action_service import SEOActionService
 from apps.seo.services.action_executors import MockSEOActionExecutor
+from apps.seo.services.tool_registry import (
+    ToolCategory, AgentToolDefinition, ToolRegistry,
+    get_tool_registry, create_default_tool_registry
+)
+from apps.seo.services.agent_orchestrator import AgentOrchestrator
 
 
 User = get_user_model()
@@ -2886,6 +2893,1233 @@ class SEOActionAPITests(TestCase):
         res = self.client.delete(f'{self.actions_url}{self.action_a.id}/')
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(SEOAction.objects.filter(id=self.action_a.id).exists())
+
+
+class AgentExecutionStateModelTests(TestCase):
+    """
+    Phase 1 Test Suite: Agent Execution State Models
+    1. AgentRun creation with default fields (status=pending, max_steps=15, total_steps=0)
+    2. AgentRun structured JSON fields (plan, context_snapshot)
+    3. AgentStep creation and relationship to AgentRun
+    4. AgentStep step_number uniqueness constraint per run
+    5. AgentToolCall creation and relationship to AgentStep
+    6. AgentToolCall structured JSON fields and latency telemetry
+    7. Cascade deletion on Project deletion
+    8. Cascade deletion on User deletion
+    9. Cascade deletion on AgentRun and AgentStep deletion
+    10. Multi-tenant isolation and ownership preservation
+    11. Model string representations (__str__)
+    12. Terminal status transitions and completed_at timestamps
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='agent_state_tester@doxarank.com',
+            password='Password123!',
+            first_name='Agent',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Agentic Tech Ethiopia',
+            website_url='https://agentic-tech.et'
+        )
+
+    def test_agent_run_creation_and_defaults(self):
+        """1. AgentRun can be created with correct defaults."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Analyze and optimize all page 2 search queries.'
+        )
+        self.assertIsNotNone(run.id)
+        self.assertEqual(run.project, self.project)
+        self.assertEqual(run.user, self.user)
+        self.assertEqual(run.goal, 'Analyze and optimize all page 2 search queries.')
+        self.assertEqual(run.status, AgentRunStatus.PENDING)
+        self.assertEqual(run.max_steps, 15)
+        self.assertEqual(run.total_steps, 0)
+        self.assertEqual(run.plan, [])
+        self.assertEqual(run.context_snapshot, {})
+        self.assertEqual(run.summary, '')
+        self.assertIsNone(run.completed_at)
+        self.assertIsNotNone(run.created_at)
+        self.assertIsNotNone(run.updated_at)
+
+    def test_agent_run_structured_json_fields(self):
+        """2. AgentRun correctly stores structured plan and context snapshot."""
+        plan_data = [
+            {"step": 1, "task": "Query Google Search Console for low-CTR queries"},
+            {"step": 2, "task": "Generate on-page copy recommendations"},
+            {"step": 3, "task": "Propose action plan for human approval"}
+        ]
+        context_data = {
+            "initial_rankings_count": 24,
+            "target_country": "ET",
+            "search_engine": "google"
+        }
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Execute structured plan test',
+            plan=plan_data,
+            context_snapshot=context_data,
+            max_steps=10
+        )
+        run.refresh_from_db()
+        self.assertEqual(len(run.plan), 3)
+        self.assertEqual(run.plan[0]["task"], "Query Google Search Console for low-CTR queries")
+        self.assertEqual(run.context_snapshot["target_country"], "ET")
+        self.assertEqual(run.max_steps, 10)
+
+    def test_agent_step_creation_and_relationship(self):
+        """3. AgentStep belongs to an AgentRun and supports action_type/status choices."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Step relationship test'
+        )
+        step = AgentStep.objects.create(
+            run=run,
+            step_number=1,
+            thought='I should first inspect search console analytics to find declining pages.',
+            action_type=AgentActionType.PLAN,
+            status=AgentStepStatus.RUNNING
+        )
+        self.assertIsNotNone(step.id)
+        self.assertEqual(step.run, run)
+        self.assertEqual(step.step_number, 1)
+        self.assertIn('search console analytics', step.thought)
+        self.assertEqual(step.action_type, AgentActionType.PLAN)
+        self.assertEqual(step.status, AgentStepStatus.RUNNING)
+        self.assertIn(step, run.steps.all())
+
+    def test_agent_step_number_uniqueness_constraint(self):
+        """4. `run + step_number` uniqueness constraint prevents duplicate steps within a run."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Uniqueness test'
+        )
+        AgentStep.objects.create(
+            run=run,
+            step_number=1,
+            thought='First step'
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AgentStep.objects.create(
+                    run=run,
+                    step_number=1,
+                    thought='Duplicate step 1'
+                )
+
+        # Different runs can use the same step_number
+        run2 = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Second run'
+        )
+        step_run2 = AgentStep.objects.create(
+            run=run2,
+            step_number=1,
+            thought='First step of run 2'
+        )
+        self.assertIsNotNone(step_run2.id)
+
+    def test_agent_tool_call_creation_and_fields(self):
+        """5. AgentToolCall belongs to AgentStep and records tool input, output, latency, and mutating flag."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Tool call test'
+        )
+        step = AgentStep.objects.create(
+            run=run,
+            step_number=1,
+            action_type=AgentActionType.TOOL_CALL
+        )
+        tool_call = AgentToolCall.objects.create(
+            step=step,
+            tool_name='get_search_console_analytics',
+            tool_input={"days": 28, "min_impressions": 100},
+            tool_output={"queries_found": 5, "top_query": "ethiopian coffee export"},
+            duration_ms=145,
+            is_mutating=False
+        )
+        self.assertIsNotNone(tool_call.id)
+        self.assertEqual(tool_call.step, step)
+        self.assertEqual(tool_call.tool_name, 'get_search_console_analytics')
+        self.assertEqual(tool_call.tool_input['days'], 28)
+        self.assertEqual(tool_call.tool_output['top_query'], 'ethiopian coffee export')
+        self.assertEqual(tool_call.duration_ms, 145)
+        self.assertFalse(tool_call.is_mutating)
+        self.assertIn(tool_call, step.tool_calls.all())
+
+    def test_cascade_deletion_on_project_delete(self):
+        """6. Deleting Project cascades to delete all AgentRuns, AgentSteps, and AgentToolCalls."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Cascade test'
+        )
+        step = AgentStep.objects.create(run=run, step_number=1)
+        tool_call = AgentToolCall.objects.create(step=step, tool_name='test_tool')
+
+        run_id = run.id
+        step_id = step.id
+        tool_call_id = tool_call.id
+
+        self.project.delete()
+
+        self.assertFalse(AgentRun.objects.filter(id=run_id).exists())
+        self.assertFalse(AgentStep.objects.filter(id=step_id).exists())
+        self.assertFalse(AgentToolCall.objects.filter(id=tool_call_id).exists())
+
+    def test_cascade_deletion_on_user_delete(self):
+        """7. Deleting User cascades to delete user's AgentRuns."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='User cascade test'
+        )
+        run_id = run.id
+        self.user.delete()
+        self.assertFalse(AgentRun.objects.filter(id=run_id).exists())
+
+    def test_cascade_deletion_on_run_and_step_delete(self):
+        """8. Deleting AgentRun cascades to steps and tool calls."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Run cascade test'
+        )
+        step = AgentStep.objects.create(run=run, step_number=1)
+        tool_call = AgentToolCall.objects.create(step=step, tool_name='propose_action', is_mutating=True)
+
+        step_id = step.id
+        tool_call_id = tool_call.id
+
+        run.delete()
+        self.assertFalse(AgentStep.objects.filter(id=step_id).exists())
+        self.assertFalse(AgentToolCall.objects.filter(id=tool_call_id).exists())
+
+    def test_model_string_representations(self):
+        """9. Verify clean, readable __str__ representations across all three models."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Audit landing page speed and mobile usability',
+            status=AgentRunStatus.RUNNING
+        )
+        step = AgentStep.objects.create(
+            run=run,
+            step_number=2,
+            action_type=AgentActionType.TOOL_CALL
+        )
+        tool_call_ok = AgentToolCall.objects.create(
+            step=step,
+            tool_name='get_audit_issues',
+            duration_ms=85
+        )
+        tool_call_err = AgentToolCall.objects.create(
+            step=step,
+            tool_name='run_external_crawler',
+            error_message='Connection timed out',
+            duration_ms=5000
+        )
+
+        self.assertIn(f"Run #{run.id}", str(run))
+        self.assertIn("Running", str(run))
+        self.assertIn(f"Run #{run.id} Step 2 [Tool Call]", str(step))
+        self.assertIn("get_audit_issues on Step #", str(tool_call_ok))
+        self.assertIn("OK, 85ms", str(tool_call_ok))
+        self.assertIn("Error, 5000ms", str(tool_call_err))
+
+    def test_terminal_status_transitions_and_timestamps(self):
+        """10. Terminal state updates set completed_at and summary."""
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Complete run test',
+            status=AgentRunStatus.RUNNING
+        )
+        now = timezone.now()
+        run.status = AgentRunStatus.COMPLETED
+        run.total_steps = 4
+        run.summary = "Successfully completed 4 steps and generated publish action."
+        run.completed_at = now
+        run.save()
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        self.assertEqual(run.total_steps, 4)
+        self.assertIn('Successfully completed', run.summary)
+        self.assertIsNotNone(run.completed_at)
+
+
+class ToolRegistryTests(TestCase):
+    """
+    Phase 2 Test Suite: Tool Registry & Schema Abstraction
+    1. Tool registration, uniqueness, and lookup
+    2. Provider-neutral LLM schema export
+    3. Safety governance attributes (approval & mutability flags)
+    4. Argument schema validation (missing required, type mismatch, enum mismatch)
+    5. Execution of read-only tools (get_keyword_rankings, get_search_console_analytics, get_audit_issues)
+    6. Execution of safe internal tools (run_intelligence_analysis, generate_recommendation, generate_content_brief, generate_content_draft)
+    7. Execution of high-impact tool (propose_seo_action)
+    8. Multi-tenant isolation enforcement (cross-project entities rejected)
+    9. Error handling (unknown tools, validation failures, service exceptions)
+    """
+
+    def setUp(self):
+        self.registry = get_tool_registry()
+
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='tool_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Tool',
+            last_name='UserA'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Ethio Telecom Hub',
+            website_url='https://ethio-telecom-hub.et'
+        )
+
+        # User B & Project B (Isolation Target)
+        self.user_b = User.objects.create_user(
+            email='tool_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Competitor',
+            last_name='UserB'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Competitor Hub',
+            website_url='https://competitor-hub.et'
+        )
+
+        # Data for Project A
+        self.kw_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='telebirr payment integration',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.kw_a,
+            position=6,
+            ranking_url='https://ethio-telecom-hub.et/telebirr',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.audit_a = SiteAudit.objects.create(
+            project=self.project_a,
+            status=AuditStatus.COMPLETED,
+            score=88
+        )
+        self.issue_a = AuditIssue.objects.create(
+            audit=self.audit_a,
+            issue_type='slow_ttfb',
+            severity=IssueSeverity.WARNING,
+            title='Slow Server Response Time (TTFB)',
+            description='TTFB is 1.4s on landing pages.',
+            page_url='https://ethio-telecom-hub.et/telebirr'
+        )
+        self.gsc_conn_a = SearchConsoleConnection.objects.create(
+            project=self.project_a,
+            property_url='https://ethio-telecom-hub.et',
+            permission_level=SearchConsolePermission.SITE_OWNER,
+            sync_status=SearchConsoleSyncStatus.SUCCESS
+        )
+        self.gsc_data_a = SearchAnalyticsData.objects.create(
+            connection=self.gsc_conn_a,
+            query='telebirr merchant api',
+            page='https://ethio-telecom-hub.et/telebirr',
+            clicks=120,
+            impressions=3400,
+            ctr=0.035,
+            position=6.2,
+            country='ET',
+            device='desktop',
+            date=timezone.now().date()
+        )
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='fp_tool_test_a',
+            insight_type=InsightType.HIGH_IMPRESSIONS_LOW_CTR,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='High Impressions Low CTR on "telebirr merchant api"',
+            description='Page gets 3400 impressions with only 3.5% CTR.',
+            status=InsightStatus.OPEN,
+            related_keyword=self.kw_a
+        )
+        self.rec_a = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=self.insight_a,
+            recommendation_type=RecommendationType.CTR_OPTIMIZATION,
+            priority=RecommendationPriority.HIGH,
+            title='Optimize Title and Meta Description for Telebirr API',
+            summary='Compelling CTA in SERP snippet.',
+            explanation='High impression volume available.',
+            recommended_action='Rewrite title to emphasize 2026 instant onboarding.',
+            expected_impact='Estimated +40% clicks.',
+            affected_keyword='telebirr merchant api',
+            affected_url='https://ethio-telecom-hub.et/telebirr'
+        )
+        self.brief_a = SEOContentBrief.objects.create(
+            project=self.project_a,
+            recommendation=self.rec_a,
+            title='Telebirr Merchant Integration Guide Brief',
+            target_keyword='telebirr merchant api',
+            content_type=BriefContentType.BLOG_POST,
+            recommended_title='How to Integrate Telebirr Merchant API (2026 Guide)',
+            meta_description='Step-by-step developer tutorial for integrating Telebirr in Ethiopia.'
+        )
+
+        # Data for Project B (to test isolation)
+        self.insight_b = SEOInsight.objects.create(
+            project=self.project_b,
+            fingerprint='fp_tool_test_b',
+            title='Competitor Insight',
+            description='Competitor desc'
+        )
+        self.rec_b = SEORecommendation.objects.create(
+            project=self.project_b,
+            insight=self.insight_b,
+            title='Competitor Recommendation',
+            summary='Competitor summary',
+            explanation='Competitor explanation',
+            recommended_action='Competitor action'
+        )
+        self.brief_b = SEOContentBrief.objects.create(
+            project=self.project_b,
+            title='Competitor Brief',
+            target_keyword='competitor term'
+        )
+
+    def test_default_registry_has_all_8_tools(self):
+        """1. Default ToolRegistry is populated with exactly the 8 core tools."""
+        expected_tools = [
+            'get_keyword_rankings',
+            'get_search_console_analytics',
+            'get_audit_issues',
+            'run_intelligence_analysis',
+            'generate_recommendation',
+            'generate_content_brief',
+            'generate_content_draft',
+            'propose_seo_action'
+        ]
+        registered_names = [t.name for t in self.registry.list_tools()]
+        self.assertEqual(len(registered_names), 8)
+        for tool_name in expected_tools:
+            self.assertIn(tool_name, registered_names)
+            tool = self.registry.get(tool_name)
+            self.assertIsNotNone(tool)
+            self.assertEqual(tool.name, tool_name)
+
+    def test_tool_definitions_and_schema_export(self):
+        """2. Tool definitions export standard provider-neutral JSON schemas."""
+        schemas = self.registry.get_schemas()
+        self.assertEqual(len(schemas), 8)
+
+        for s in schemas:
+            self.assertIn('name', s)
+            self.assertIn('description', s)
+            self.assertIn('category', s)
+            self.assertIn('parameters', s)
+            self.assertIn('requires_approval', s)
+            self.assertIn('is_mutating', s)
+
+            params = s['parameters']
+            self.assertEqual(params.get('type'), 'object')
+            self.assertIn('properties', params)
+            self.assertIsInstance(params.get('required', []), list)
+
+    def test_tool_governance_attributes(self):
+        """3. Tool governance classification matches safety policy."""
+        # Read-only tools
+        for name in ['get_keyword_rankings', 'get_search_console_analytics', 'get_audit_issues']:
+            tool = self.registry.get(name)
+            self.assertEqual(tool.category, ToolCategory.READ_ONLY)
+            self.assertFalse(tool.requires_approval)
+            self.assertFalse(tool.is_mutating)
+
+        # Safe internal mutating tools
+        for name in ['run_intelligence_analysis', 'generate_recommendation', 'generate_content_brief', 'generate_content_draft']:
+            tool = self.registry.get(name)
+            self.assertEqual(tool.category, ToolCategory.SAFE_INTERNAL)
+            self.assertFalse(tool.requires_approval)
+            self.assertTrue(tool.is_mutating)
+
+        # High-impact tool
+        action_tool = self.registry.get('propose_seo_action')
+        self.assertEqual(action_tool.category, ToolCategory.HIGH_IMPACT)
+        self.assertTrue(action_tool.requires_approval)
+        self.assertTrue(action_tool.is_mutating)
+
+    def test_unknown_tool_lookup_and_execution(self):
+        """4. Unknown tool lookup fails safely and returns structured error."""
+        self.assertIsNone(self.registry.get('nonexistent_tool'))
+        with self.assertRaises(KeyError):
+            self.registry.get_tool('nonexistent_tool')
+
+        res = self.registry.execute('nonexistent_tool', self.project_a, {})
+        self.assertFalse(res['success'])
+        self.assertEqual(res['error']['code'], 'TOOL_NOT_FOUND')
+        self.assertIn('nonexistent_tool', res['error']['message'])
+
+    def test_argument_validation_missing_required_and_type_mismatch(self):
+        """5. Argument validation rejects missing required parameters, wrong types, and invalid enums."""
+        # Missing required parameter: insight_id for generate_recommendation
+        res_missing = self.registry.execute('generate_recommendation', self.project_a, {})
+        self.assertFalse(res_missing['success'])
+        self.assertEqual(res_missing['error']['code'], 'VALIDATION_ERROR')
+        self.assertIn("Missing required parameter 'insight_id'", res_missing['error']['message'])
+
+        # Type mismatch: string instead of integer
+        res_type = self.registry.execute('generate_recommendation', self.project_a, {'insight_id': 'abc'})
+        self.assertFalse(res_type['success'])
+        self.assertEqual(res_type['error']['code'], 'VALIDATION_ERROR')
+        self.assertIn("must be an integer", res_type['error']['message'])
+
+        # Enum mismatch: invalid source_type for propose_seo_action
+        res_enum = self.registry.execute('propose_seo_action', self.project_a, {
+            'source_type': 'invalid_source',
+            'source_id': 1
+        })
+        self.assertFalse(res_enum['success'])
+        self.assertEqual(res_enum['error']['code'], 'VALIDATION_ERROR')
+        self.assertIn("is not in allowed values", res_enum['error']['message'])
+
+    def test_execute_get_keyword_rankings(self):
+        """6. Tool 'get_keyword_rankings' retrieves project rankings accurately."""
+        res = self.registry.execute('get_keyword_rankings', self.project_a, {'keyword': 'telebirr'})
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['returned_count'], 1)
+        self.assertEqual(data['rankings'][0]['keyword'], 'telebirr payment integration')
+        self.assertEqual(data['rankings'][0]['current_position'], 6)
+
+    def test_execute_get_search_console_analytics(self):
+        """7. Tool 'get_search_console_analytics' retrieves GSC metrics accurately."""
+        res = self.registry.execute('get_search_console_analytics', self.project_a, {'min_impressions': 1000})
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['returned_count'], 1)
+        self.assertEqual(data['analytics'][0]['query'], 'telebirr merchant api')
+        self.assertEqual(data['analytics'][0]['impressions'], 3400)
+
+    def test_execute_get_audit_issues(self):
+        """8. Tool 'get_audit_issues' retrieves site audit issues accurately."""
+        res = self.registry.execute('get_audit_issues', self.project_a, {'severity': 'warning'})
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['returned_count'], 1)
+        self.assertEqual(data['issues'][0]['issue_type'], 'slow_ttfb')
+
+    def test_execute_run_intelligence_analysis(self):
+        """9. Tool 'run_intelligence_analysis' runs SEO intelligence service."""
+        res = self.registry.execute('run_intelligence_analysis', self.project_a, {})
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertIn('summary', data)
+        self.assertIn('total_open', data['summary'])
+
+    def test_execute_generate_recommendation(self):
+        """10. Tool 'generate_recommendation' creates grounded recommendation."""
+        res = self.registry.execute('generate_recommendation', self.project_a, {'insight_id': self.insight_a.id})
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['insight_id'], self.insight_a.id)
+        self.assertIn('recommendation_type', data)
+        self.assertIn('action_checklist', data['generated_content'])
+
+    def test_execute_generate_content_brief(self):
+        """11. Tool 'generate_content_brief' creates structured brief."""
+        res = self.registry.execute('generate_content_brief', self.project_a, {
+            'recommendation_id': self.rec_a.id,
+            'content_type': 'blog_post'
+        })
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['recommendation_id'], self.rec_a.id)
+        self.assertEqual(data['content_type'], 'blog_post')
+        self.assertIn('outline', data)
+
+    def test_execute_generate_content_draft(self):
+        """12. Tool 'generate_content_draft' creates full draft with schema."""
+        res = self.registry.execute('generate_content_draft', self.project_a, {
+            'content_brief_id': self.brief_a.id
+        })
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['brief_id'], self.brief_a.id)
+        self.assertTrue(data['word_count'] > 0)
+        self.assertIn('schema_json_ld', data)
+
+    def test_execute_propose_seo_action(self):
+        """13. Tool 'propose_seo_action' creates proposed action and declares approval requirement."""
+        res = self.registry.execute('propose_seo_action', self.project_a, {
+            'source_type': 'recommendation',
+            'source_id': self.rec_a.id
+        })
+        self.assertTrue(res['success'])
+        data = res['data']
+        self.assertEqual(data['project_id'], self.project_a.id)
+        self.assertEqual(data['status'], ActionStatus.PROPOSED)
+        self.assertTrue(data['requires_human_approval'])
+        self.assertIn('proposed_change', data)
+
+        # Verify action is in database but NOT executed
+        action = SEOAction.objects.get(id=data['id'])
+        self.assertEqual(action.status, ActionStatus.PROPOSED)
+        self.assertIsNone(action.completed_at)
+
+    def test_multi_tenant_isolation_cross_project_rejected(self):
+        """14. Tools strictly reject cross-tenant entity IDs and return structured error."""
+        # Attempt to generate recommendation using Project B's insight on Project A context
+        res_rec = self.registry.execute('generate_recommendation', self.project_a, {'insight_id': self.insight_b.id})
+        self.assertFalse(res_rec['success'])
+        self.assertEqual(res_rec['error']['code'], 'EXECUTION_ERROR')
+        self.assertIn('not found on project', res_rec['error']['message'])
+
+        # Attempt to generate brief using Project B's recommendation on Project A context
+        res_brief = self.registry.execute('generate_content_brief', self.project_a, {'recommendation_id': self.rec_b.id})
+        self.assertFalse(res_brief['success'])
+        self.assertEqual(res_brief['error']['code'], 'EXECUTION_ERROR')
+
+        # Attempt to generate draft using Project B's brief on Project A context
+        res_draft = self.registry.execute('generate_content_draft', self.project_a, {'content_brief_id': self.brief_b.id})
+        self.assertFalse(res_draft['success'])
+        self.assertEqual(res_draft['error']['code'], 'EXECUTION_ERROR')
+
+        # Attempt to propose action using Project B's recommendation on Project A context
+        res_act = self.registry.execute('propose_seo_action', self.project_a, {
+            'source_type': 'recommendation',
+            'source_id': self.rec_b.id
+        })
+        self.assertFalse(res_act['success'])
+        self.assertEqual(res_act['error']['code'], 'EXECUTION_ERROR')
+
+
+class AgentOrchestratorTests(TestCase):
+    """
+    Phase 3 Test Suite: Core Agent Orchestrator & ReAct Execution Engine
+    1. Multi-step agent execution through ReAct loop
+    2. AgentRun state transitions and step ordering
+    3. AgentToolCall telemetry persistence (inputs, outputs, latency, mutability)
+    4. ToolRegistry invocation adherence
+    5. max_steps guardrail bounding
+    6. Repeated-tool failure loop detection
+    7. Malformed AI decision handling
+    8. Unknown tool handling
+    9. Tool argument validation failure handling
+    10. Human approval pause behavior on propose_seo_action
+    11. Approved action resume behavior
+    12. Rejected action resume behavior
+    13. Resume guardrail on non-waiting runs
+    14. Multi-tenant isolation enforcement
+    15. Verification that unapproved actions are never executed
+    16. Project baseline context snapshot capture
+    17. Terminal completed state
+    18. Terminal failed/cancelled state
+    """
+
+    def setUp(self):
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='orch_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Orchestrator',
+            last_name='UserA'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Ethio Fintech Solutions',
+            website_url='https://ethio-fintech.et'
+        )
+
+        # User B & Project B
+        self.user_b = User.objects.create_user(
+            email='orch_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Competitor',
+            last_name='UserB'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Competitor Fintech',
+            website_url='https://competitor-fintech.et'
+        )
+
+        # Seed Project A SEO Entities
+        self.kw_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='cbe birr mobile payment',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.kw_a,
+            position=11,
+            ranking_url='https://ethio-fintech.et/cbe-birr',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='fp_orch_a1',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Push "cbe birr mobile payment" to Page 1',
+            description='Ranking at position 11 on page 2.',
+            status=InsightStatus.OPEN,
+            related_keyword=self.kw_a,
+            related_url='https://ethio-fintech.et/cbe-birr'
+        )
+
+        self.mock_provider = MockAIProvider()
+        self.registry = get_tool_registry()
+        self.orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=self.mock_provider,
+            registry=self.registry,
+            max_steps=15
+        )
+
+    def test_basic_multistep_agent_execution_and_approval_pause(self):
+        """1. Agent runs multi-step loop and pauses at human approval checkpoint."""
+        goal = "Analyze ranking drop for cbe birr mobile payment and draft optimization action"
+        run = self.orchestrator.start_run(goal=goal)
+
+        # Run pauses at propose_seo_action waiting for approval
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertGreaterEqual(run.total_steps, 5)
+        self.assertEqual(run.steps.count(), run.total_steps)
+
+        # Verify step order
+        steps = list(run.steps.order_by('step_number'))
+        for idx, step in enumerate(steps, start=1):
+            self.assertEqual(step.step_number, idx)
+
+        # Verify latest step is an approval checkpoint
+        latest_step = steps[-1]
+        self.assertEqual(latest_step.action_type, AgentActionType.APPROVAL)
+        self.assertEqual(latest_step.status, AgentStepStatus.WAITING)
+
+        # Verify an SEOAction proposal was created in database in PROPOSED status
+        action = SEOAction.objects.filter(project=self.project_a).first()
+        self.assertIsNotNone(action)
+        self.assertEqual(action.status, ActionStatus.PROPOSED)
+        self.assertIsNone(action.completed_at)
+
+    def test_agent_tool_call_telemetry_persistence(self):
+        """2. Every executed step records AgentToolCall with inputs, outputs, duration, and mutability."""
+        goal = "Query search rankings baseline"
+        run = self.orchestrator.start_run(goal=goal)
+
+        first_step = run.steps.get(step_number=1)
+        tool_call = first_step.tool_calls.first()
+        self.assertIsNotNone(tool_call)
+        self.assertEqual(tool_call.tool_name, 'get_keyword_rankings')
+        self.assertIsInstance(tool_call.tool_input, dict)
+        self.assertIsInstance(tool_call.tool_output, dict)
+        self.assertGreaterEqual(tool_call.duration_ms, 0)
+        self.assertFalse(tool_call.is_mutating)
+
+    def test_resume_run_on_approved_action_completes_workflow(self):
+        """3. Resuming run with approval marks step complete, continues loop, and finishes successfully."""
+        goal = "Optimize cbe birr mobile payment page"
+        run = self.orchestrator.start_run(goal=goal)
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Simulate user approving the action
+        resumed_run = self.orchestrator.resume_run(run, approval_decision="approved")
+        self.assertEqual(resumed_run.status, AgentRunStatus.COMPLETED)
+        self.assertIsNotNone(resumed_run.completed_at)
+        self.assertIn("Successfully completed", resumed_run.summary)
+
+        # Verify last step is FINAL and completed
+        final_step = resumed_run.steps.order_by('-step_number').first()
+        self.assertEqual(final_step.action_type, AgentActionType.FINAL)
+        self.assertEqual(final_step.status, AgentStepStatus.COMPLETED)
+
+    def test_resume_run_on_rejected_action_terminates_run(self):
+        """4. Resuming run with rejection transitions to CANCELLED and stops."""
+        goal = "Optimize landing page copy"
+        run = self.orchestrator.start_run(goal=goal)
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Simulate user rejecting the action
+        resumed_run = self.orchestrator.resume_run(run, approval_decision="rejected")
+        self.assertEqual(resumed_run.status, AgentRunStatus.CANCELLED)
+        self.assertIsNotNone(resumed_run.completed_at)
+        self.assertIn("rejected", resumed_run.summary)
+
+        # Latest step is marked FAILED with rejection note
+        latest_step = resumed_run.steps.order_by('-step_number').first()
+        self.assertEqual(latest_step.status, AgentStepStatus.FAILED)
+        self.assertIn("Human Rejection", latest_step.thought)
+
+    def test_cannot_resume_non_waiting_run(self):
+        """5. Attempting to resume a run that is not waiting for approval raises ValueError."""
+        run = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='Invalid resume test',
+            status=AgentRunStatus.COMPLETED
+        )
+        with self.assertRaises(ValueError):
+            self.orchestrator.resume_run(run, "approved")
+
+    def test_max_steps_guardrail_bounding(self):
+        """6. Agent halts and marks FAILED when max_steps limit is exceeded."""
+        short_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=self.mock_provider,
+            registry=self.registry,
+            max_steps=2
+        )
+        run = short_orchestrator.start_run(goal="Long workflow exceeding max steps")
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertEqual(run.total_steps, 2)
+        self.assertIn("step limit (2)", run.summary)
+        self.assertIsNotNone(run.completed_at)
+
+    def test_repeated_tool_failure_loop_detection(self):
+        """7. Agent detects repeated failing tool calls and terminates safely."""
+        # Provider that repeatedly tries to call generate_recommendation with invalid insight ID
+        class LoopingProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_recommendation",
+                    "arguments": {"insight_id": 999999},  # Will fail validation/lookup
+                    "reason": "Repeated failing call"
+                }
+
+        loop_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=LoopingProvider(),
+            registry=self.registry,
+            max_steps=10
+        )
+        run = loop_orchestrator.start_run(goal="Test loop detection")
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertIn("repetitive tool loop", run.summary.lower())
+
+    def test_malformed_ai_decision_handling(self):
+        """8. Agent handles malformed/invalid decision output from AI without crashing."""
+        class MalformedProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                return {"invalid_key": "not a valid action"}
+
+        malformed_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=MalformedProvider(),
+            registry=self.registry,
+            max_steps=5
+        )
+        run = malformed_orchestrator.start_run(goal="Test malformed decision")
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertIn("malformed AI decision", run.summary)
+        self.assertEqual(run.steps.count(), 1)
+        self.assertEqual(run.steps.first().status, AgentStepStatus.FAILED)
+
+    def test_unknown_tool_decision_handling(self):
+        """9. Calling an unknown tool records failure and terminates without unhandled exception."""
+        class UnknownToolProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                if not context.get('history'):
+                    return {
+                        "action": "tool",
+                        "tool_name": "hack_external_server",
+                        "arguments": {},
+                        "reason": "Attempt unknown tool"
+                    }
+                return {"action": "finish", "summary": "Finished after error"}
+
+        unknown_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=UnknownToolProvider(),
+            registry=self.registry,
+            max_steps=5
+        )
+        run = unknown_orchestrator.start_run(goal="Test unknown tool")
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        first_step = run.steps.get(step_number=1)
+        self.assertEqual(first_step.status, AgentStepStatus.FAILED)
+        self.assertEqual(first_step.tool_calls.first().error_message, "Tool 'hack_external_server' is not registered.")
+
+    def test_tool_argument_validation_failure_handling(self):
+        """10. Tool parameter schema validation failure is captured in telemetry."""
+        class InvalidArgsProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                if not context.get('history'):
+                    return {
+                        "action": "tool",
+                        "tool_name": "generate_recommendation",
+                        "arguments": {"insight_id": "not_an_int"},  # Type mismatch
+                        "reason": "Attempt invalid arg type"
+                    }
+                return {"action": "finish", "summary": "Finished after validation error"}
+
+        invalid_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=InvalidArgsProvider(),
+            registry=self.registry,
+            max_steps=5
+        )
+        run = invalid_orchestrator.start_run(goal="Test argument validation failure")
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        first_step = run.steps.get(step_number=1)
+        self.assertEqual(first_step.status, AgentStepStatus.FAILED)
+        tc = first_step.tool_calls.first()
+        self.assertIn("must be an integer", tc.error_message)
+
+    def test_multi_tenant_isolation_enforcement(self):
+        """11. Orchestrator operates strictly within authorized project context."""
+        # Verify baseline snapshot has Project A count
+        run = self.orchestrator.start_run(goal="Tenant isolation test")
+        self.assertEqual(run.project, self.project_a)
+        self.assertEqual(run.user, self.user_a)
+        self.assertEqual(run.context_snapshot["total_keywords"], 1)
+
+        # Attempting to pass Project B entity fails securely
+        class CrossTenantProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_recommendation",
+                    "arguments": {"insight_id": 99999},
+                    "reason": "Attempt cross project"
+                }
+
+        ct_orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=CrossTenantProvider(),
+            registry=self.registry,
+            max_steps=2
+        )
+        run_ct = ct_orchestrator.start_run(goal="Cross tenant test")
+        first_tc = run_ct.steps.first().tool_calls.first()
+        self.assertIn("not found on project", first_tc.error_message)
+
+    def test_unapproved_high_impact_actions_are_never_executed(self):
+        """12. Orchestrator never directly executes SEOAction in production or staging without user approval."""
+        run = self.orchestrator.start_run(goal="Generate and execute action safely")
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Check all SEOActions for Project A
+        actions = SEOAction.objects.filter(project=self.project_a)
+        for act in actions:
+            self.assertEqual(act.status, ActionStatus.PROPOSED)
+            self.assertIsNone(act.completed_at)
+
+
+class AgentRunAPITests(TestCase):
+    """
+    Phase 4 Test Suite: REST API, Multi-Tenancy, and End-to-End Orchestrator Verification
+    1. Authentication enforcement (401 on unauthenticated endpoints)
+    2. Multi-tenant isolation (rejection of unowned project IDs, 404 on cross-user run access)
+    3. Creation endpoint (POST /api/seo/ai/agent/runs/)
+    4. Validation of input goal and project
+    5. List endpoint (GET /api/seo/ai/agent/runs/ with project filtering)
+    6. Retrieval endpoint (GET /api/seo/ai/agent/runs/{id}/ with nested step and tool telemetry)
+    7. Resume endpoint (POST /api/seo/ai/agent/runs/{id}/resume/) with approval
+    8. Resume endpoint with rejection
+    9. Resume rejection on non-waiting runs (400 Bad Request)
+    10. Full End-to-End lifecycle (Goal -> Tools -> Proposal -> Pause -> Human Approval -> Complete)
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.base_url = '/api/seo/ai/agent/runs/'
+
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='api_agent_a@doxarank.com',
+            password='Password123!',
+            first_name='ApiAgent',
+            last_name='UserA'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Ethio Ecommerce Hub',
+            website_url='https://ethio-ecommerce.et'
+        )
+
+        # User B & Project B
+        self.user_b = User.objects.create_user(
+            email='api_agent_b@doxarank.com',
+            password='Password123!',
+            first_name='ApiAgent',
+            last_name='UserB'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Competitor Ecommerce',
+            website_url='https://competitor-ecommerce.et'
+        )
+
+        # Seed Project A Entities
+        self.kw_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='ethio telecom sim card online',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking_a = KeywordRanking.objects.create(
+            keyword=self.kw_a,
+            position=8,
+            ranking_url='https://ethio-ecommerce.et/sim-cards',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.insight_a = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='fp_api_orch_1',
+            insight_type=InsightType.HIGH_IMPRESSIONS_LOW_CTR,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Optimize Snippet CTR for SIM Card Landing Page',
+            description='High impressions but below-average CTR observed.',
+            status=InsightStatus.OPEN,
+            related_keyword=self.kw_a,
+            related_url='https://ethio-ecommerce.et/sim-cards'
+        )
+
+    def test_unauthenticated_requests_rejected(self):
+        """1. Unauthenticated requests to AgentRun endpoints return 401 Unauthorized."""
+        res_list = self.client.get(self.base_url)
+        self.assertEqual(res_list.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_create = self.client.post(self.base_url, {'project': self.project_a.id, 'goal': 'Test'})
+        self.assertEqual(res_create.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_retrieve = self.client.get(f'{self.base_url}1/')
+        self.assertEqual(res_retrieve.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_resume = self.client.post(f'{self.base_url}1/resume/', {'decision': 'approved'})
+        self.assertEqual(res_resume.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_agent_run_success(self):
+        """2. Authenticated user creates an agent run and receives serialized execution state."""
+        self.client.force_authenticate(user=self.user_a)
+        payload = {
+            'project': self.project_a.id,
+            'goal': 'Inspect ranking signals and synthesize optimization action.'
+        }
+        res = self.client.post(self.base_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.data
+        self.assertIn('id', data)
+        self.assertEqual(data['project'], self.project_a.id)
+        self.assertEqual(data['project_name'], self.project_a.name)
+        self.assertEqual(data['goal'], payload['goal'])
+        self.assertEqual(data['status'], AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertGreaterEqual(data['total_steps'], 5)
+        self.assertIsInstance(data['steps'], list)
+        self.assertIsNotNone(data['pending_action'])
+
+    def test_create_agent_run_rejects_missing_or_invalid_goal(self):
+        """3. Creating run with empty goal returns 400 Bad Request."""
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(self.base_url, {'project': self.project_a.id, 'goal': ''}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('goal', res.data)
+
+    def test_multi_tenant_create_rejects_unowned_project(self):
+        """4. User B cannot create an agent run on User A's project."""
+        self.client.force_authenticate(user=self.user_b)
+        payload = {
+            'project': self.project_a.id,
+            'goal': 'Unauthorized agent execution'
+        }
+        res = self.client.post(self.base_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('project', res.data)
+        self.assertIn('permission', str(res.data['project']).lower())
+
+    def test_list_agent_runs_scoped_to_user_projects(self):
+        """5. List endpoint returns only runs belonging to projects owned by the requesting user."""
+        # Create run for User A
+        run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='Goal User A',
+            status=AgentRunStatus.COMPLETED
+        )
+        # Create run for User B
+        run_b = AgentRun.objects.create(
+            project=self.project_b,
+            user=self.user_b,
+            goal='Goal User B',
+            status=AgentRunStatus.COMPLETED
+        )
+
+        # User A list
+        self.client.force_authenticate(user=self.user_a)
+        res_a = self.client.get(self.base_url)
+        self.assertEqual(res_a.status_code, status.HTTP_200_OK)
+        run_ids_a = [r['id'] for r in res_a.data]
+        self.assertIn(run_a.id, run_ids_a)
+        self.assertNotIn(run_b.id, run_ids_a)
+
+        # User B list
+        self.client.force_authenticate(user=self.user_b)
+        res_b = self.client.get(self.base_url)
+        self.assertEqual(res_b.status_code, status.HTTP_200_OK)
+        run_ids_b = [r['id'] for r in res_b.data]
+        self.assertIn(run_b.id, run_ids_b)
+        self.assertNotIn(run_a.id, run_ids_b)
+
+    def test_retrieve_agent_run_with_nested_telemetry(self):
+        """6. Retrieve endpoint returns full step hierarchy and tool telemetry."""
+        self.client.force_authenticate(user=self.user_a)
+        create_res = self.client.post(self.base_url, {
+            'project': self.project_a.id,
+            'goal': 'Inspect search metrics'
+        }, format='json')
+        run_id = create_res.data['id']
+
+        retrieve_res = self.client.get(f'{self.base_url}{run_id}/')
+        self.assertEqual(retrieve_res.status_code, status.HTTP_200_OK)
+        data = retrieve_res.data
+        self.assertEqual(data['id'], run_id)
+        self.assertGreaterEqual(len(data['steps']), 1)
+
+        # Verify step and tool telemetry fields
+        first_step = data['steps'][0]
+        self.assertEqual(first_step['step_number'], 1)
+        self.assertIn('thought', first_step)
+        self.assertIn('tool_calls', first_step)
+        first_tc = first_step['tool_calls'][0]
+        self.assertEqual(first_tc['tool_name'], 'get_keyword_rankings')
+        self.assertIn('tool_input', first_tc)
+        self.assertIn('tool_output', first_tc)
+        self.assertIn('duration_ms', first_tc)
+
+    def test_retrieve_other_user_run_returns_404(self):
+        """7. Attempting to retrieve another user's run returns 404 Not Found."""
+        run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='User A Secret Mission',
+            status=AgentRunStatus.COMPLETED
+        )
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.get(f'{self.base_url}{run_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_resume_other_user_run_returns_404(self):
+        """8. Attempting to resume another user's run returns 404 Not Found."""
+        run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='User A Waiting Mission',
+            status=AgentRunStatus.WAITING_FOR_APPROVAL
+        )
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.post(f'{self.base_url}{run_a.id}/resume/', {'decision': 'approved'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_resume_non_waiting_run_returns_400(self):
+        """9. Resuming a run that is not waiting for approval returns 400 Bad Request."""
+        run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='Already Completed Mission',
+            status=AgentRunStatus.COMPLETED
+        )
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'{self.base_url}{run_a.id}/resume/', {'decision': 'approved'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('detail', res.data)
+        self.assertIn('Only runs waiting for approval', res.data['detail'])
+
+    def test_end_to_end_agent_workflow_and_human_approval_resume(self):
+        """10. Full End-to-End flow: Creation -> Paused for Approval -> API Resume (Approved) -> Completed."""
+        self.client.force_authenticate(user=self.user_a)
+
+        # Step 1: POST goal to initiate run
+        create_res = self.client.post(self.base_url, {
+            'project': self.project_a.id,
+            'goal': 'Run autonomous ranking optimization workflow for Ethio Ecommerce'
+        }, format='json')
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        run_id = create_res.data['id']
+        self.assertEqual(create_res.data['status'], AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertIsNotNone(create_res.data['pending_action'])
+
+        # Step 2: Verify action proposal in database
+        action = SEOAction.objects.get(id=create_res.data['pending_action']['id'])
+        self.assertEqual(action.status, ActionStatus.PROPOSED)
+
+        # Step 3: Call resume endpoint with decision='approved'
+        resume_res = self.client.post(f'{self.base_url}{run_id}/resume/', {
+            'decision': 'approved'
+        }, format='json')
+        self.assertEqual(resume_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(resume_res.data['status'], AgentRunStatus.COMPLETED)
+        self.assertIsNotNone(resume_res.data['completed_at'])
+        self.assertIn("Successfully completed", resume_res.data['summary'])
+
+        # Step 4: Verify terminal state in database and action execution
+        run_db = AgentRun.objects.get(id=run_id)
+        self.assertEqual(run_db.status, AgentRunStatus.COMPLETED)
+        self.assertIsNotNone(run_db.completed_at)
+
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.COMPLETED)
+        self.assertIsNotNone(action.completed_at)
+
+    def test_end_to_end_agent_workflow_and_human_rejection(self):
+        """11. Full End-to-End flow: Creation -> Paused for Approval -> API Resume (Rejected) -> Cancelled."""
+        self.client.force_authenticate(user=self.user_a)
+
+        create_res = self.client.post(self.base_url, {
+            'project': self.project_a.id,
+            'goal': 'Run optimization workflow'
+        }, format='json')
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        run_id = create_res.data['id']
+        self.assertEqual(create_res.data['status'], AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # User rejects proposal
+        resume_res = self.client.post(f'{self.base_url}{run_id}/resume/', {
+            'decision': 'rejected'
+        }, format='json')
+        self.assertEqual(resume_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(resume_res.data['status'], AgentRunStatus.CANCELLED)
+        self.assertIn("rejected", resume_res.data['summary'])
+
+        run_db = AgentRun.objects.get(id=run_id)
+        self.assertEqual(run_db.status, AgentRunStatus.CANCELLED)
+
+        # Verify action marked rejected
+        action_id = create_res.data['pending_action']['id']
+        action_db = SEOAction.objects.get(id=action_id)
+        self.assertEqual(action_db.status, ActionStatus.REJECTED)
 
 
 

@@ -1,0 +1,927 @@
+import React, { useState, useEffect, useRef } from 'react';
+import type { Project } from '../types/project';
+import type { AgentRun, AgentStep } from '../types/agentRun';
+import {
+  getAgentRuns,
+  getAgentRun,
+  createAgentRun,
+  resumeAgentRun,
+} from '../api/agentRuns';
+
+interface AgentOrchestratorPanelProps {
+  project: Project;
+  onActionCreated?: () => void;
+}
+
+const SAMPLE_GOALS = [
+  'Analyze ranking drops for tracked keywords and synthesize a recovery plan.',
+  'Inspect Google Search Console queries with high impressions but low CTR and draft meta tag optimizations.',
+  'Perform deep SEO intelligence analysis, generate an article brief, and draft publish-ready content.',
+  'Inspect site audit diagnostic issues and propose technical fixes for the developer team.',
+];
+
+export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
+  project,
+  onActionCreated,
+}) => {
+  const [goal, setGoal] = useState<string>('');
+  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
+  const [isLoadingRuns, setIsLoadingRuns] = useState<boolean>(false);
+  const [isStartingRun, setIsStartingRun] = useState<boolean>(false);
+  const [isResuming, setIsResuming] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [expandedStepId, setExpandedStepId] = useState<number | null>(null);
+
+  const pollingRef = useRef<number | null>(null);
+
+  // Fetch runs on project change
+  useEffect(() => {
+    fetchProjectRuns();
+    return () => {
+      stopPolling();
+    };
+  }, [project.id]);
+
+  // Handle polling when active run is running
+  useEffect(() => {
+    if (activeRun && activeRun.status === 'running') {
+      startPolling(activeRun.id);
+    } else {
+      stopPolling();
+    }
+    return () => {
+      stopPolling();
+    };
+  }, [activeRun?.status, activeRun?.id]);
+
+  const startPolling = (runId: number) => {
+    stopPolling();
+    pollingRef.current = window.setInterval(async () => {
+      try {
+        const updated = await getAgentRun(runId);
+        setActiveRun(updated);
+        setRuns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        if (updated.status !== 'running') {
+          stopPolling();
+          if (updated.status === 'completed') {
+            setSuccessMessage('Agent run finished successfully!');
+          }
+        }
+      } catch (err) {
+        console.error('Polling agent run failed:', err);
+        stopPolling();
+      }
+    }, 1500);
+  };
+
+  const stopPolling = () => {
+    if (pollingRef.current !== null) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const fetchProjectRuns = async () => {
+    setIsLoadingRuns(true);
+    setErrorMessage(null);
+    try {
+      const data = await getAgentRuns(project.id);
+      setRuns(data);
+      if (data.length > 0) {
+        setActiveRun(data[0]);
+      } else {
+        setActiveRun(null);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.data?.detail || 'Failed to load agent runs.');
+    } finally {
+      setIsLoadingRuns(false);
+    }
+  };
+
+  const handleStartRun = async () => {
+    if (!goal.trim()) {
+      setErrorMessage('Please specify an SEO goal for the agent.');
+      return;
+    }
+
+    setIsStartingRun(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const newRun = await createAgentRun({
+        project: project.id,
+        goal: goal.trim(),
+      });
+      setRuns((prev) => [newRun, ...prev]);
+      setActiveRun(newRun);
+      setGoal('');
+      if (newRun.status === 'running') {
+        startPolling(newRun.id);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.data?.detail || 'Failed to start agent run.');
+    } finally {
+      setIsStartingRun(false);
+    }
+  };
+
+  const handleResumeRun = async (decision: 'approved' | 'rejected') => {
+    if (!activeRun) return;
+
+    setIsResuming(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const resumed = await resumeAgentRun(activeRun.id, { decision });
+      setActiveRun(resumed);
+      setRuns((prev) => prev.map((r) => (r.id === resumed.id ? resumed : r)));
+      if (decision === 'approved') {
+        setSuccessMessage('Action approved! Agent resumed execution.');
+        if (onActionCreated) onActionCreated();
+      } else {
+        setSuccessMessage('Action proposal rejected. Agent run cancelled.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.data?.detail || `Failed to ${decision} agent action.`);
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  const toggleStepExpand = (stepId: number) => {
+    setExpandedStepId((prev) => (prev === stepId ? null : stepId));
+  };
+
+  // Status Styling Helpers
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'running':
+        return (
+          <span style={badgeRunningStyle}>
+            <span style={pulseDotStyle} /> Running ({activeRun?.total_steps || 0}/{activeRun?.max_steps || 15})
+          </span>
+        );
+      case 'waiting_for_approval':
+        return (
+          <span style={badgeWaitingStyle}>
+            ⚠️ Paused — Human Approval Required
+          </span>
+        );
+      case 'completed':
+        return <span style={badgeCompletedStyle}>✓ Completed</span>;
+      case 'failed':
+        return <span style={badgeFailedStyle}>✕ Failed</span>;
+      case 'cancelled':
+        return <span style={badgeCancelledStyle}>⊘ Cancelled</span>;
+      default:
+        return <span style={badgePendingStyle}>⏳ {status}</span>;
+    }
+  };
+
+  return (
+    <section
+      id="ai-agent-orchestrator-section"
+      style={panelContainerStyle}
+    >
+      {/* Header Bar */}
+      <div style={headerContainerStyle}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={featureTagStyle}>
+              Autonomous ReAct Engine
+            </span>
+            <span style={{ fontSize: '13px', color: '#64748b' }}>
+              Project: <strong>{project.name}</strong>
+            </span>
+          </div>
+          <h3 style={titleStyle}>
+            🤖 AI SEO Agent Orchestrator
+          </h3>
+          <p style={subtitleStyle}>
+            Define high-level objectives. The agent decomposes goals, invokes governed SEO tools, evaluates observations, and requests approval for publishing actions.
+          </p>
+        </div>
+
+        {/* Run Selector Dropdown */}
+        {runs.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="agent-run-select" style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+              Runs:
+            </label>
+            <select
+              id="agent-run-select"
+              value={activeRun?.id || ''}
+              onChange={(e) => {
+                const selected = runs.find((r) => String(r.id) === e.target.value);
+                if (selected) setActiveRun(selected);
+              }}
+              style={selectDropdownStyle}
+            >
+              {runs.map((r) => (
+                <option key={r.id} value={r.id}>
+                  Run #{r.id} ({r.status}) — {r.goal.slice(0, 35)}...
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Alert Messages */}
+      {errorMessage && (
+        <div style={errorAlertStyle}>
+          <span>⚠️ {errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} style={closeAlertBtnStyle}>×</button>
+        </div>
+      )}
+      {successMessage && (
+        <div style={successAlertStyle}>
+          <span>✓ {successMessage}</span>
+          <button onClick={() => setSuccessMessage(null)} style={closeAlertBtnStyle}>×</button>
+        </div>
+      )}
+
+      {/* Goal Input & Trigger Box */}
+      <div style={goalCardStyle}>
+        <label htmlFor="agent-goal-input" style={goalLabelStyle}>
+          Agent Mission / Goal
+        </label>
+        <textarea
+          id="agent-goal-input"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          placeholder="e.g. Inspect tracked rankings for page-two keywords, analyze anomalies, synthesize an article brief, and propose an action."
+          rows={3}
+          style={goalTextareaStyle}
+          disabled={isStartingRun}
+        />
+
+        {/* Suggestion Pills */}
+        <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Suggested missions:</span>
+          {SAMPLE_GOALS.map((sample, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setGoal(sample)}
+              style={suggestionPillStyle}
+              title="Click to populate goal"
+            >
+              💡 {sample.slice(0, 48)}...
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
+          <button
+            id="run-agent-btn"
+            onClick={handleStartRun}
+            disabled={isStartingRun || !goal.trim()}
+            style={{
+              ...primaryRunBtnStyle,
+              opacity: isStartingRun || !goal.trim() ? 0.6 : 1,
+              cursor: isStartingRun || !goal.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isStartingRun ? '⚡ Launching Agent Loop...' : '🚀 Run Autonomous Agent'}
+          </button>
+        </div>
+      </div>
+
+      {/* Active Run Execution Lifecycle View */}
+      {isLoadingRuns ? (
+        <div style={emptyRunsCardStyle}>
+          <p style={{ color: '#64748b', fontSize: '14px' }}>Loading agent execution runs...</p>
+        </div>
+      ) : activeRun ? (
+        <div style={executionCardStyle}>
+          {/* Run Header */}
+          <div style={runHeaderStyle}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
+                  Execution Run #{activeRun.id}
+                </h4>
+                {getStatusBadge(activeRun.status)}
+              </div>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                <strong>Goal:</strong> "{activeRun.goal}"
+              </p>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                Started: {new Date(activeRun.created_at).toLocaleTimeString()}
+              </span>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', marginTop: '2px' }}>
+                Steps: {activeRun.total_steps} / {activeRun.max_steps}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div style={progressTrackStyle}>
+            <div
+              style={{
+                ...progressBarStyle,
+                width: `${Math.min(100, ((activeRun.total_steps || 1) / (activeRun.max_steps || 15)) * 100)}%`,
+                backgroundColor:
+                  activeRun.status === 'completed'
+                    ? '#10b981'
+                    : activeRun.status === 'waiting_for_approval'
+                    ? '#f59e0b'
+                    : activeRun.status === 'failed' || activeRun.status === 'cancelled'
+                    ? '#ef4444'
+                    : '#3b82f6',
+              }}
+            />
+          </div>
+
+          {/* HUMAN APPROVAL REQUIRED CALLOUT */}
+          {activeRun.status === 'waiting_for_approval' && activeRun.pending_action && (
+            <div style={approvalGateCardStyle} id="agent-approval-gate-card">
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                <span style={{ fontSize: '28px' }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#92400e' }}>
+                      Human Review & Approval Required
+                    </h4>
+                    <span style={actionTypeBadgeStyle}>
+                      {activeRun.pending_action.action_type}
+                    </span>
+                  </div>
+                  <p style={{ margin: '6px 0 10px 0', fontSize: '13px', color: '#78350f', lineHeight: 1.4 }}>
+                    The agent has generated a proposed SEO action and paused execution. <strong>This action has NOT been executed</strong> on your website. Review the proposal below to proceed.
+                  </p>
+
+                  <div style={proposalDetailBoxStyle}>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                      {activeRun.pending_action.title}
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px' }}>
+                      {activeRun.pending_action.description}
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b', display: 'flex', gap: '16px' }}>
+                      {activeRun.pending_action.target_keyword && (
+                        <span>🎯 Keyword: <strong>{activeRun.pending_action.target_keyword}</strong></span>
+                      )}
+                      {activeRun.pending_action.target_url && (
+                        <span>🔗 URL: <strong>{activeRun.pending_action.target_url}</strong></span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Approve / Reject Controls */}
+                  <div style={{ marginTop: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <button
+                      id="agent-approve-btn"
+                      onClick={() => handleResumeRun('approved')}
+                      disabled={isResuming}
+                      style={approveBtnStyle}
+                    >
+                      {isResuming ? 'Processing Approval...' : '✓ Approve & Resume Run'}
+                    </button>
+                    <button
+                      id="agent-reject-btn"
+                      onClick={() => handleResumeRun('rejected')}
+                      disabled={isResuming}
+                      style={rejectBtnStyle}
+                    >
+                      {isResuming ? 'Processing...' : '✕ Reject Proposal'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Final Executive Summary Box */}
+          {activeRun.summary && (
+            <div style={summaryBoxStyle}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', marginBottom: '4px' }}>
+                Executive Conclusion
+              </div>
+              <p style={{ margin: 0, fontSize: '14px', color: '#064e3b', lineHeight: 1.5 }}>
+                {activeRun.summary}
+              </p>
+            </div>
+          )}
+
+          {/* Steps Timeline Stream */}
+          <div style={{ marginTop: '20px' }}>
+            <h5 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 700, color: '#334155' }}>
+              ReAct Reasoning & Execution Stream ({activeRun.steps?.length || 0} Steps)
+            </h5>
+
+            {activeRun.steps && activeRun.steps.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {activeRun.steps.map((step: AgentStep) => {
+                  const toolCall = step.tool_calls?.[0];
+                  const isExpanded = expandedStepId === step.id;
+                  const isStepWaiting = step.status === 'waiting';
+                  const isStepFailed = step.status === 'failed';
+                  const isStepCompleted = step.status === 'completed';
+
+                  return (
+                    <div
+                      key={step.id}
+                      id={`agent-step-${step.step_number}`}
+                      style={{
+                        ...stepItemStyle,
+                        borderColor: isStepWaiting ? '#fcd34d' : isStepFailed ? '#fca5a5' : '#e2e8f0',
+                        backgroundColor: isStepWaiting ? '#fffbeb' : isStepFailed ? '#fef2f2' : '#ffffff',
+                      }}
+                    >
+                      {/* Step Header Line */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <span
+                            style={{
+                              ...stepNumberBadgeStyle,
+                              backgroundColor: isStepWaiting ? '#f59e0b' : isStepFailed ? '#ef4444' : isStepCompleted ? '#10b981' : '#3b82f6',
+                            }}
+                          >
+                            {step.step_number}
+                          </span>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={actionTypeTagStyle}>{step.action_type_display}</span>
+                              {toolCall && (
+                                <code style={toolNameCodeStyle}>
+                                  🔧 {toolCall.tool_name}
+                                </code>
+                              )}
+                              {toolCall?.duration_ms !== undefined && (
+                                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                  ⏱️ {toolCall.duration_ms}ms
+                                </span>
+                              )}
+                            </div>
+                            <p style={stepThoughtStyle}>
+                              {step.thought}
+                            </p>
+                          </div>
+                        </div>
+
+                        {toolCall && (
+                          <button
+                            onClick={() => toggleStepExpand(step.id)}
+                            style={toggleDetailBtnStyle}
+                          >
+                            {isExpanded ? 'Hide Data ▲' : 'View Observation ▼'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Expandable Tool Call Observation Details */}
+                      {isExpanded && toolCall && (
+                        <div style={toolDetailBoxStyle}>
+                          <div style={{ marginBottom: '8px' }}>
+                            <strong style={{ fontSize: '12px', color: '#475569' }}>Arguments Passed:</strong>
+                            <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_input, null, 2)}</pre>
+                          </div>
+                          {toolCall.error_message ? (
+                            <div>
+                              <strong style={{ fontSize: '12px', color: '#dc2626' }}>Error Details:</strong>
+                              <pre style={{ ...codeBlockStyle, color: '#dc2626', backgroundColor: '#fef2f2' }}>
+                                {toolCall.error_message}
+                              </pre>
+                            </div>
+                          ) : (
+                            <div>
+                              <strong style={{ fontSize: '12px', color: '#475569' }}>Tool Observation / Output:</strong>
+                              <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_output, null, 2)}</pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={emptyStepsStyle}>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                  No execution steps recorded yet. Click "Run Autonomous Agent" to start.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={emptyRunsCardStyle}>
+          <span style={{ fontSize: '36px', marginBottom: '8px' }}>🚀</span>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>
+            No Agent Runs Executed Yet
+          </h4>
+          <p style={{ margin: 0, fontSize: '13px', color: '#64748b', maxWidth: '460px', textAlign: 'center' }}>
+            Enter an SEO mission above to allow DoxaRank's Autonomous ReAct Agent to discover keyword opportunities, inspect audits, and propose actionable publishing fixes.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// Styles
+const panelContainerStyle: React.CSSProperties = {
+  marginTop: '40px',
+  backgroundColor: '#ffffff',
+  borderRadius: '16px',
+  border: '1px solid #e2e8f0',
+  padding: '28px',
+  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+};
+
+const headerContainerStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  flexWrap: 'wrap',
+  gap: '16px',
+  borderBottom: '1px solid #f1f5f9',
+  paddingBottom: '18px',
+  marginBottom: '20px',
+};
+
+const featureTagStyle: React.CSSProperties = {
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  fontWeight: 800,
+  letterSpacing: '0.05em',
+  color: '#4338ca',
+  backgroundColor: '#e0e7ff',
+  padding: '3px 8px',
+  borderRadius: '4px',
+};
+
+const titleStyle: React.CSSProperties = {
+  margin: '8px 0 4px 0',
+  fontSize: '22px',
+  fontWeight: 800,
+  color: '#0f172a',
+  letterSpacing: '-0.02em',
+};
+
+const subtitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: '13px',
+  color: '#64748b',
+  maxWidth: '680px',
+  lineHeight: 1.4,
+};
+
+const selectDropdownStyle: React.CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: '8px',
+  border: '1px solid #cbd5e1',
+  backgroundColor: '#ffffff',
+  fontSize: '13px',
+  color: '#1e293b',
+  fontWeight: 600,
+};
+
+const goalCardStyle: React.CSSProperties = {
+  backgroundColor: '#f8fafc',
+  border: '1px solid #e2e8f0',
+  borderRadius: '12px',
+  padding: '20px',
+  marginBottom: '24px',
+};
+
+const goalLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: '14px',
+  fontWeight: 700,
+  color: '#1e293b',
+  marginBottom: '8px',
+};
+
+const goalTextareaStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '12px',
+  fontSize: '14px',
+  borderRadius: '8px',
+  border: '1px solid #cbd5e1',
+  fontFamily: 'inherit',
+  resize: 'vertical',
+  lineHeight: 1.4,
+  outline: 'none',
+};
+
+const suggestionPillStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  borderRadius: '16px',
+  backgroundColor: '#eff6ff',
+  color: '#2563eb',
+  border: '1px solid #bfdbfe',
+  fontSize: '11px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
+const primaryRunBtnStyle: React.CSSProperties = {
+  padding: '10px 20px',
+  borderRadius: '8px',
+  backgroundColor: '#4338ca',
+  color: '#ffffff',
+  fontWeight: 700,
+  fontSize: '14px',
+  border: 'none',
+  boxShadow: '0 2px 4px rgba(67, 56, 202, 0.25)',
+};
+
+const executionCardStyle: React.CSSProperties = {
+  border: '1px solid #e2e8f0',
+  borderRadius: '12px',
+  padding: '20px',
+  backgroundColor: '#ffffff',
+};
+
+const runHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  flexWrap: 'wrap',
+  gap: '12px',
+  marginBottom: '14px',
+};
+
+const progressTrackStyle: React.CSSProperties = {
+  height: '6px',
+  width: '100%',
+  backgroundColor: '#e2e8f0',
+  borderRadius: '3px',
+  overflow: 'hidden',
+  marginBottom: '20px',
+};
+
+const progressBarStyle: React.CSSProperties = {
+  height: '100%',
+  transition: 'width 0.3s ease',
+};
+
+const approvalGateCardStyle: React.CSSProperties = {
+  backgroundColor: '#fffbeb',
+  border: '2px solid #f59e0b',
+  borderRadius: '12px',
+  padding: '18px',
+  marginBottom: '20px',
+  boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.15)',
+};
+
+const actionTypeBadgeStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 700,
+  backgroundColor: '#fef3c7',
+  color: '#b45309',
+  padding: '2px 8px',
+  borderRadius: '4px',
+  textTransform: 'uppercase',
+};
+
+const proposalDetailBoxStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  border: '1px solid #fde68a',
+  borderRadius: '8px',
+  padding: '12px',
+  marginTop: '8px',
+};
+
+const approveBtnStyle: React.CSSProperties = {
+  padding: '8px 18px',
+  borderRadius: '8px',
+  backgroundColor: '#059669',
+  color: '#ffffff',
+  fontWeight: 700,
+  fontSize: '13px',
+  border: 'none',
+  cursor: 'pointer',
+  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
+};
+
+const rejectBtnStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  borderRadius: '8px',
+  backgroundColor: '#ffffff',
+  color: '#dc2626',
+  fontWeight: 700,
+  fontSize: '13px',
+  border: '1px solid #f87171',
+  cursor: 'pointer',
+};
+
+const summaryBoxStyle: React.CSSProperties = {
+  backgroundColor: '#ecfdf5',
+  border: '1px solid #a7f3d0',
+  borderRadius: '8px',
+  padding: '14px',
+  marginBottom: '20px',
+};
+
+const stepItemStyle: React.CSSProperties = {
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+  padding: '14px',
+  transition: 'all 0.15s ease',
+};
+
+const stepNumberBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '24px',
+  height: '24px',
+  borderRadius: '50%',
+  color: '#ffffff',
+  fontSize: '12px',
+  fontWeight: 800,
+  flexShrink: 0,
+};
+
+const actionTypeTagStyle: React.CSSProperties = {
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  fontWeight: 700,
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
+  padding: '2px 6px',
+  borderRadius: '4px',
+};
+
+const toolNameCodeStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontFamily: 'monospace',
+  color: '#1e293b',
+  backgroundColor: '#f1f5f9',
+  padding: '2px 6px',
+  borderRadius: '4px',
+};
+
+const stepThoughtStyle: React.CSSProperties = {
+  margin: '4px 0 0 0',
+  fontSize: '13px',
+  color: '#334155',
+  lineHeight: 1.4,
+};
+
+const toggleDetailBtnStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 600,
+  color: '#64748b',
+  backgroundColor: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  padding: '4px 8px',
+};
+
+const toolDetailBoxStyle: React.CSSProperties = {
+  marginTop: '12px',
+  paddingTop: '12px',
+  borderTop: '1px dashed #cbd5e1',
+};
+
+const codeBlockStyle: React.CSSProperties = {
+  margin: '4px 0 0 0',
+  padding: '8px 12px',
+  backgroundColor: '#f8fafc',
+  border: '1px solid #e2e8f0',
+  borderRadius: '6px',
+  fontSize: '11px',
+  fontFamily: 'monospace',
+  overflowX: 'auto',
+  maxHeight: '180px',
+};
+
+const emptyRunsCardStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '48px 24px',
+  border: '1px dashed #cbd5e1',
+  borderRadius: '12px',
+  backgroundColor: '#f8fafc',
+};
+
+const emptyStepsStyle: React.CSSProperties = {
+  padding: '18px',
+  border: '1px dashed #cbd5e1',
+  borderRadius: '8px',
+  backgroundColor: '#f8fafc',
+  textAlign: 'center',
+};
+
+// Badges
+const badgeRunningStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#eff6ff',
+  color: '#1d4ed8',
+  border: '1px solid #bfdbfe',
+};
+
+const pulseDotStyle: React.CSSProperties = {
+  width: '8px',
+  height: '8px',
+  borderRadius: '50%',
+  backgroundColor: '#3b82f6',
+};
+
+const badgeWaitingStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 800,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#fef3c7',
+  color: '#92400e',
+  border: '1px solid #fcd34d',
+};
+
+const badgeCompletedStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#ecfdf5',
+  color: '#047857',
+  border: '1px solid #a7f3d0',
+};
+
+const badgeFailedStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#fef2f2',
+  color: '#b91c1c',
+  border: '1px solid #fca5a5',
+};
+
+const badgeCancelledStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
+  border: '1px solid #cbd5e1',
+};
+
+const badgePendingStyle: React.CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#f8fafc',
+  color: '#64748b',
+  border: '1px solid #e2e8f0',
+};
+
+const errorAlertStyle: React.CSSProperties = {
+  backgroundColor: '#fef2f2',
+  border: '1px solid #f87171',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  color: '#991b1b',
+  fontSize: '13px',
+  marginBottom: '16px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+};
+
+const successAlertStyle: React.CSSProperties = {
+  backgroundColor: '#f0fdf4',
+  border: '1px solid #86efac',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  color: '#166534',
+  fontSize: '13px',
+  marginBottom: '16px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+};
+
+const closeAlertBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: 'inherit',
+  cursor: 'pointer',
+  fontSize: '16px',
+  fontWeight: 'bold',
+};

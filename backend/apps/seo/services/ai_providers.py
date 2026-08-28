@@ -190,6 +190,30 @@ SCHEMA:
 }
 """
 
+AGENT_DECISION_SYSTEM_PROMPT = """You are DoxaRank's Autonomous AI SEO Orchestrator.
+Your goal is to inspect SEO signals, analyze performance, synthesize recommendations/content, and propose actions using available registered tools.
+
+SAFETY & GOVERNANCE RULES:
+1. NEVER invent parameters or call tools that are not in the provided tool registry.
+2. Ground all arguments in previous observations and database context.
+3. When creating mutating actions, use propose_seo_action so the user can review and approve them.
+4. Output MUST be valid JSON adhering strictly to one of the two decision schemas:
+
+TOOL SELECTION SCHEMA:
+{
+  "action": "tool",
+  "tool_name": "<registered_tool_name>",
+  "arguments": { "<param>": "<value>" },
+  "reason": "<Concise rationale explaining why this tool is needed for the goal>"
+}
+
+TERMINAL FINISH SCHEMA:
+{
+  "action": "finish",
+  "summary": "<Comprehensive markdown summary of all work completed, findings, and next human steps>"
+}
+"""
+
 
 class BaseAIProvider(ABC):
 
@@ -213,6 +237,11 @@ class BaseAIProvider(ABC):
     @abstractmethod
     def generate_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate structured executable SEO action task JSON based on recommendation or draft context."""
+        pass
+
+    @abstractmethod
+    def decide_agent_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Decide next agent action (tool call or finish) based on run goal, history, and available tools."""
         pass
 
 
@@ -1257,6 +1286,116 @@ class MockAIProvider(BaseAIProvider):
                 )
             }
 
+    def decide_agent_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Deterministic Mock reasoning logic for Agent Orchestrator.
+        Inspects goal and prior step history to decide the next logical tool call or finish.
+        """
+        goal = (context.get('goal') or '').lower()
+        history = context.get('history') or []
+        available_tools = [t.get('name') for t in context.get('available_tools', []) if isinstance(t, dict)]
+        tool_calls = [h.get('tool_name') for h in history if h.get('tool_name')]
+
+        # Custom mock decision injection for testing
+        if context.get('mock_decision'):
+            return context['mock_decision']
+
+        # 1. First Step: Inspection
+        if not tool_calls:
+            if any(term in goal for term in ['gsc', 'search console', 'ctr', 'impressions']):
+                return {
+                    "action": "tool",
+                    "tool_name": "get_search_console_analytics",
+                    "arguments": {"min_impressions": 100, "limit": 10},
+                    "reason": "Inspect Google Search Console query impressions and click-through rates to find opportunities."
+                }
+            elif any(term in goal for term in ['audit', 'technical', 'issue', 'health', 'broken']):
+                return {
+                    "action": "tool",
+                    "tool_name": "get_audit_issues",
+                    "arguments": {"severity": "warning", "limit": 10},
+                    "reason": "Inspect site audit diagnostics to locate technical SEO issues and crawl bottlenecks."
+                }
+            else:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_keyword_rankings",
+                    "arguments": {"limit": 10},
+                    "reason": "Query current tracked keyword ranking positions to evaluate baseline search visibility."
+                }
+
+        # 2. Second Step: Intelligence Heuristic Run
+        if 'run_intelligence_analysis' not in tool_calls:
+            return {
+                "action": "tool",
+                "tool_name": "run_intelligence_analysis",
+                "arguments": {},
+                "reason": "Run SEO intelligence heuristic analysis to generate fresh anomaly and opportunity insights."
+            }
+
+        # Extract returned IDs from history observations if available
+        insight_id = context.get('target_insight_id')
+        rec_id = context.get('target_recommendation_id')
+        brief_id = context.get('target_brief_id')
+        draft_id = context.get('target_draft_id')
+
+        for h in history:
+            t_name = h.get('tool_name')
+            t_out = h.get('tool_output') or {}
+            if isinstance(t_out, dict):
+                if t_name == 'generate_recommendation' and t_out.get('id'):
+                    rec_id = t_out['id']
+                elif t_name == 'generate_content_brief' and t_out.get('id'):
+                    brief_id = t_out['id']
+                elif t_name == 'generate_content_draft' and t_out.get('id'):
+                    draft_id = t_out['id']
+
+        # 3. Third Step: Generate Recommendation
+        if 'generate_recommendation' not in tool_calls:
+            return {
+                "action": "tool",
+                "tool_name": "generate_recommendation",
+                "arguments": {"insight_id": insight_id or 1},
+                "reason": "Generate grounded AI strategy recommendation for the highest-priority identified insight."
+            }
+
+        # 4. Fourth Step: Generate Content Brief
+        if 'generate_content_brief' not in tool_calls:
+            return {
+                "action": "tool",
+                "tool_name": "generate_content_brief",
+                "arguments": {"recommendation_id": rec_id or 1, "content_type": "blog_post"},
+                "reason": "Synthesize comprehensive SEO content brief with topical outline, secondary keywords, and FAQs."
+            }
+
+        # 5. Fifth Step: Generate Content Draft
+        if 'generate_content_draft' not in tool_calls:
+            return {
+                "action": "tool",
+                "tool_name": "generate_content_draft",
+                "arguments": {"content_brief_id": brief_id or 1},
+                "reason": "Write full-length publishable SEO article draft with schema markup and keyword density mapping."
+            }
+
+        # 6. Sixth Step: Propose SEO Action
+        if 'propose_seo_action' not in tool_calls:
+            return {
+                "action": "tool",
+                "tool_name": "propose_seo_action",
+                "arguments": {"source_type": "draft", "source_id": draft_id or 1},
+                "reason": "Create formal SEOAction proposal for human review and approval."
+            }
+
+        # 7. Final Step: Finish
+        return {
+            "action": "finish",
+            "summary": (
+                f"Successfully completed autonomous SEO workflow for goal: \"{context.get('goal', '')}\". "
+                "Retrieved baseline rankings, executed intelligence heuristics, generated grounded recommendations, "
+                "synthesized a structured content brief, drafted publication copy, and created a formal SEO Action proposal for human approval."
+            )
+        }
+
 
 class OpenAIProvider(BaseAIProvider):
     """
@@ -1430,6 +1569,47 @@ class OpenAIProvider(BaseAIProvider):
         except Exception as e:
             logger.error(f"OpenAI API action generation failed: {e}. Falling back to MockAIProvider.")
             return MockAIProvider().generate_action(context)
+
+    def decide_agent_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.api_key:
+            logger.warning("OPENAI_API_KEY is not configured; falling back to MockAIProvider.")
+            return MockAIProvider().decide_agent_action(context)
+
+        try:
+            import urllib.request
+            import urllib.error
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": AGENT_DECISION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Given the following goal, execution history, and available tools, decide the next action:\n{json.dumps(context, indent=2)}"
+                    }
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2
+            }
+
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=json.dumps(payload).encode('utf-8'),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.api_key}"
+                }
+            )
+
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                content_str = res_data['choices'][0]['message']['content']
+                parsed = json.loads(content_str)
+                return parsed
+
+        except Exception as e:
+            logger.error(f"OpenAI API agent decision failed: {e}. Falling back to MockAIProvider.")
+            return MockAIProvider().decide_agent_action(context)
 
 
 def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:

@@ -10,7 +10,8 @@ from .models import (
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
     SEOContentDraft, DraftStatus,
-    SEOAction, ActionType, ActionStatus, ActionPriority
+    SEOAction, ActionType, ActionStatus, ActionPriority,
+    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
 from apps.projects.models import Project
 
@@ -1054,6 +1055,149 @@ class SEOActionGenerateRequestSerializer(serializers.Serializer):
                     raise serializers.ValidationError({"content_brief_id": "Content brief not found for this project."})
 
         return attrs
+
+
+class AgentToolCallSerializer(serializers.ModelSerializer):
+    """
+    Serializer for AgentToolCall telemetry records.
+    """
+    class Meta:
+        model = AgentToolCall
+        fields = (
+            'id',
+            'step',
+            'tool_name',
+            'tool_input',
+            'tool_output',
+            'error_message',
+            'duration_ms',
+            'is_mutating',
+            'created_at',
+            'completed_at'
+        )
+        read_only_fields = fields
+
+
+class AgentStepSerializer(serializers.ModelSerializer):
+    """
+    Serializer for discrete AgentStep execution items.
+    """
+    tool_calls = AgentToolCallSerializer(many=True, read_only=True)
+    action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = AgentStep
+        fields = (
+            'id',
+            'run',
+            'step_number',
+            'thought',
+            'action_type',
+            'action_type_display',
+            'status',
+            'status_display',
+            'tool_calls',
+            'created_at',
+            'completed_at'
+        )
+        read_only_fields = fields
+
+
+class AgentRunSerializer(serializers.ModelSerializer):
+    """
+    Serializer for complete AgentRun session with nested steps and approval metadata.
+    """
+    steps = AgentStepSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    pending_action = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AgentRun
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'user',
+            'goal',
+            'status',
+            'status_display',
+            'plan',
+            'context_snapshot',
+            'max_steps',
+            'total_steps',
+            'summary',
+            'steps',
+            'pending_action',
+            'created_at',
+            'updated_at',
+            'completed_at'
+        )
+        read_only_fields = (
+            'id', 'user', 'status', 'status_display', 'plan', 'context_snapshot',
+            'max_steps', 'total_steps', 'summary', 'steps', 'pending_action',
+            'created_at', 'updated_at', 'completed_at'
+        )
+
+    def get_pending_action(self, obj):
+        if obj.status == AgentRunStatus.WAITING_FOR_APPROVAL:
+            action = SEOAction.objects.filter(
+                project=obj.project,
+                status=ActionStatus.PROPOSED
+            ).order_by('-created_at').first()
+            if action:
+                return {
+                    "id": action.id,
+                    "title": action.title,
+                    "description": action.description,
+                    "action_type": action.action_type,
+                    "priority": action.priority,
+                    "target_url": action.target_url,
+                    "target_keyword": action.target_keyword,
+                    "status": action.status,
+                    "proposed_change": action.proposed_change,
+                    "implementation_instructions": action.implementation_instructions
+                }
+        return None
+
+
+class AgentRunCreateSerializer(serializers.Serializer):
+    """
+    Serializer for initiating an AgentRun session.
+    """
+    project = serializers.PrimaryKeyRelatedField(
+        queryset=Project.objects.all(),
+        required=True,
+        help_text="ID of the project to run the agent on."
+    )
+    goal = serializers.CharField(
+        min_length=3,
+        max_length=2000,
+        required=True,
+        help_text="The high-level SEO objective for the agent."
+    )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to execute agent runs for this project.")
+        return value
+
+
+class AgentRunResumeSerializer(serializers.Serializer):
+    """
+    Serializer for resuming an AgentRun paused in WAITING_FOR_APPROVAL state.
+    """
+    decision = serializers.ChoiceField(
+        choices=[('approved', 'Approved'), ('rejected', 'Rejected')],
+        default='approved',
+        required=False,
+        help_text="Human approval decision: 'approved' or 'rejected'."
+    )
 
 
 

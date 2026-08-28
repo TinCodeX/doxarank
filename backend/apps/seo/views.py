@@ -11,7 +11,8 @@ from .models import (
     SEORecommendation, RecommendationType, RecommendationPriority, RecommendationStatus,
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
     SEOContentDraft, DraftStatus,
-    SEOAction, ActionType, ActionStatus, ActionPriority
+    SEOAction, ActionType, ActionStatus, ActionPriority,
+    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -22,7 +23,8 @@ from .serializers import (
     SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer,
     SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
     SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer,
-    SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer
+    SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer,
+    AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.seo_intelligence import SEOIntelligenceService
@@ -32,6 +34,7 @@ from .services.content_writer_service import SEOContentWriterService
 from .services.export_service import ContentBriefExportService, ContentDraftExportService
 from .services.action_service import SEOActionService
 from .services.action_executors import get_action_executor
+from .services.agent_orchestrator import AgentOrchestrator
 from apps.projects.models import Project
 
 
@@ -1141,6 +1144,68 @@ class SEOActionViewSet(viewsets.ModelViewSet):
             'total': base_qs.count()
         }
         return Response(counts, status=status.HTTP_200_OK)
+
+
+class AgentRunViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing autonomous AgentRun sessions.
+    Provides endpoints for creating, listing, retrieving, and resuming agent runs.
+    Endpoints:
+    - GET /api/seo/ai/agent/runs/ (list runs for accessible projects, optional ?project=<id>)
+    - POST /api/seo/ai/agent/runs/ (start a new run)
+    - GET /api/seo/ai/agent/runs/{id}/ (retrieve run with steps and tool calls)
+    - POST /api/seo/ai/agent/runs/{id}/resume/ (resume paused run with approved/rejected decision)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AgentRunSerializer
+
+    def get_queryset(self):
+        qs = AgentRun.objects.filter(project__owner=self.request.user).prefetch_related('steps__tool_calls')
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        create_serializer = AgentRunCreateSerializer(data=request.data, context={'request': request})
+        create_serializer.is_valid(raise_exception=True)
+
+        project = create_serializer.validated_data['project']
+        goal = create_serializer.validated_data['goal']
+
+        orchestrator = AgentOrchestrator(
+            project=project,
+            user=request.user
+        )
+
+        run = orchestrator.start_run(goal=goal)
+        response_serializer = AgentRunSerializer(run, context={'request': request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='resume')
+    def resume(self, request, pk=None):
+        run = self.get_object()
+
+        if run.status != AgentRunStatus.WAITING_FOR_APPROVAL:
+            return Response(
+                {
+                    "detail": f"Cannot resume run #{run.id}. Current status is '{run.get_status_display()}'. Only runs waiting for approval can be resumed."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        resume_serializer = AgentRunResumeSerializer(data=request.data)
+        resume_serializer.is_valid(raise_exception=True)
+        decision = resume_serializer.validated_data.get('decision', 'approved')
+
+        orchestrator = AgentOrchestrator(
+            project=run.project,
+            user=request.user
+        )
+
+        updated_run = orchestrator.resume_run(run, approval_decision=decision)
+        response_serializer = AgentRunSerializer(updated_run, context={'request': request})
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 

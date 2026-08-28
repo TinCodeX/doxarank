@@ -3,7 +3,7 @@ from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
-    SEOAction
+    SEOAction, AgentRun, AgentStep, AgentToolCall
 )
 
 
@@ -354,6 +354,85 @@ class SEOActionAdmin(admin.ModelAdmin):
         'project__owner__email'
     )
     readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+
+
+@admin.register(AgentRun)
+class AgentRunAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'user',
+        'goal',
+        'status',
+        'max_steps',
+        'total_steps',
+        'completed_at',
+        'created_at'
+    )
+    list_filter = (
+        'status',
+        'created_at',
+        'completed_at'
+    )
+    search_fields = (
+        'goal',
+        'summary',
+        'project__name',
+        'project__website_url',
+        'user__email'
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+
+
+@admin.register(AgentStep)
+class AgentStepAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'run',
+        'step_number',
+        'action_type',
+        'status',
+        'completed_at',
+        'created_at'
+    )
+    list_filter = (
+        'action_type',
+        'status',
+        'created_at'
+    )
+    search_fields = (
+        'thought',
+        'run__goal',
+        'run__project__name'
+    )
+    readonly_fields = ('created_at',)
+    ordering = ('run', 'step_number')
+
+
+@admin.register(AgentToolCall)
+class AgentToolCallAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'step',
+        'tool_name',
+        'duration_ms',
+        'is_mutating',
+        'completed_at',
+        'created_at'
+    )
+    list_filter = (
+        'tool_name',
+        'is_mutating',
+        'created_at'
+    )
+    search_fields = (
+        'tool_name',
+        'error_message',
+        'step__run__goal'
+    )
+    readonly_fields = ('created_at',)
     ordering = ('-created_at',)
 
 

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 from apps.projects.models import Project
 
@@ -1273,6 +1274,242 @@ class SEOAction(models.Model):
 
     def __str__(self):
         return f"[{self.get_action_type_display()}] {self.title} ({self.get_status_display()})"
+
+
+class AgentRunStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    WAITING_FOR_APPROVAL = 'waiting_for_approval', 'Waiting for Approval'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class AgentActionType(models.TextChoices):
+    PLAN = 'plan', 'Plan'
+    TOOL_CALL = 'tool_call', 'Tool Call'
+    OBSERVATION = 'observation', 'Observation'
+    DECISION = 'decision', 'Decision'
+    FINAL = 'final', 'Final'
+    APPROVAL = 'approval', 'Approval'
+
+
+class AgentStepStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    WAITING = 'waiting', 'Waiting'
+
+
+class AgentRun(models.Model):
+    """
+    AgentRun model representing an autonomous agent execution session initiated by a user
+    for a specific Project with a defined high-level SEO goal.
+    Relationship: Project 1 ─────── * AgentRun
+                  User 1 ────────── * AgentRun
+    Ownership follows: run.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='agent_runs',
+        help_text='The project this agent execution run belongs to.'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='agent_runs',
+        help_text='The user who initiated this agent run.'
+    )
+    goal = models.TextField(
+        help_text='The high-level SEO objective or task for the agent.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=AgentRunStatus.choices,
+        default=AgentRunStatus.PENDING,
+        db_index=True,
+        help_text='Current execution status of the agent run.'
+    )
+    plan = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Structured list of planned sub-tasks or milestones.'
+    )
+    context_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Snapshot of project SEO state and baseline metrics when run started.'
+    )
+    max_steps = models.PositiveIntegerField(
+        default=15,
+        help_text='Maximum allowed reasoning/execution steps to prevent unbounded execution loops.'
+    )
+    total_steps = models.PositiveIntegerField(
+        default=0,
+        help_text='Total steps executed so far during this run.'
+    )
+    summary = models.TextField(
+        blank=True,
+        default='',
+        help_text='Final executive summary or conclusion of the agent run.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the agent run was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the agent run was last modified.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the agent run reached a terminal state (completed, failed, cancelled).'
+    )
+
+    class Meta:
+        db_table = 'seo_agent_runs'
+        verbose_name = 'Agent run'
+        verbose_name_plural = 'Agent runs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_agent_run_proj_stat_idx'),
+            models.Index(fields=['user', 'status'], name='seo_agent_run_user_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_agent_run_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"Run #{self.id}: {self.goal[:50]} ({self.get_status_display()})"
+
+
+class AgentStep(models.Model):
+    """
+    AgentStep model representing one discrete reasoning, decision, or tool-execution step
+    within an AgentRun session.
+    Relationship: AgentRun 1 ─────── * AgentStep
+    """
+    run = models.ForeignKey(
+        AgentRun,
+        on_delete=models.CASCADE,
+        related_name='steps',
+        help_text='The agent run session this step belongs to.'
+    )
+    step_number = models.PositiveIntegerField(
+        help_text='Sequential 1-indexed step number within the run.'
+    )
+    thought = models.TextField(
+        blank=True,
+        default='',
+        help_text='Internal reasoning or thought process of the agent at this step.'
+    )
+    action_type = models.CharField(
+        max_length=30,
+        choices=AgentActionType.choices,
+        default=AgentActionType.PLAN,
+        db_index=True,
+        help_text='Type of action taken in this step (plan, tool_call, observation, decision, final, approval).'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=AgentStepStatus.choices,
+        default=AgentStepStatus.PENDING,
+        db_index=True,
+        help_text='Execution status of this step.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this step was created.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when this step completed execution.'
+    )
+
+    class Meta:
+        db_table = 'seo_agent_steps'
+        verbose_name = 'Agent step'
+        verbose_name_plural = 'Agent steps'
+        ordering = ['run', 'step_number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['run', 'step_number'],
+                name='unique_agent_run_step_number'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['run', 'step_number'], name='seo_agent_step_run_num_idx'),
+            models.Index(fields=['run', 'status'], name='seo_agent_step_run_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"Run #{self.run_id} Step {self.step_number} [{self.get_action_type_display()}]"
+
+
+class AgentToolCall(models.Model):
+    """
+    AgentToolCall model representing a specific tool invocation made during an AgentStep.
+    Relationship: AgentStep 1 ─────── * AgentToolCall
+    """
+    step = models.ForeignKey(
+        AgentStep,
+        on_delete=models.CASCADE,
+        related_name='tool_calls',
+        help_text='The agent step in which this tool was invoked.'
+    )
+    tool_name = models.CharField(
+        max_length=150,
+        db_index=True,
+        help_text='The identifier/name of the invoked tool.'
+    )
+    tool_input = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured JSON arguments passed to the tool.'
+    )
+    tool_output = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured JSON output or observation returned by the tool.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error message or stack summary if tool execution failed.'
+    )
+    duration_ms = models.PositiveIntegerField(
+        default=0,
+        help_text='Execution latency of the tool call in milliseconds.'
+    )
+    is_mutating = models.BooleanField(
+        default=False,
+        help_text='Whether this tool invocation changes external or persistent database state.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the tool call was initiated.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the tool call finished execution.'
+    )
+
+    class Meta:
+        db_table = 'seo_agent_tool_calls'
+        verbose_name = 'Agent tool call'
+        verbose_name_plural = 'Agent tool calls'
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['step', 'tool_name'], name='seo_agent_tc_step_name_idx'),
+            models.Index(fields=['tool_name'], name='seo_agent_tc_name_idx'),
+        ]
+
+    def __str__(self):
+        status_str = "Error" if self.error_message else "OK"
+        return f"{self.tool_name} on Step #{self.step_id} ({status_str}, {self.duration_ms}ms)"
 
 
 

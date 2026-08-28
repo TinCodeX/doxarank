@@ -13,6 +13,7 @@ import { SiteAuditPanel } from '../components/SiteAuditPanel';
 import { SearchConsolePanel } from '../components/SearchConsolePanel';
 import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalyticsPanel';
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
+import { AgentOrchestratorPanel } from '../components/AgentOrchestratorPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -717,6 +718,19 @@ export const Dashboard: React.FC = () => {
         {selectedProject && (
           <SEOInsightsPanel
             project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 6.5: AI AGENT ORCHESTRATOR (Visible when a project is selected) */}
+        {selectedProject && (
+          <AgentOrchestratorPanel
+            project={selectedProject}
+            onActionCreated={() => {
+              const actElem = document.getElementById('seo-actions-section');
+              if (actElem) {
+                actElem.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
           />
         )}
 

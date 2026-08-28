@@ -6,7 +6,7 @@ from .views import (
     SearchConsoleConnectionViewSet, SearchAnalyticsViewSet,
     SEOInsightViewSet, SEORecommendationViewSet,
     SEOContentBriefViewSet, SEOContentDraftViewSet,
-    SEOActionViewSet
+    SEOActionViewSet, AgentRunViewSet
 )
 
 app_name = 'seo'
@@ -23,6 +23,7 @@ router.register('ai/recommendations', SEORecommendationViewSet, basename='seorec
 router.register('ai/content-briefs', SEOContentBriefViewSet, basename='seocontentbrief')
 router.register('ai/content-drafts', SEOContentDraftViewSet, basename='seocontentdraft')
 router.register('ai/actions', SEOActionViewSet, basename='seoaction')
+router.register('ai/agent/runs', AgentRunViewSet, basename='agent-run')
 
 
 urlpatterns = [
