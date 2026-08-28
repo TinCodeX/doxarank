@@ -44,9 +44,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     };
   }, [project.id]);
 
-  // Handle polling when active run is running
+  // Handle polling when active run is running or pending in Celery queue
   useEffect(() => {
-    if (activeRun && activeRun.status === 'running') {
+    if (activeRun && (activeRun.status === 'running' || activeRun.status === 'pending')) {
       startPolling(activeRun.id);
     } else {
       stopPolling();
@@ -63,7 +63,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         const updated = await getAgentRun(runId);
         setActiveRun(updated);
         setRuns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-        if (updated.status !== 'running') {
+        if (updated.status !== 'running' && updated.status !== 'pending') {
           stopPolling();
           if (updated.status === 'completed') {
             setSuccessMessage('Agent run finished successfully!');
@@ -119,7 +119,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       setRuns((prev) => [newRun, ...prev]);
       setActiveRun(newRun);
       setGoal('');
-      if (newRun.status === 'running') {
+      if (newRun.status === 'running' || newRun.status === 'pending') {
         startPolling(newRun.id);
       }
     } catch (err: any) {
@@ -142,6 +142,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       setRuns((prev) => prev.map((r) => (r.id === resumed.id ? resumed : r)));
       if (decision === 'approved') {
         setSuccessMessage('Action approved! Agent resumed execution.');
+        if (resumed.status === 'running' || resumed.status === 'pending') {
+          startPolling(resumed.id);
+        }
         if (onActionCreated) onActionCreated();
       } else {
         setSuccessMessage('Action proposal rejected. Agent run cancelled.');
@@ -160,6 +163,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   // Status Styling Helpers
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'pending':
+        return (
+          <span style={badgePendingStyle}>
+            <span style={pulseDotStyle} /> Queued in Celery
+          </span>
+        );
       case 'running':
         return (
           <span style={badgeRunningStyle}>

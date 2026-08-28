@@ -4122,6 +4122,335 @@ class AgentRunAPITests(TestCase):
         self.assertEqual(action_db.status, ActionStatus.REJECTED)
 
 
+# ==============================================================================
+# MILESTONE 2: CELERY, ASYNC EXECUTION, CONCURRENCY & RETRY TEST SUITE
+# ==============================================================================
+
+from unittest.mock import patch, MagicMock
+from django.conf import settings
+from config.celery import app as celery_app, debug_task
+from apps.seo.tasks import execute_agent_run, _mark_run_failed
+
+
+class CeleryInfrastructureTests(TestCase):
+    """
+    Phase 2.1: Celery & Redis Infrastructure Tests
+    1. Celery app is instantiated and bound to 'doxarank'
+    2. Django settings configured with 'CELERY' namespace
+    3. Broker and result backend settings configured
+    4. Eager execution active in test environment
+    5. Debug task runs without error
+    """
+    def test_celery_app_initialization(self):
+        self.assertEqual(celery_app.main, 'doxarank')
+        self.assertIn('apps.seo.tasks.execute_agent_run', celery_app.tasks)
+
+    def test_celery_settings_configuration(self):
+        self.assertTrue(hasattr(settings, 'CELERY_BROKER_URL'))
+        self.assertTrue(hasattr(settings, 'CELERY_RESULT_BACKEND'))
+        self.assertTrue(settings.CELERY_TASK_ALWAYS_EAGER)
+
+    def test_debug_task_execution(self):
+        result = debug_task.delay()
+        self.assertTrue(result.successful() or result.ready())
+
+
+class AgentCeleryTaskExecutionTests(TestCase):
+    """
+    Phase 2.2 & 2.7: Agent Execution Celery Tasks
+    1. execute_agent_run executes pending run end-to-end
+    2. Missing run ID returns None without exception
+    3. Resumed run with 'approved' executes action and finishes
+    4. Resumed run with 'rejected' cancels run and marks action rejected
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='task_test_user@doxarank.com',
+            password='Password123!',
+            first_name='Task',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Celery Task Project',
+            website_url='https://celery-test.et'
+        )
+        self.kw = Keyword.objects.create(
+            project=self.project,
+            keyword='async seo test',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking = KeywordRanking.objects.create(
+            keyword=self.kw,
+            position=4,
+            ranking_url='https://celery-test.et/page',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.insight = SEOInsight.objects.create(
+            project=self.project,
+            fingerprint='fp_celery_test_1',
+            insight_type=InsightType.HIGH_IMPRESSIONS_LOW_CTR,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Celery Opportunity Insight',
+            description='Test insight for celery task execution.',
+            status=InsightStatus.OPEN,
+            related_keyword=self.kw,
+            related_url='https://celery-test.et/page'
+        )
+
+    def test_execute_agent_run_success(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Execute asynchronous SEO optimization via Celery task',
+            status=AgentRunStatus.PENDING
+        )
+        result = execute_agent_run(run.id)
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertGreater(run.steps.count(), 0)
+
+    def test_execute_agent_run_missing_id_handled_gracefully(self):
+        result = execute_agent_run(999999)
+        self.assertIsNone(result)
+
+    def test_execute_agent_run_resume_approved(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Resume approved run',
+            status=AgentRunStatus.PENDING
+        )
+        execute_agent_run(run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Now resume with approval
+        result = execute_agent_run(run.id, is_resume=True, approval_decision='approved')
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        self.assertIsNotNone(run.completed_at)
+
+        # Check action was executed
+        action = SEOAction.objects.filter(project=self.project).latest('created_at')
+        self.assertEqual(action.status, ActionStatus.COMPLETED)
+
+    def test_execute_agent_run_resume_rejected(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Resume rejected run',
+            status=AgentRunStatus.PENDING
+        )
+        execute_agent_run(run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Now resume with rejection
+        result = execute_agent_run(run.id, is_resume=True, approval_decision='rejected')
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.CANCELLED)
+        self.assertIn("rejected", run.summary)
+
+        # Check action marked rejected
+        action = SEOAction.objects.filter(project=self.project).latest('created_at')
+        self.assertEqual(action.status, ActionStatus.REJECTED)
+
+
+class AgentRunConcurrencyAndLockingTests(TestCase):
+    """
+    Phase 2.5 & 2.8: Idempotency, Concurrency & State Machine Precondition Tests
+    1. Task ignores run already in RUNNING status (prevents duplicate worker execution)
+    2. Task ignores run already in COMPLETED status
+    3. Task ignores run already in FAILED status
+    4. Task ignores run already in CANCELLED status
+    5. Resume ignores run that is not WAITING_FOR_APPROVAL
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='concurrency_user@doxarank.com',
+            password='Password123!',
+            first_name='Concurrent',
+            last_name='User'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Concurrency Project',
+            website_url='https://concurrency.et'
+        )
+
+    def test_task_skips_already_running_run(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Concurrent running goal',
+            status=AgentRunStatus.RUNNING
+        )
+        result = execute_agent_run(run.id)
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.RUNNING)
+        self.assertEqual(run.steps.count(), 0)
+
+    def test_task_skips_already_completed_run(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Already completed goal',
+            status=AgentRunStatus.COMPLETED
+        )
+        result = execute_agent_run(run.id)
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+
+    def test_task_skips_failed_run(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Already failed goal',
+            status=AgentRunStatus.FAILED
+        )
+        result = execute_agent_run(run.id)
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+
+    def test_cannot_resume_pending_or_running_run(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Pending goal cannot resume',
+            status=AgentRunStatus.PENDING
+        )
+        result = execute_agent_run(run.id, is_resume=True, approval_decision='approved')
+        self.assertEqual(result, run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.PENDING)
+
+
+class AgentTaskRetryAndErrorHandlingTests(TestCase):
+    """
+    Phase 2.6 & 2.13: Retry Strategy & Safe Error Persisting Tests
+    1. Retryable ConnectionError triggers self.retry
+    2. Non-retryable error transitions run to FAILED with sanitized summary
+    3. Safe error masking strips simulated API tokens
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='retry_user@doxarank.com',
+            password='Password123!',
+            first_name='Retry',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Retry Project',
+            website_url='https://retry.et'
+        )
+
+    @patch('apps.seo.tasks.AgentOrchestrator.execute_loop')
+    def test_retryable_exception_triggers_celery_retry(self, mock_loop):
+        mock_loop.side_effect = ConnectionError("Simulated Redis/network connection drop")
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Test connection retry',
+            status=AgentRunStatus.PENDING
+        )
+        with patch.object(execute_agent_run, 'retry', side_effect=Exception("CeleryRetryRaised")) as mock_retry:
+            with self.assertRaises(Exception) as ctx:
+                execute_agent_run(run.id)
+            self.assertIn("CeleryRetryRaised", str(ctx.exception))
+            mock_retry.assert_called_once()
+
+    @patch('apps.seo.tasks.AgentOrchestrator.execute_loop')
+    def test_non_retryable_exception_marks_run_failed(self, mock_loop):
+        mock_loop.side_effect = ValueError("Fatal schema corruption")
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Test non-retryable failure',
+            status=AgentRunStatus.PENDING
+        )
+        execute_agent_run(run.id)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertIn("Fatal agent execution error", run.summary)
+        self.assertIsNotNone(run.completed_at)
+
+    def test_mark_run_failed_sanitizes_tokens(self):
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal='Sanitization test',
+            status=AgentRunStatus.RUNNING
+        )
+        raw_error = "OpenAI key sk-1234567890abcdef failed with 401"
+        _mark_run_failed(run, raw_error)
+        run.refresh_from_db()
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertNotIn("sk-1234567890abcdef", run.summary)
+        self.assertIn("sk-***", run.summary)
+
+
+class ToolRegistryObservabilityAndSanitizationTests(TestCase):
+    """
+    Phase 2.12 & 2.13: Tool Observability & Sanitization Tests
+    1. Tool registry execution captures duration_ms
+    2. Tool registry sanitizes sensitive authorization tokens in error messages
+    """
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='tool_obs_user@doxarank.com',
+            password='Password123!',
+            first_name='Obs',
+            last_name='User'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Tool Obs Project',
+            website_url='https://tool-obs.et'
+        )
+        self.registry = create_default_tool_registry()
+
+    def test_tool_telemetry_captures_duration_ms(self):
+        res = self.registry.execute('get_keyword_rankings', self.project, {})
+        self.assertTrue(res['success'])
+        self.assertIn('duration_ms', res)
+        self.assertGreaterEqual(res['duration_ms'], 0)
+
+    def test_tool_error_sanitizes_bearer_and_api_keys(self):
+        custom_registry = ToolRegistry()
+        def leaky_handler(project, args):
+            raise RuntimeError("Failed communicating with provider using Bearer secret_token_xyz_12345 and sk-livekey99999999")
+
+        leaky_tool = AgentToolDefinition(
+            name="test_leaky_tool",
+            description="Tool that leaks credentials in exception",
+            category=ToolCategory.READ_ONLY,
+            parameters_schema={"type": "object", "properties": {}},
+            requires_approval=False,
+            is_mutating=False,
+            handler=leaky_handler
+        )
+        custom_registry.register(leaky_tool)
+
+        res = custom_registry.execute('test_leaky_tool', self.project, {})
+        self.assertFalse(res['success'])
+        err_msg = res['error']['message']
+        self.assertNotIn("secret_token_xyz_12345", err_msg)
+        self.assertNotIn("sk-livekey99999999", err_msg)
+        self.assertIn("Bearer ***", err_msg)
+        self.assertIn("sk-***", err_msg)
+
+
 
 
 

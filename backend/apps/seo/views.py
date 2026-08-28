@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Sum, Avg, Count, F
 from django.http import HttpResponse
 from rest_framework import viewsets, permissions, status
@@ -1177,8 +1178,26 @@ class AgentRunViewSet(viewsets.ModelViewSet):
             project=project,
             user=request.user
         )
+        snapshot = orchestrator._capture_project_baseline()
 
-        run = orchestrator.start_run(goal=goal)
+        with transaction.atomic():
+            run = AgentRun.objects.create(
+                project=project,
+                user=request.user,
+                goal=goal,
+                status=AgentRunStatus.PENDING,
+                plan=[],
+                context_snapshot=snapshot,
+                max_steps=15,
+                total_steps=0
+            )
+
+        # Enqueue background Celery task
+        from apps.seo.tasks import execute_agent_run
+        execute_agent_run.delay(run.id)
+
+        # Return immediately with pending state
+        run.refresh_from_db()
         response_serializer = AgentRunSerializer(run, context={'request': request})
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
@@ -1186,25 +1205,29 @@ class AgentRunViewSet(viewsets.ModelViewSet):
     def resume(self, request, pk=None):
         run = self.get_object()
 
-        if run.status != AgentRunStatus.WAITING_FOR_APPROVAL:
-            return Response(
-                {
-                    "detail": f"Cannot resume run #{run.id}. Current status is '{run.get_status_display()}'. Only runs waiting for approval can be resumed."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         resume_serializer = AgentRunResumeSerializer(data=request.data)
         resume_serializer.is_valid(raise_exception=True)
         decision = resume_serializer.validated_data.get('decision', 'approved')
 
-        orchestrator = AgentOrchestrator(
-            project=run.project,
-            user=request.user
-        )
+        from apps.seo.tasks import execute_agent_run
 
-        updated_run = orchestrator.resume_run(run, approval_decision=decision)
-        response_serializer = AgentRunSerializer(updated_run, context={'request': request})
+        with transaction.atomic():
+            locked_run = AgentRun.objects.select_for_update().get(id=run.id)
+            if locked_run.status != AgentRunStatus.WAITING_FOR_APPROVAL:
+                return Response(
+                    {
+                        "detail": f"Cannot resume run #{locked_run.id}. Current status is '{locked_run.get_status_display()}'. Only runs waiting for approval can be resumed."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if decision == 'rejected':
+                execute_agent_run(run.id, is_resume=True, approval_decision='rejected')
+            else:
+                execute_agent_run.delay(run.id, is_resume=True, approval_decision='approved')
+
+        locked_run.refresh_from_db()
+        response_serializer = AgentRunSerializer(locked_run, context={'request': request})
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 

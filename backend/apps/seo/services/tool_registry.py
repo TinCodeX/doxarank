@@ -205,6 +205,7 @@ class ToolRegistry:
         except Exception as exc:
             duration_ms = int((time.time() - start_time) * 1000)
             logger.exception(f"Error executing agent tool '{tool_name}' on project #{project.id}: {exc}")
+            safe_error_msg = _sanitize_error_message(str(exc))
             return {
                 "success": False,
                 "tool_name": tool_name,
@@ -214,9 +215,20 @@ class ToolRegistry:
                 "requires_approval": tool.requires_approval,
                 "error": {
                     "code": "EXECUTION_ERROR",
-                    "message": str(exc)
+                    "message": safe_error_msg
                 }
             }
+
+
+def _sanitize_error_message(message: str) -> str:
+    """Sanitize error messages to prevent accidental leakage of API keys or credentials."""
+    if not message:
+        return ""
+    import re
+    # Mask OpenAI-style keys (sk-...) and generic auth tokens
+    clean = re.sub(r'sk-[a-zA-Z0-9_-]{8,}', 'sk-***', message)
+    clean = re.sub(r'Bearer\s+[a-zA-Z0-9_\-\.]{8,}', 'Bearer ***', clean, flags=re.IGNORECASE)
+    return clean[:500]
 
 
 # ==============================================================================
