@@ -4451,9 +4451,821 @@ class ToolRegistryObservabilityAndSanitizationTests(TestCase):
         self.assertIn("sk-***", err_msg)
 
 
+# ==============================================================================
+# MILESTONE 3, PHASE 3.1: REAL-TIME AGENT EVENT ARCHITECTURE TEST SUITE
+# ==============================================================================
+
+import json
+import uuid
+from apps.seo.services.agent_events import (
+    AgentEvent, AgentEventType, AgentEventPublisher,
+    InMemoryEventPublisher, RedisEventPublisher, sanitize_event_payload,
+    get_event_publisher, set_event_publisher
+)
 
 
+class AgentEventContractTests(TestCase):
+    """
+    Phase 3.1: Event Contract, UUID Generation, Schema & Payload Sanitization Tests
+    1. Event receives server-side generated UUID4 string
+    2. Event contains required fields: event_id, event_type, run_id, project_id, step_number, sequence_number, timestamp, payload
+    3. Event serializes to valid JSON dictionary and string
+    4. All required event types exist in AgentEventType enum
+    5. Payload security sanitization masks OpenAI keys, Bearer tokens, passwords, and sensitive keys
+    """
 
+    def test_event_construction_and_uuid_generation(self):
+        """1. Event receives server-generated UUID4 and preserves required fields."""
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_STARTED,
+            run_id=42,
+            project_id=7,
+            step_number=3,
+            sequence_number=5,
+            payload={"tool_name": "get_keyword_rankings"}
+        )
+        self.assertIsNotNone(event.event_id)
+        # Verify valid UUID format
+        parsed_uuid = uuid.UUID(event.event_id)
+        self.assertEqual(str(parsed_uuid), event.event_id)
+        self.assertEqual(event.event_type, "tool.started")
+        self.assertEqual(event.run_id, 42)
+        self.assertEqual(event.project_id, 7)
+        self.assertEqual(event.step_number, 3)
+        self.assertEqual(event.sequence_number, 5)
+        self.assertIsNotNone(event.timestamp)
+        self.assertEqual(event.payload["tool_name"], "get_keyword_rankings")
+
+    def test_event_json_serialization(self):
+        """2. Event serializes cleanly to dictionary and JSON string."""
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_COMPLETED,
+            run_id=10,
+            project_id=2,
+            step_number=1,
+            sequence_number=4,
+            payload={"tool_name": "get_keyword_rankings", "duration_ms": 120, "success": True}
+        )
+        data = event.to_dict()
+        self.assertEqual(data["event_id"], event.event_id)
+        self.assertEqual(data["event_type"], "tool.completed")
+        self.assertEqual(data["run_id"], 10)
+        self.assertEqual(data["project_id"], 2)
+        self.assertEqual(data["step_number"], 1)
+        self.assertEqual(data["sequence_number"], 4)
+        self.assertEqual(data["payload"]["duration_ms"], 120)
+
+        json_str = event.to_json()
+        parsed = json.loads(json_str)
+        self.assertEqual(parsed["event_id"], event.event_id)
+        self.assertEqual(parsed["event_type"], "tool.completed")
+        self.assertEqual(parsed["sequence_number"], 4)
+
+    def test_all_required_event_types_exist(self):
+        """3. Verify all 13 required stable event types exist."""
+        expected_types = {
+            "agent.started": AgentEventType.AGENT_STARTED,
+            "agent.completed": AgentEventType.AGENT_COMPLETED,
+            "agent.failed": AgentEventType.AGENT_FAILED,
+            "agent.cancelled": AgentEventType.AGENT_CANCELLED,
+            "step.started": AgentEventType.STEP_STARTED,
+            "step.completed": AgentEventType.STEP_COMPLETED,
+            "step.failed": AgentEventType.STEP_FAILED,
+            "tool.started": AgentEventType.TOOL_STARTED,
+            "tool.completed": AgentEventType.TOOL_COMPLETED,
+            "tool.failed": AgentEventType.TOOL_FAILED,
+            "approval.required": AgentEventType.APPROVAL_REQUIRED,
+            "approval.approved": AgentEventType.APPROVAL_APPROVED,
+            "approval.rejected": AgentEventType.APPROVAL_REJECTED,
+        }
+        for name, enum_val in expected_types.items():
+            self.assertEqual(enum_val.value, name)
+
+    def test_payload_security_sanitization(self):
+        """4. Payload sanitization securely masks keys, bearer tokens, passwords, and sensitive dictionary values."""
+        raw_payload = {
+            "api_key": "sk-1234567890abcdef1234567890",
+            "password": "SuperSecretPassword123!",
+            "token": "secret_jwt_token_xyz",
+            "auth_header": "Bearer secret_bearer_token_99999",
+            "error_message": "Failed connecting to OpenAI using sk-9876543210fedcba and Bearer auth_secret_tok",
+            "nested": {
+                "credential": "password=my_plain_password; api_key=secret_val_123",
+                "normal_field": "public SEO content"
+            }
+        }
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_FAILED,
+            run_id=1,
+            project_id=1,
+            payload=raw_payload
+        )
+        cleaned = event.payload
+        self.assertEqual(cleaned["api_key"], "***REDACTED***")
+        self.assertEqual(cleaned["password"], "***REDACTED***")
+        self.assertEqual(cleaned["token"], "***REDACTED***")
+        self.assertNotIn("secret_bearer_token_99999", str(cleaned))
+        self.assertIn("Bearer ***", str(cleaned))
+        self.assertNotIn("sk-9876543210fedcba", cleaned["error_message"])
+        self.assertIn("sk-***", cleaned["error_message"])
+        self.assertNotIn("my_plain_password", cleaned["nested"]["credential"])
+        self.assertEqual(cleaned["nested"]["normal_field"], "public SEO content")
+
+
+class AgentEventOrderingAndOrchestratorTests(TestCase):
+    """
+    Phase 3.1: Sequence Numbering, Lifecycle Integration, and Failure Resilience Tests
+    1. Orchestrator emits monotonically increasing sequence numbers per run
+    2. Resumed run continues sequence numbering without reset or duplicate agent.started
+    3. Successful agent workflow emits complete event sequence
+    4. Tool and step failure emits tool.failed, step.failed, agent.failed
+    5. Approval workflow emits approval.required, approval.approved, approval.rejected, agent.cancelled
+    6. Publisher failure resilience: publisher errors do not crash orchestrator or corrupt DB state
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='event_orch_user@doxarank.com',
+            password='Password123!',
+            first_name='Event',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Event Architecture Project',
+            website_url='https://event-arch.et'
+        )
+        self.kw = Keyword.objects.create(
+            project=self.project,
+            keyword='event driven seo',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking = KeywordRanking.objects.create(
+            keyword=self.kw,
+            position=3,
+            ranking_url='https://event-arch.et/blog',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.insight = SEOInsight.objects.create(
+            project=self.project,
+            fingerprint='fp_event_arch_1',
+            insight_type=InsightType.HIGH_IMPRESSIONS_LOW_CTR,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='CTR Improvement Opportunity',
+            description='Test insight for event emission.',
+            status=InsightStatus.OPEN,
+            related_keyword=self.kw,
+            related_url='https://event-arch.et/blog'
+        )
+        self.publisher = InMemoryEventPublisher()
+        self.registry = create_default_tool_registry()
+
+    def test_successful_workflow_event_lifecycle(self):
+        """1. Successful workflow emits agent.started -> step.started -> tool.started -> tool.completed -> step.completed -> agent.completed."""
+        class FinishMockProvider(MockAIProvider):
+            def __init__(self):
+                self.calls = 0
+
+            def decide_agent_action(self, context):
+                self.calls += 1
+                if self.calls == 1:
+                    return {
+                        "action": "tool",
+                        "tool_name": "get_keyword_rankings",
+                        "arguments": {"keyword": "event"},
+                        "reason": "Inspect keyword rankings"
+                    }
+                return {
+                    "action": "finish",
+                    "summary": "Keyword optimization completed.",
+                    "reason": "Goal achieved."
+                }
+
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            provider=FinishMockProvider(),
+            registry=self.registry,
+            publisher=self.publisher,
+            max_steps=5
+        )
+
+        run = orchestrator.start_run(goal="Test event emission on successful workflow")
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+
+        events = self.publisher.get_events(run_id=run.id)
+        event_types = [e.event_type for e in events]
+
+        expected_order = [
+            "agent.started",
+            "step.started",
+            "tool.started",
+            "tool.completed",
+            "step.completed",
+            "step.started",
+            "step.completed",
+            "agent.completed"
+        ]
+        self.assertEqual(event_types, expected_order)
+
+        # Verify monotonic sequence ordering
+        sequence_numbers = [e.sequence_number for e in events]
+        self.assertEqual(sequence_numbers, list(range(1, len(events) + 1)))
+
+    def test_sequence_continuity_across_approval_and_resume(self):
+        """2. Resumed run continues sequence numbering seamlessly without duplicate agent.started."""
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            registry=self.registry,
+            publisher=self.publisher
+        )
+
+        # Start run -> pauses at propose_seo_action (WAITING_FOR_APPROVAL)
+        run = orchestrator.start_run(goal="Pause and resume with event tracking")
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        events_phase1 = self.publisher.get_events(run_id=run.id)
+        phase1_types = [e.event_type for e in events_phase1]
+        self.assertIn("agent.started", phase1_types)
+        self.assertIn("approval.required", phase1_types)
+        last_seq_phase1 = events_phase1[-1].sequence_number
+
+        # Resume with new orchestrator instance (simulating Celery worker transition)
+        resume_publisher = InMemoryEventPublisher()
+        resume_orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            registry=self.registry,
+            publisher=resume_publisher
+        )
+
+        run.refresh_from_db()
+        run_resumed = resume_orchestrator.resume_run(run, approval_decision="approved")
+        self.assertEqual(run_resumed.status, AgentRunStatus.COMPLETED)
+
+        events_phase2 = resume_publisher.get_events(run_id=run.id)
+        phase2_types = [e.event_type for e in events_phase2]
+
+        # Verify NO duplicate agent.started
+        self.assertNotIn("agent.started", phase2_types)
+        self.assertEqual(phase2_types[0], "approval.approved")
+        self.assertIn("agent.completed", phase2_types)
+
+        # Verify sequence continued from phase 1 without resetting to 1
+        first_seq_phase2 = events_phase2[0].sequence_number
+        self.assertEqual(first_seq_phase2, last_seq_phase1 + 1)
+
+        phase2_seqs = [e.sequence_number for e in events_phase2]
+        expected_seqs = list(range(last_seq_phase1 + 1, last_seq_phase1 + 1 + len(events_phase2)))
+        self.assertEqual(phase2_seqs, expected_seqs)
+
+    def test_rejection_emits_approval_rejected_and_agent_cancelled(self):
+        """3. Human rejection emits approval.rejected and agent.cancelled."""
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            registry=self.registry,
+            publisher=self.publisher
+        )
+
+        run = orchestrator.start_run(goal="Test rejection event emission")
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Clear publisher to isolate resume events
+        self.publisher.clear()
+
+        run.refresh_from_db()
+        cancelled_run = orchestrator.resume_run(run, approval_decision="rejected")
+        self.assertEqual(cancelled_run.status, AgentRunStatus.CANCELLED)
+
+        events = self.publisher.get_events(run_id=run.id)
+        event_types = [e.event_type for e in events]
+        self.assertEqual(event_types, ["approval.rejected", "agent.cancelled"])
+
+    def test_tool_failure_workflow_events(self):
+        """4. Tool failure emits tool.failed, step.failed, and agent.failed."""
+        class FailingToolProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_recommendation",
+                    "arguments": {"insight_id": 999999},  # Non-existent ID causes failure
+                    "reason": "Attempt bad recommendation"
+                }
+
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            provider=FailingToolProvider(),
+            registry=self.registry,
+            publisher=self.publisher,
+            max_steps=2
+        )
+
+        run = orchestrator.start_run(goal="Test tool failure events")
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+
+        events = self.publisher.get_events(run_id=run.id)
+        event_types = [e.event_type for e in events]
+        self.assertIn("tool.failed", event_types)
+        self.assertIn("step.failed", event_types)
+        self.assertIn("agent.failed", event_types)
+
+    def test_resilient_to_publisher_failure(self):
+        """5. Publisher exceptions do not abort or corrupt agent execution or database state."""
+        class BrokenPublisher(AgentEventPublisher):
+            def publish(self, event: AgentEvent) -> None:
+                raise RuntimeError("Simulated Redis Pub/Sub / WebSocket connection drop!")
+
+        broken_publisher = BrokenPublisher()
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            registry=self.registry,
+            publisher=broken_publisher
+        )
+
+        # Run should still complete its logic and transition to WAITING_FOR_APPROVAL safely
+        run = orchestrator.start_run(goal="Test resilience against publisher failures")
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertGreater(run.steps.count(), 0)
+        self.assertTrue(SEOAction.objects.filter(project=self.project, status=ActionStatus.PROPOSED).exists())
+
+
+class RedisEventPublisherTests(TestCase):
+    """
+    Milestone 3, Phase 3.2.1: Redis Event Publisher Tests
+    1. Channel naming formats as 'agent:run:{run_id}'
+    2. URL resolution reuses Django Redis settings
+    3. Event publication formats JSON and calls Redis publish on correct channel
+    4. Payload sanitization is applied prior to Redis publishing
+    5. Redis connection drops and publish errors are caught non-fatally
+    6. Orchestrator executes smoothly and publishes lifecycle events to Redis channels
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='redis_pub_user@doxarank.com',
+            password='Password123!',
+            first_name='Redis',
+            last_name='PubTester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Redis Publisher Project',
+            website_url='https://redis-pub.et'
+        )
+        self.kw = Keyword.objects.create(
+            project=self.project,
+            keyword='redis event pubsub',
+            search_engine='google',
+            country='ET'
+        )
+        self.ranking = KeywordRanking.objects.create(
+            keyword=self.kw,
+            position=2,
+            ranking_url='https://redis-pub.et/page',
+            search_engine='google',
+            country='ET',
+            recorded_at=timezone.now()
+        )
+        self.registry = create_default_tool_registry()
+
+    def test_channel_naming_format(self):
+        """1. Channel naming strictly adheres to 'agent:run:{run_id}'."""
+        self.assertEqual(RedisEventPublisher.get_channel_name(42), "agent:run:42")
+        self.assertEqual(RedisEventPublisher.get_channel_name(999), "agent:run:999")
+        self.assertEqual(RedisEventPublisher.get_channel_name(1), "agent:run:1")
+
+    def test_redis_url_resolution(self):
+        """2. Reuses existing settings.CELERY_BROKER_URL or custom url."""
+        publisher_default = RedisEventPublisher()
+        expected_url = getattr(settings, 'REDIS_URL', getattr(settings, 'CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0'))
+        self.assertEqual(publisher_default._get_redis_url(), expected_url)
+
+        publisher_custom = RedisEventPublisher(redis_url="redis://custom-host:6380/5")
+        self.assertEqual(publisher_custom._get_redis_url(), "redis://custom-host:6380/5")
+
+    def test_publish_serializes_and_calls_redis(self):
+        """3. Publishes valid JSON payload with required fields to agent:run:{run_id}."""
+        mock_redis = MagicMock()
+        publisher = RedisEventPublisher(redis_client=mock_redis)
+
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_COMPLETED,
+            run_id=42,
+            project_id=7,
+            step_number=2,
+            sequence_number=5,
+            payload={"tool_name": "get_keyword_rankings", "success": True, "duration_ms": 340}
+        )
+
+        publisher.publish(event)
+
+        mock_redis.publish.assert_called_once()
+        channel, message = mock_redis.publish.call_args[0]
+        self.assertEqual(channel, "agent:run:42")
+
+        parsed = json.loads(message)
+        self.assertEqual(parsed["event_id"], event.event_id)
+        self.assertEqual(parsed["event_type"], "tool.completed")
+        self.assertEqual(parsed["run_id"], 42)
+        self.assertEqual(parsed["project_id"], 7)
+        self.assertEqual(parsed["step_number"], 2)
+        self.assertEqual(parsed["sequence_number"], 5)
+        self.assertEqual(parsed["payload"]["tool_name"], "get_keyword_rankings")
+        self.assertEqual(parsed["payload"]["duration_ms"], 340)
+
+    def test_publish_payload_sanitization(self):
+        """4. Sensitive credentials and private keys are sanitized before publishing to Redis."""
+        mock_redis = MagicMock()
+        publisher = RedisEventPublisher(redis_client=mock_redis)
+
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_FAILED,
+            run_id=10,
+            project_id=3,
+            payload={
+                "api_key": "sk-test1234567890abcdef",
+                "auth_header": "Bearer secret_access_token_777",
+                "error_msg": "Provider failed with key sk-secret99999999"
+            }
+        )
+
+        publisher.publish(event)
+
+        mock_redis.publish.assert_called_once()
+        _, message = mock_redis.publish.call_args[0]
+        parsed = json.loads(message)
+
+        self.assertEqual(parsed["payload"]["api_key"], "***REDACTED***")
+        self.assertNotIn("sk-test1234567890abcdef", message)
+        self.assertNotIn("secret_access_token_777", message)
+        self.assertIn("Bearer ***", message)
+        self.assertIn("sk-***", message)
+
+    def test_publish_failure_is_non_fatal(self):
+        """5. Connection drops or Redis errors in publish() are logged and do not raise exceptions."""
+        mock_redis = MagicMock()
+        mock_redis.publish.side_effect = ConnectionError("Connection refused by Redis server at 127.0.0.1:6379")
+        publisher = RedisEventPublisher(redis_client=mock_redis)
+
+        event = AgentEvent(
+            event_type=AgentEventType.AGENT_STARTED,
+            run_id=1,
+            project_id=1,
+            payload={"goal": "Test resilience"}
+        )
+
+        # Must not raise an exception
+        try:
+            publisher.publish(event)
+        except Exception as e:
+            self.fail(f"publisher.publish raised an unexpected exception: {e}")
+
+    def test_orchestrator_integration_with_redis_publisher(self):
+        """6. Orchestrator seamlessly integrates with RedisEventPublisher to stream lifecycle events."""
+        mock_redis = MagicMock()
+        redis_publisher = RedisEventPublisher(redis_client=mock_redis)
+
+        class FinishMockProvider(MockAIProvider):
+            def decide_agent_action(self, context):
+                return {
+                    "action": "finish",
+                    "summary": "Agent completed via Redis publisher.",
+                    "reason": "Direct finish."
+                }
+
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            provider=FinishMockProvider(),
+            registry=self.registry,
+            publisher=redis_publisher,
+            max_steps=3
+        )
+
+        run = orchestrator.start_run(goal="Test Redis publisher integration")
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+
+        # Verify Redis publish was called for every lifecycle event
+        self.assertGreater(mock_redis.publish.call_count, 0)
+        expected_channel = f"agent:run:{run.id}"
+
+        for call in mock_redis.publish.call_args_list:
+            channel, payload_str = call[0]
+            self.assertEqual(channel, expected_channel)
+            payload_data = json.loads(payload_str)
+            self.assertEqual(payload_data["run_id"], run.id)
+            self.assertEqual(payload_data["project_id"], self.project.id)
+            self.assertIn(payload_data["event_type"], [
+                "agent.started",
+                "step.started",
+                "step.completed",
+                "agent.completed"
+            ])
+
+
+# ==============================================================================
+# MILESTONE 3, PHASE 3.2.2: DJANGO CHANNELS + WEBSOCKET CONSUMER TEST SUITE
+# ==============================================================================
+
+from channels.testing import WebsocketCommunicator
+from channels.layers import get_channel_layer
+from config.asgi import application
+from apps.seo.consumers import AgentEventConsumer
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
+class AgentWebSocketConsumerTests(TestCase):
+    """
+    Milestone 3, Phase 3.2.2: Django Channels + WebSocket Consumer Tests
+    1. Authenticated connection to valid owned run succeeds
+    2. Anonymous / unauthenticated connection is rejected (code 4001)
+    3. Nonexistent run connection is rejected (code 4003)
+    4. Cross-tenant run connection is rejected (code 4003)
+    5. Invalid run ID parameter is rejected (code 4004)
+    6. Channels group naming adheres to 'agent_run_{run_id}'
+    7. Event dispatched via channel layer is delivered to WebSocket client as valid JSON
+    8. Sequence numbers are preserved during WebSocket transmission
+    9. Sanitized payloads are preserved (no credential leaks over WebSocket)
+    10. Tenant isolation across channels groups (Run A events never reach Run B subscriber)
+    11. Clean disconnect discards group subscription without error
+    12. JWT query string authentication (?token=...) authenticates user on handshake
+    13. Transport failures during publishing do not modify or corrupt AgentRun database state
+    """
+
+    def setUp(self):
+        # User A & Project A
+        self.user_a = User.objects.create_user(
+            email='ws_user_a@doxarank.com',
+            password='Password123!',
+            first_name='WsUser',
+            last_name='A'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Project A WS',
+            website_url='https://project-a-ws.et'
+        )
+        self.run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal='Goal for Project A WS',
+            status=AgentRunStatus.RUNNING
+        )
+
+        # User B & Project B
+        self.user_b = User.objects.create_user(
+            email='ws_user_b@doxarank.com',
+            password='Password123!',
+            first_name='WsUser',
+            last_name='B'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Project B WS',
+            website_url='https://project-b-ws.et'
+        )
+        self.run_b = AgentRun.objects.create(
+            project=self.project_b,
+            user=self.user_b,
+            goal='Goal for Project B WS',
+            status=AgentRunStatus.RUNNING
+        )
+
+    async def test_authenticated_user_can_connect_to_own_run(self):
+        """1. Authenticated user connecting to their own run succeeds."""
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        communicator.scope["user"] = self.user_a
+
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
+
+    async def test_anonymous_user_connection_is_rejected(self):
+        """2. Anonymous / unauthenticated user connection is rejected with 4001."""
+        from django.contrib.auth.models import AnonymousUser
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        communicator.scope["user"] = AnonymousUser()
+
+        connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
+    async def test_nonexistent_run_connection_is_rejected(self):
+        """3. Connection to nonexistent run ID is rejected with 4003 without leaking information."""
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/seo/ai/agent/runs/999999/"
+        )
+        communicator.scope["user"] = self.user_a
+
+        connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4003)
+
+    async def test_cross_tenant_run_connection_is_rejected(self):
+        """4. User B connecting to User A's run is rejected with 4003."""
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        communicator.scope["user"] = self.user_b
+
+        connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4003)
+
+    async def test_channels_group_naming_format(self):
+        """5. Channels group naming strictly conforms to 'agent_run_{run_id}'."""
+        self.assertEqual(RedisEventPublisher.get_group_name(42), "agent_run_42")
+        self.assertEqual(RedisEventPublisher.get_group_name(self.run_a.id), f"agent_run_{self.run_a.id}")
+
+    async def test_event_delivery_to_connected_client(self):
+        """6. Serialized AgentEvent sent via channel layer is delivered to WebSocket subscriber."""
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        communicator.scope["user"] = self.user_a
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Create and dispatch an event
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_COMPLETED,
+            run_id=self.run_a.id,
+            project_id=self.project_a.id,
+            step_number=3,
+            sequence_number=7,
+            payload={"tool_name": "get_keyword_rankings", "duration_ms": 150, "success": True}
+        )
+
+        channel_layer = get_channel_layer()
+        group_name = RedisEventPublisher.get_group_name(self.run_a.id)
+        await channel_layer.group_send(
+            group_name,
+            {
+                "type": "agent_event",
+                "event": event.to_dict()
+            }
+        )
+
+        # Receive JSON over WebSocket
+        message = await communicator.receive_json_from()
+        self.assertEqual(message["event_id"], event.event_id)
+        self.assertEqual(message["event_type"], "tool.completed")
+        self.assertEqual(message["run_id"], self.run_a.id)
+        self.assertEqual(message["project_id"], self.project_a.id)
+        self.assertEqual(message["step_number"], 3)
+        self.assertEqual(message["sequence_number"], 7)
+        self.assertEqual(message["payload"]["tool_name"], "get_keyword_rankings")
+        self.assertEqual(message["payload"]["duration_ms"], 150)
+
+        await communicator.disconnect()
+
+    async def test_group_isolation_between_runs(self):
+        """7. Events published for Run A never reach subscribers of Run B."""
+        # Connect to Run A
+        comm_a = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        comm_a.scope["user"] = self.user_a
+        connected_a, _ = await comm_a.connect()
+        self.assertTrue(connected_a)
+
+        # Connect to Run B
+        comm_b = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_b.id}/"
+        )
+        comm_b.scope["user"] = self.user_b
+        connected_b, _ = await comm_b.connect()
+        self.assertTrue(connected_b)
+
+        # Dispatch event to Run A only
+        event_a = AgentEvent(
+            event_type=AgentEventType.STEP_COMPLETED,
+            run_id=self.run_a.id,
+            project_id=self.project_a.id,
+            step_number=1,
+            sequence_number=2,
+            payload={"action_type": "tool_call"}
+        )
+
+        channel_layer = get_channel_layer()
+        await channel_layer.group_send(
+            RedisEventPublisher.get_group_name(self.run_a.id),
+            {
+                "type": "agent_event",
+                "event": event_a.to_dict()
+            }
+        )
+
+        # Comm A receives event
+        msg_a = await comm_a.receive_json_from()
+        self.assertEqual(msg_a["run_id"], self.run_a.id)
+
+        # Comm B receives nothing
+        received_nothing = await comm_b.receive_nothing()
+        self.assertTrue(received_nothing)
+
+        await comm_a.disconnect()
+        await comm_b.disconnect()
+
+    async def test_jwt_query_string_authentication(self):
+        """8. JWT token in query string (?token=...) authenticates connection successfully."""
+        from asgiref.sync import sync_to_async
+        refresh = await sync_to_async(RefreshToken.for_user)(self.user_a)
+        access_token = str(refresh.access_token)
+
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/?token={access_token}"
+        )
+
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
+
+    async def test_sanitized_payloads_delivered_over_websocket(self):
+        """9. Sensitive tokens and keys remain sanitized when delivered to WebSocket client."""
+        communicator = WebsocketCommunicator(
+            application,
+            f"/ws/seo/ai/agent/runs/{self.run_a.id}/"
+        )
+        communicator.scope["user"] = self.user_a
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        event = AgentEvent(
+            event_type=AgentEventType.TOOL_FAILED,
+            run_id=self.run_a.id,
+            project_id=self.project_a.id,
+            payload={
+                "api_key": "sk-secret1234567890abcdef",
+                "header": "Bearer top_secret_token_12345",
+                "error": "Failed with key sk-secret99999999"
+            }
+        )
+
+        channel_layer = get_channel_layer()
+        await channel_layer.group_send(
+            RedisEventPublisher.get_group_name(self.run_a.id),
+            {
+                "type": "agent_event",
+                "event": event.to_dict()
+            }
+        )
+
+        msg = await communicator.receive_json_from()
+        payload = msg["payload"]
+        self.assertEqual(payload["api_key"], "***REDACTED***")
+        self.assertNotIn("sk-secret1234567890abcdef", str(payload))
+        self.assertNotIn("top_secret_token_12345", str(payload))
+        self.assertIn("Bearer ***", str(payload))
+        self.assertIn("sk-***", str(payload))
+
+        await communicator.disconnect()
+
+    def test_transport_failure_does_not_corrupt_agent_run(self):
+        """10. Broken channel layer does not corrupt or modify AgentRun database state."""
+        class BrokenChannelLayer:
+            async def group_send(self, group, message):
+                raise RuntimeError("Channel layer crashed!")
+
+        broken_publisher = RedisEventPublisher(
+            redis_client=MagicMock(),
+            channel_layer=BrokenChannelLayer()
+        )
+
+        event = AgentEvent(
+            event_type=AgentEventType.AGENT_STARTED,
+            run_id=self.run_a.id,
+            project_id=self.project_a.id,
+            payload={"goal": "Resilience test"}
+        )
+
+        # Must not raise an exception
+        try:
+            broken_publisher.publish(event)
+        except Exception as e:
+            self.fail(f"publish() raised an unexpected exception: {e}")
+
+        self.run_a.refresh_from_db()
+        self.assertEqual(self.run_a.status, AgentRunStatus.RUNNING)
 
 
 
