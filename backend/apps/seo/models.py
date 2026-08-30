@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict, Any
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -347,6 +348,28 @@ class SearchConsoleConnection(models.Model):
         blank=True,
         help_text='Error details if the connection or last sync failed.'
     )
+    # OAuth2 Credentials & Token Metadata
+    encrypted_refresh_token = models.TextField(
+        null=True,
+        blank=True,
+        help_text='AES-encrypted OAuth2 refresh token.'
+    )
+    token_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Expiration timestamp of the active access token.'
+    )
+    google_account_email = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Google user account email used for OAuth authorization.'
+    )
+    scopes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='OAuth2 scopes granted by the user.'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -362,6 +385,26 @@ class SearchConsoleConnection(models.Model):
 
     def __str__(self):
         return f"GSC: {self.property_url} ({self.project.name})"
+
+    def set_refresh_token(self, raw_token: Optional[str]) -> None:
+        """Encrypt and store OAuth2 refresh token."""
+        from apps.seo.services.encryption import encrypt_token
+        self.encrypted_refresh_token = encrypt_token(raw_token)
+
+    def get_refresh_token(self) -> Optional[str]:
+        """Decrypt and return plaintext OAuth2 refresh token."""
+        from apps.seo.services.encryption import decrypt_token
+        return decrypt_token(self.encrypted_refresh_token)
+
+    @property
+    def has_oauth_token(self) -> bool:
+        """Check if connection has an encrypted refresh token present."""
+        return bool(self.encrypted_refresh_token and self.encrypted_refresh_token.strip())
+
+    def has_valid_credentials(self) -> bool:
+        """Check if connection is active with verified property and stored refresh token."""
+        return bool(self.is_connected and self.property_url and self.has_oauth_token)
+
 
 
 class SearchAnalyticsData(models.Model):

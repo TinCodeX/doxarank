@@ -5509,3 +5509,144 @@ class AgentEventReplayAPITests(TestCase):
         self.assertIn('step.started', event_types)
         self.assertIn('tool.completed', event_types)
         self.assertIn('agent.completed', event_types)
+
+
+# ==============================================================================
+# MILESTONE 4, PHASE 4.1.1: GOOGLE SEARCH CONSOLE OAUTH2 FOUNDATION TEST SUITE
+# ==============================================================================
+
+from apps.seo.services.encryption import encrypt_token, decrypt_token
+
+
+class GoogleOAuthFoundationTests(TestCase):
+    """
+    Phase 4.1.1: Google OAuth2 Settings, Symmetric Encryption, Credential Storage & Serialization Safety Tests
+    1. Google OAuth settings load with safe development defaults when unset
+    2. Symmetric Fernet encryption/decryption round-trip succeeds with zero plaintext leakage
+    3. Invalid or corrupted ciphertext safely returns None without crashing
+    4. SearchConsoleConnection helper methods (set_refresh_token, get_refresh_token, has_valid_credentials)
+    5. SearchConsoleConnectionSerializer strictly excludes encrypted_refresh_token from API responses
+    6. Multi-tenant isolation prevents cross-tenant access to SearchConsoleConnection credentials
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            email='gsc_oauth_owner@doxarank.com',
+            password='Password123!',
+            first_name='GSC',
+            last_name='Owner'
+        )
+        self.other_user = User.objects.create_user(
+            email='gsc_oauth_other@doxarank.com',
+            password='Password123!',
+            first_name='Other',
+            last_name='User'
+        )
+        self.project = Project.objects.create(
+            owner=self.owner,
+            name='GSC OAuth Project',
+            website_url='https://gsc-oauth.et'
+        )
+        self.other_project = Project.objects.create(
+            owner=self.other_user,
+            name='Other Project',
+            website_url='https://other-gsc.et'
+        )
+
+    def test_google_oauth_settings_load_with_safe_defaults(self):
+        """1. Settings define OAuth client ID, secret, redirect URI, and scopes with safe defaults."""
+        self.assertTrue(hasattr(settings, 'GOOGLE_OAUTH_CLIENT_ID'))
+        self.assertTrue(hasattr(settings, 'GOOGLE_OAUTH_CLIENT_SECRET'))
+        self.assertTrue(hasattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI'))
+        self.assertTrue(hasattr(settings, 'GOOGLE_OAUTH_SCOPES'))
+        self.assertIn('https://www.googleapis.com/auth/webmasters.readonly', settings.GOOGLE_OAUTH_SCOPES)
+
+    def test_token_encryption_and_decryption(self):
+        """2. Raw OAuth refresh token is encrypted at rest and decrypted accurately in memory."""
+        raw_refresh_token = "1//04_example_google_oauth2_refresh_token_secret_xyz12345"
+        encrypted = encrypt_token(raw_refresh_token)
+
+        self.assertIsNotNone(encrypted)
+        self.assertNotEqual(encrypted, raw_refresh_token)
+        self.assertNotIn(raw_refresh_token, encrypted)
+
+        decrypted = decrypt_token(encrypted)
+        self.assertEqual(decrypted, raw_refresh_token)
+
+        # Empty / None handling
+        self.assertIsNone(encrypt_token(None))
+        self.assertIsNone(encrypt_token(""))
+        self.assertIsNone(decrypt_token(None))
+        self.assertIsNone(decrypt_token(""))
+
+    def test_invalid_token_decryption_returns_none(self):
+        """3. Corrupted or invalid ciphertext safely returns None without raising an uncaught exception."""
+        invalid_ciphertext = "not_a_valid_fernet_token_xyz"
+        decrypted = decrypt_token(invalid_ciphertext)
+        self.assertIsNone(decrypted)
+
+    def test_search_console_connection_model_token_helpers(self):
+        """4. Model methods accurately manage token encryption, decryption, and credential validity state."""
+        raw_token = "1//04_test_live_refresh_token_abc"
+        connection = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:gsc-oauth.et",
+            is_connected=True,
+            google_account_email="owner@doxarank.com",
+            scopes=["https://www.googleapis.com/auth/webmasters.readonly"]
+        )
+
+        # Initially no token
+        self.assertFalse(connection.has_oauth_token)
+        self.assertFalse(connection.has_valid_credentials())
+        self.assertIsNone(connection.get_refresh_token())
+
+        # Set token
+        connection.set_refresh_token(raw_token)
+        connection.save()
+
+        connection.refresh_from_db()
+        self.assertTrue(connection.has_oauth_token)
+        self.assertTrue(connection.has_valid_credentials())
+        self.assertEqual(connection.get_refresh_token(), raw_token)
+        self.assertNotIn(raw_token, connection.encrypted_refresh_token)
+
+    def test_serializer_excludes_encrypted_refresh_token(self):
+        """5. Serializer exposes metadata and has_oauth_token, but strictly excludes encrypted_refresh_token."""
+        connection = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:gsc-oauth.et",
+            is_connected=True,
+            google_account_email="admin@gsc-oauth.et",
+            scopes=["https://www.googleapis.com/auth/webmasters.readonly"]
+        )
+        connection.set_refresh_token("1//04_secret_refresh_token_999")
+        connection.save()
+
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/search-console/{connection.id}/'
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn('encrypted_refresh_token', response.data)
+        self.assertNotIn('1//04_secret_refresh_token_999', str(response.data))
+        self.assertTrue(response.data.get('has_oauth_token'))
+        self.assertEqual(response.data.get('google_account_email'), 'admin@gsc-oauth.et')
+
+    def test_multi_tenant_isolation_on_gsc_connection_with_credentials(self):
+        """6. Other authenticated users cannot access or view project owner's Search Console connection."""
+        connection = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:gsc-oauth.et",
+            is_connected=True,
+            google_account_email="owner@doxarank.com"
+        )
+        connection.set_refresh_token("1//04_secret_owner_token")
+        connection.save()
+
+        # Other user tries to access owner's connection
+        self.client.force_authenticate(user=self.other_user)
+        url = f'/api/seo/search-console/{connection.id}/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

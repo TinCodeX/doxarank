@@ -223,3 +223,22 @@ else:
             },
         },
     }
+
+# ==============================================================================
+# Google Search Console OAuth2 & Credential Encryption Configuration
+# ==============================================================================
+GOOGLE_OAUTH_CLIENT_ID = config('GOOGLE_OAUTH_CLIENT_ID', default='')
+GOOGLE_OAUTH_CLIENT_SECRET = config('GOOGLE_OAUTH_CLIENT_SECRET', default='')
+GOOGLE_OAUTH_REDIRECT_URI = config(
+    'GOOGLE_OAUTH_REDIRECT_URI',
+    default='http://localhost:5173/integrations/google/callback'
+)
+GOOGLE_OAUTH_SCOPES = [
+    'https://www.googleapis.com/auth/webmasters.readonly',
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+]
+
+# Dedicated AES key for encrypting OAuth refresh tokens at rest (falls back to SECRET_KEY derived key)
+GSC_TOKEN_ENCRYPTION_KEY = config('GSC_TOKEN_ENCRYPTION_KEY', default='')
