@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Project } from '../types/project';
 import type { AgentRun, AgentStep } from '../types/agentRun';
+import type { AgentEvent, AgentEventConnectionState } from '../types/agentEvent';
 import {
   getAgentRuns,
   getAgentRun,
   createAgentRun,
   resumeAgentRun,
 } from '../api/agentRuns';
+import { useAgentEvents } from '../hooks/useAgentEvents';
 
 interface AgentOrchestratorPanelProps {
   project: Project;
@@ -36,6 +38,44 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
 
   const pollingRef = useRef<number | null>(null);
 
+  // Real-time WebSocket event handler for active run
+  const handleLiveAgentEvent = useCallback((event: AgentEvent) => {
+    // Reactive sync: Fetch authoritative state from PostgreSQL when lifecycle boundaries fire
+    if (activeRun && event.run_id === activeRun.id) {
+      if (event.event_type === 'approval.required') {
+        // Immediate UI reaction to approval checkpoint
+        getAgentRun(event.run_id).then((freshRun) => {
+          setActiveRun(freshRun);
+          setRuns((prev) => prev.map((r) => (r.id === freshRun.id ? freshRun : r)));
+        }).catch((err) => console.error('[AgentOrchestrator] Error syncing approval state:', err));
+      } else if (
+        event.event_type === 'step.completed' ||
+        event.event_type === 'step.started' ||
+        event.event_type === 'tool.completed' ||
+        event.event_type === 'agent.completed' ||
+        event.event_type === 'agent.failed' ||
+        event.event_type === 'agent.cancelled'
+      ) {
+        getAgentRun(event.run_id).then((freshRun) => {
+          setActiveRun(freshRun);
+          setRuns((prev) => prev.map((r) => (r.id === freshRun.id ? freshRun : r)));
+          if (event.event_type === 'agent.completed') {
+            setSuccessMessage('Agent run finished successfully!');
+          }
+        }).catch((err) => console.error('[AgentOrchestrator] Error syncing run state:', err));
+      }
+    }
+  }, [activeRun]);
+
+  // Real-time WebSocket hook connection
+  const {
+    events: liveEvents,
+    connectionState,
+    connect: reconnectWs,
+  } = useAgentEvents(activeRun?.id, {
+    onEvent: handleLiveAgentEvent,
+  });
+
   // Fetch runs on project change
   useEffect(() => {
     fetchProjectRuns();
@@ -44,19 +84,23 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     };
   }, [project.id]);
 
-  // Handle polling when active run is running or pending in Celery queue
+  // Fallback Polling: Adjust interval based on WebSocket connection state
   useEffect(() => {
-    if (activeRun && (activeRun.status === 'running' || activeRun.status === 'pending')) {
-      startPolling(activeRun.id);
+    const isRunActive = activeRun && (activeRun.status === 'running' || activeRun.status === 'pending');
+    if (isRunActive) {
+      // If WebSocket is actively connected, run polling at a relaxed heartbeat (10s)
+      // If WebSocket is offline/reconnecting/error, run polling at rapid fallback frequency (1.5s)
+      const pollInterval = connectionState === 'connected' ? 10000 : 1500;
+      startPolling(activeRun.id, pollInterval);
     } else {
       stopPolling();
     }
     return () => {
       stopPolling();
     };
-  }, [activeRun?.status, activeRun?.id]);
+  }, [activeRun?.status, activeRun?.id, connectionState]);
 
-  const startPolling = (runId: number) => {
+  const startPolling = (runId: number, intervalMs = 1500) => {
     stopPolling();
     pollingRef.current = window.setInterval(async () => {
       try {
@@ -73,7 +117,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         console.error('Polling agent run failed:', err);
         stopPolling();
       }
-    }, 1500);
+    }, intervalMs);
   };
 
   const stopPolling = () => {
@@ -120,7 +164,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       setActiveRun(newRun);
       setGoal('');
       if (newRun.status === 'running' || newRun.status === 'pending') {
-        startPolling(newRun.id);
+        startPolling(newRun.id, connectionState === 'connected' ? 10000 : 1500);
       }
     } catch (err: any) {
       setErrorMessage(err?.data?.detail || 'Failed to start agent run.');
@@ -143,7 +187,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       if (decision === 'approved') {
         setSuccessMessage('Action approved! Agent resumed execution.');
         if (resumed.status === 'running' || resumed.status === 'pending') {
-          startPolling(resumed.id);
+          startPolling(resumed.id, connectionState === 'connected' ? 10000 : 1500);
         }
         if (onActionCreated) onActionCreated();
       } else {
@@ -158,6 +202,42 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
 
   const toggleStepExpand = (stepId: number) => {
     setExpandedStepId((prev) => (prev === stepId ? null : stepId));
+  };
+
+  // WebSocket Connection Indicator helper
+  const getConnectionBadge = (state: AgentEventConnectionState) => {
+    switch (state) {
+      case 'connected':
+        return (
+          <span style={badgeWsLiveStyle} title="Connected to real-time agent event stream">
+            <span style={pulseGreenDotStyle} /> Live Stream
+          </span>
+        );
+      case 'connecting':
+        return (
+          <span style={badgeWsConnectingStyle} title="Connecting to agent WebSocket stream...">
+            <span style={pulseBlueDotStyle} /> Connecting...
+          </span>
+        );
+      case 'reconnecting':
+        return (
+          <span style={badgeWsReconnectingStyle} title="Reconnecting with exponential backoff...">
+            ⚠️ Reconnecting...
+          </span>
+        );
+      case 'error':
+      case 'disconnected':
+      default:
+        return (
+          <span
+            style={badgeWsOfflineStyle}
+            title="WebSocket disconnected. Polling fallback is active."
+            onClick={() => reconnectWs()}
+          >
+            ○ Offline (Polling Active)
+          </span>
+        );
+    }
   };
 
   // Status Styling Helpers
@@ -216,27 +296,30 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           </p>
         </div>
 
-        {/* Run Selector Dropdown */}
+        {/* Run Selector Dropdown & Live Indicator */}
         {runs.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label htmlFor="agent-run-select" style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
-              Runs:
-            </label>
-            <select
-              id="agent-run-select"
-              value={activeRun?.id || ''}
-              onChange={(e) => {
-                const selected = runs.find((r) => String(r.id) === e.target.value);
-                if (selected) setActiveRun(selected);
-              }}
-              style={selectDropdownStyle}
-            >
-              {runs.map((r) => (
-                <option key={r.id} value={r.id}>
-                  Run #{r.id} ({r.status}) — {r.goal.slice(0, 35)}...
-                </option>
-              ))}
-            </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {activeRun && getConnectionBadge(connectionState)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label htmlFor="agent-run-select" style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                Runs:
+              </label>
+              <select
+                id="agent-run-select"
+                value={activeRun?.id || ''}
+                onChange={(e) => {
+                  const selected = runs.find((r) => String(r.id) === e.target.value);
+                  if (selected) setActiveRun(selected);
+                }}
+                style={selectDropdownStyle}
+              >
+                {runs.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    Run #{r.id} ({r.status}) — {r.goal.slice(0, 35)}...
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </div>
@@ -424,9 +507,16 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
 
           {/* Steps Timeline Stream */}
           <div style={{ marginTop: '20px' }}>
-            <h5 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 700, color: '#334155' }}>
-              ReAct Reasoning & Execution Stream ({activeRun.steps?.length || 0} Steps)
-            </h5>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h5 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#334155' }}>
+                ReAct Reasoning & Execution Stream ({activeRun.steps?.length || 0} Steps)
+              </h5>
+              {liveEvents.length > 0 && (
+                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                  ⚡ {liveEvents.length} events received (Seq #{liveEvents[liveEvents.length - 1]?.sequence_number})
+                </span>
+              )}
+            </div>
 
             {activeRun.steps && activeRun.steps.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -829,7 +919,75 @@ const emptyStepsStyle: React.CSSProperties = {
   textAlign: 'center',
 };
 
-// Badges
+// WebSocket Live Badges
+const badgeWsLiveStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#ecfdf5',
+  color: '#059669',
+  border: '1px solid #a7f3d0',
+};
+
+const pulseGreenDotStyle: React.CSSProperties = {
+  width: '8px',
+  height: '8px',
+  borderRadius: '50%',
+  backgroundColor: '#10b981',
+};
+
+const badgeWsConnectingStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#eff6ff',
+  color: '#2563eb',
+  border: '1px solid #bfdbfe',
+};
+
+const pulseBlueDotStyle: React.CSSProperties = {
+  width: '8px',
+  height: '8px',
+  borderRadius: '50%',
+  backgroundColor: '#3b82f6',
+};
+
+const badgeWsReconnectingStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#fffbeb',
+  color: '#b45309',
+  border: '1px solid #fcd34d',
+};
+
+const badgeWsOfflineStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 600,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#f8fafc',
+  color: '#64748b',
+  border: '1px solid #e2e8f0',
+  cursor: 'pointer',
+};
+
+// Status Badges
 const badgeRunningStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',

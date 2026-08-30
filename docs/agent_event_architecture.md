@@ -1,6 +1,6 @@
-# DoxaRank — Real-Time Agent Event Architecture (Milestone 3, Phase 3.1)
+# DoxaRank — Real-Time Agent Event Architecture (Milestone 3, Phase 3.1 - 3.3)
 
-This document outlines the transport-independent event contract, lifecycle events, publisher abstraction, sequence ordering, payload security, and architectural relationship between the database source-of-truth and the real-time event stream in DoxaRank.
+This document outlines the transport-independent event contract, lifecycle events, publisher abstraction, sequence ordering, payload security, WebSocket client layer, and architectural relationship between the database source-of-truth and the real-time event stream in DoxaRank.
 
 ---
 
@@ -19,38 +19,45 @@ The real-time event layer provides decoupled, transport-independent structured e
 3. **Observability Resilience**: Event publication errors are treated as non-fatal observability warnings; transport failures never abort or corrupt an active SEO agent execution.
 4. **Zero Token / Secret Leakage**: Strict sanitization guarantees that OpenAI/Anthropic API keys, Bearer tokens, passwords, and private provider credentials are never placed in event payloads.
 5. **No Private Hidden Reasoning**: Event payloads contain concise, user-facing summary information and action rationale, preventing exposure of internal chain-of-thought tokens.
+6. **Read-Only Real-Time Transport**: The WebSocket channel is strictly a notification/read stream. All state mutations and human approvals occur via authenticated REST APIs.
 
 ---
 
-## 2. Event Layer Architecture
+## 2. End-to-End Real-Time Event Architecture
 
 ```text
+               React Dashboard (AgentOrchestratorPanel)
+                                  │
+                                  ▼
+                            useAgentEvents
+                                  │
+                                  ▼
+                         AgentEventClient (WS)
+                                  │
+               (ws://.../ws/seo/ai/agent/runs/{run_id}/?token=...)
+                                  ▼
+                         AgentEventConsumer
+                     (Django Channels ASGI Layer)
+                                  │
+                                  ▼
+                         Redis Pub/Sub Layer
+                   (channel `agent:run:{run_id}`)
+                                  ▲
+                                  │
+                         RedisEventPublisher
+                                  ▲
+                                  │
                           AgentOrchestrator
-                                 │
-                                 ▼
-                             AgentEvent
-                (UUID4, sequence_number, timestamp,
-                   sanitized user-facing payload)
-                                 │
-                                 ▼
-                        AgentEventPublisher
-                                 │
-                   ┌─────────────┴─────────────┐
-                   ▼                           ▼
-        InMemoryEventPublisher     Future Transports (Phase 3.2+)
-         (Unit tests / Local)        ├── Redis Pub/Sub
-                                     ├── Django Channels / WebSockets
-                                     └── Server-Sent Events (SSE)
-                                               │
-                                               ▼
-                                        React Dashboard
+                                  │
+                                  ▼
+                   PostgreSQL State (Authoritative)
 ```
 
 ---
 
 ## 3. Strongly-Typed Event System
 
-All events use the `AgentEventType` enum defined in `apps.seo.services.agent_events.py`:
+All events use the `AgentEventType` enum defined in `apps.seo.services.agent_events.py` (and mirrored in `dashboard/src/types/agentEvent.ts`):
 
 | Event Type | Category | Emitted When |
 |---|---|---|
@@ -107,7 +114,8 @@ Every event implements the `AgentEvent` data structure:
 
 1. **Ordering Mechanism**: Ordering is determined **exclusively** by the monotonically increasing integer `sequence_number` per `AgentRun` (1, 2, 3, 4...).
 2. **Timestamps as Metadata**: Timestamps provide chronological context for humans and logging, but must not be used for ordering.
-3. **Resumption Continuity**:
+3. **Frontend De-duplication & Sorting**: The React client uses `seenEventIds` to reject duplicates and sorts incoming events strictly by `sequence_number` ascending.
+4. **Resumption Continuity**:
    - When an `AgentRun` pauses on `approval.required` (e.g. at sequence #6), the last sequence number is tracked in `run.context_snapshot['_event_seq']`.
    - When resumed in a subsequent Celery worker or process, the orchestrator initializes from `_event_seq` and emits `approval.approved` as sequence #7.
    - Resumed runs **never** reset sequence numbers to 1 and **never** re-emit `agent.started`.
@@ -128,9 +136,29 @@ Sequence 10 → agent.completed
 
 ---
 
-## 6. Payload Security & Sanitization Rules
+## 6. Frontend Client & Hook Layer (Phase 3.3)
 
-To prevent accidental leakage of sensitive tokens, credentials, or private model reasoning:
+### WebSocket Client (`dashboard/src/api/agentEvents.ts`)
+- Reusable `AgentEventClient` class managing connection state (`connecting`, `connected`, `reconnecting`, `disconnected`, `error`).
+- Reuses authenticated JWT access tokens from storage via `?token=<access_token>`.
+- Exponential backoff reconnection (`1s, 2s, 4s, 8s, 16s...` capped at `30s`).
+- Immediately terminates retry loops on terminal authentication/authorization close codes (`4001`, `4003`, `4004`).
+
+### React Hook (`dashboard/src/hooks/useAgentEvents.ts`)
+- Hook `useAgentEvents(runId)` automatically connects and subscribes on mount / run selection.
+- Validates event contract and maintains state: `{ events, connectionState, error, lastEvent, connect, disconnect, clearEvents }`.
+- Guarantees ascending sequence order and eliminates duplicate `event_id` entries.
+
+### Fallback Polling & Authoritative State
+- **Primary Transport**: WebSocket streaming for instantaneous sub-second UI reactivity.
+- **Fallback Polling**: If the WebSocket is disconnected, in error, or reconnecting, the dashboard automatically maintains polling at 1.5s intervals.
+- When WebSocket is connected, polling is reduced to a relaxed 10s heartbeat.
+- **Authoritative Source**: PostgreSQL remains the authoritative source of record. WebSocket events trigger reactive re-fetching or incremental updates without duplicating state.
+- **Server-Controlled Approval**: `approval.required` events notify the UI to display the review card, but approvals/rejections are submitted strictly via authenticated POST endpoints (`/api/seo/ai/agent/runs/{id}/resume/`).
+
+---
+
+## 7. Security & Sanitization Rules
 
 1. **Automatic Credential Masking**:
    - API keys matching `sk-[a-zA-Z0-9_-]{8,}` are masked as `sk-***`.
@@ -140,49 +168,16 @@ To prevent accidental leakage of sensitive tokens, credentials, or private model
 2. **Hidden Reasoning Protection**:
    - Internal chain-of-thought prompts and intermediate LLM scratchpad states are never included in event payloads.
    - Only user-facing status messages, tool names, durations, and high-level rationales are propagated.
+3. **No Credential Exposure**:
+   - Client-side WebSocket logging avoids logging raw URLs containing JWT tokens.
+   - All authorization checks remain strictly server-side (`run.project.owner_id == user.id`).
 
 ---
 
-## 7. Publisher Abstraction (`AgentEventPublisher`)
+## 8. Milestone Roadmap
 
-The publisher layer adheres to Dependency Inversion:
-
-```python
-class AgentEventPublisher(ABC):
-    @abstractmethod
-    def publish(self, event: AgentEvent) -> None:
-        pass
-```
-
-### Implementations:
-- **`InMemoryEventPublisher`**: In-memory publisher used for deterministic testing and in-process validation. Stores events in an in-memory buffer.
-- **`RedisEventPublisher` (Phase 3.2.1)**: Production Redis Pub/Sub publisher. Publishes JSON-serialized AgentEvents to `agent:run:{run_id}`. Reuses existing `settings.CELERY_BROKER_URL` / `settings.REDIS_URL`. All transport exceptions are caught and logged non-fatally.
-- **`WebSocketEventPublisher` (Phase 3.2.2+)**: Dispatches events directly to Django Channels group consumers.
-
----
-
-## 8. Integration with Background Execution & Database Models
-
-```text
-Celery Worker (`apps.seo.tasks.execute_agent_run`)
-    │  (Responsible for async concurrency, row locking, and retry handling)
-    ▼
-AgentOrchestrator (`apps.seo.services.agent_orchestrator`)
-    │  (Responsible for agent reasoning loop, tool invocation, and decision logic)
-    ├── Emits AgentEvent ──▶ RedisEventPublisher ──▶ Redis Channel (`agent:run:{id}`)
-    └── Persists State   ──▶ PostgreSQL (AgentRun, AgentStep, AgentToolCall, SEOAction)
-```
-
-- Celery background workers do not construct business-level agent events.
-- The `AgentOrchestrator` is the single authority responsible for emitting lifecycle events.
-- If the event publisher fails (e.g., Redis network outage), the orchestrator and publisher catch the exception, log a warning, and continue executing safely without corrupting the database.
-
----
-
-## 9. Future Roadmap: Phase 3.2.2+
-
+- **Phase 3.1 (Completed)**: Transport-Independent Event Contract & Lifecycle Definitions.
 - **Phase 3.2.1 (Completed)**: `RedisEventPublisher` implementing Pub/Sub on `agent:run:{run_id}`.
-- **Phase 3.2.2**: Django Channels ASGI setup, channel layers, and `AgentEventConsumer` WebSocket consumer.
-- **Phase 3.3**: Frontend WebSocket client & state reducer for real-time dashboard updates.
-- **Phase 3.4**: Reconnection resilience, missed event replay, and live progress indicators.
-
+- **Phase 3.2.2 (Completed)**: Django Channels ASGI setup, channel layers, and `AgentEventConsumer` WebSocket consumer.
+- **Phase 3.3 (Completed)**: Frontend Real-Time Agent Event Client (`AgentEventClient`, `useAgentEvents`, `AgentOrchestratorPanel` integration, fallback polling, connection indicator).
+- **Phase 3.4**: Reconnection resilience, missed event replay buffer, and detailed step telemetry visualization.
