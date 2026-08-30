@@ -291,3 +291,217 @@ def set_event_publisher(publisher: AgentEventPublisher) -> None:
     """Set the global AgentEventPublisher instance."""
     global _default_publisher
     _default_publisher = publisher
+
+
+def reconstruct_agent_run_events(run) -> List[Dict[str, Any]]:
+    """
+    Deterministically reconstruct canonical AgentEvent sequence from PostgreSQL models
+    (AgentRun, AgentStep, AgentToolCall) for historical runs without stored event history.
+    """
+    events = []
+    seq = 1
+
+    # 1. agent.started
+    created_ts = run.created_at.isoformat() if hasattr(run, 'created_at') and run.created_at else timezone.now().isoformat()
+    events.append({
+        "event_id": f"rec-{run.id}-start",
+        "event_type": AgentEventType.AGENT_STARTED.value,
+        "run_id": run.id,
+        "project_id": run.project_id,
+        "step_number": None,
+        "sequence_number": seq,
+        "timestamp": created_ts,
+        "payload": sanitize_event_payload({
+            "goal": run.goal,
+            "project_id": run.project_id,
+            "max_steps": run.max_steps
+        })
+    })
+
+    # 2. Steps & Tool Calls
+    steps = run.steps.order_by('step_number').prefetch_related('tool_calls')
+    for step in steps:
+        step_num = step.step_number
+        tool_calls = list(step.tool_calls.order_by('created_at'))
+        tool_call = tool_calls[0] if tool_calls else None
+        tool_name = tool_call.tool_name if tool_call else None
+
+        # step.started
+        seq += 1
+        step_created_ts = step.created_at.isoformat() if step.created_at else timezone.now().isoformat()
+        events.append({
+            "event_id": f"rec-{run.id}-step-{step_num}-start",
+            "event_type": AgentEventType.STEP_STARTED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": step_num,
+            "sequence_number": seq,
+            "timestamp": step_created_ts,
+            "payload": sanitize_event_payload({
+                "step_number": step_num,
+                "action_type": step.action_type,
+                "tool_name": tool_name
+            })
+        })
+
+        if tool_call:
+            # tool.started
+            seq += 1
+            tc_created_ts = tool_call.created_at.isoformat() if tool_call.created_at else timezone.now().isoformat()
+            events.append({
+                "event_id": f"rec-{run.id}-tc-{tool_call.id}-start",
+                "event_type": AgentEventType.TOOL_STARTED.value,
+                "run_id": run.id,
+                "project_id": run.project_id,
+                "step_number": step_num,
+                "sequence_number": seq,
+                "timestamp": tc_created_ts,
+                "payload": sanitize_event_payload({
+                    "step_number": step_num,
+                    "tool_name": tool_call.tool_name,
+                    "arguments": tool_call.tool_input
+                })
+            })
+
+            # tool.completed / tool.failed
+            seq += 1
+            is_success = not bool(tool_call.error_message)
+            tc_completed_ts = tool_call.completed_at.isoformat() if tool_call.completed_at else (
+                tool_call.created_at.isoformat() if tool_call.created_at else timezone.now().isoformat()
+            )
+            events.append({
+                "event_id": f"rec-{run.id}-tc-{tool_call.id}-finish",
+                "event_type": AgentEventType.TOOL_COMPLETED.value if is_success else AgentEventType.TOOL_FAILED.value,
+                "run_id": run.id,
+                "project_id": run.project_id,
+                "step_number": step_num,
+                "sequence_number": seq,
+                "timestamp": tc_completed_ts,
+                "payload": sanitize_event_payload({
+                    "step_number": step_num,
+                    "tool_name": tool_call.tool_name,
+                    "duration_ms": tool_call.duration_ms,
+                    "success": is_success,
+                    "error_message": tool_call.error_message if not is_success else ""
+                })
+            })
+
+        # step.completed / step.failed
+        seq += 1
+        is_step_success = step.status != 'failed'
+        step_completed_ts = step.completed_at.isoformat() if step.completed_at else (
+            step.created_at.isoformat() if step.created_at else timezone.now().isoformat()
+        )
+        events.append({
+            "event_id": f"rec-{run.id}-step-{step_num}-finish",
+            "event_type": AgentEventType.STEP_COMPLETED.value if is_step_success else AgentEventType.STEP_FAILED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": step_num,
+            "sequence_number": seq,
+            "timestamp": step_completed_ts,
+            "payload": sanitize_event_payload({
+                "step_number": step_num,
+                "tool_name": tool_name,
+                "success": is_step_success
+            })
+        })
+
+    # 3. Approval events
+    if run.status == 'waiting_for_approval':
+        seq += 1
+        updated_ts = run.updated_at.isoformat() if hasattr(run, 'updated_at') and run.updated_at else timezone.now().isoformat()
+        events.append({
+            "event_id": f"rec-{run.id}-approval-req",
+            "event_type": AgentEventType.APPROVAL_REQUIRED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": run.total_steps,
+            "sequence_number": seq,
+            "timestamp": updated_ts,
+            "payload": sanitize_event_payload({
+                "requires_human_approval": True,
+                "run_id": run.id
+            })
+        })
+
+    # 4. Terminal events
+    completed_ts = run.completed_at.isoformat() if hasattr(run, 'completed_at') and run.completed_at else timezone.now().isoformat()
+    if run.status == 'completed':
+        seq += 1
+        events.append({
+            "event_id": f"rec-{run.id}-finish",
+            "event_type": AgentEventType.AGENT_COMPLETED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": run.total_steps,
+            "sequence_number": seq,
+            "timestamp": completed_ts,
+            "payload": sanitize_event_payload({
+                "summary": run.summary,
+                "total_steps": run.total_steps
+            })
+        })
+    elif run.status == 'failed':
+        seq += 1
+        events.append({
+            "event_id": f"rec-{run.id}-failed",
+            "event_type": AgentEventType.AGENT_FAILED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": run.total_steps,
+            "sequence_number": seq,
+            "timestamp": completed_ts,
+            "payload": sanitize_event_payload({
+                "summary": run.summary,
+                "error": "Execution failed"
+            })
+        })
+    elif run.status == 'cancelled':
+        seq += 1
+        events.append({
+            "event_id": f"rec-{run.id}-cancelled",
+            "event_type": AgentEventType.AGENT_CANCELLED.value,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "step_number": run.total_steps,
+            "sequence_number": seq,
+            "timestamp": completed_ts,
+            "payload": sanitize_event_payload({
+                "summary": run.summary
+            })
+        })
+
+    return events
+
+
+def get_agent_run_events(run, after_sequence: int = 0) -> List[Dict[str, Any]]:
+    """
+    Retrieve sanitized AgentEvents for an AgentRun filtered strictly after `after_sequence`.
+    Prefers stored `_event_history` in `run.context_snapshot` if present,
+    or reconstructs deterministically from database models.
+    Guarantees ascending order by `sequence_number` and zero credential leakage.
+    """
+    snapshot = run.context_snapshot or {}
+    stored_history = snapshot.get('_event_history')
+
+    if stored_history and isinstance(stored_history, list) and len(stored_history) > 0:
+        event_list = list(stored_history)
+    else:
+        event_list = reconstruct_agent_run_events(run)
+
+    # Filter strictly where sequence_number > after_sequence
+    filtered = [
+        dict(e) for e in event_list
+        if isinstance(e, dict) and int(e.get('sequence_number', 0)) > int(after_sequence)
+    ]
+
+    # Guarantee monotonic sort order
+    filtered.sort(key=lambda x: int(x.get('sequence_number', 0)))
+
+    # Ensure all payloads are safely sanitized
+    for ev in filtered:
+        if 'payload' in ev:
+            ev['payload'] = sanitize_event_payload(ev['payload'])
+
+    return filtered

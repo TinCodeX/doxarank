@@ -35,6 +35,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedStepId, setExpandedStepId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<'steps' | 'events'>('steps');
 
   const pollingRef = useRef<number | null>(null);
 
@@ -67,12 +68,15 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     }
   }, [activeRun]);
 
-  // Real-time WebSocket hook connection
+  // Real-time WebSocket hook connection with gap recovery
   const {
     events: liveEvents,
     connectionState,
+    highestSequence,
     connect: reconnectWs,
+    recoverMissingEvents,
   } = useAgentEvents(activeRun?.id, {
+    enableReplayRecovery: true,
     onEvent: handleLiveAgentEvent,
   });
 
@@ -88,9 +92,10 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   useEffect(() => {
     const isRunActive = activeRun && (activeRun.status === 'running' || activeRun.status === 'pending');
     if (isRunActive) {
-      // If WebSocket is actively connected, run polling at a relaxed heartbeat (10s)
+      // If WebSocket is actively connected or recovering, run polling at a relaxed heartbeat (10s)
       // If WebSocket is offline/reconnecting/error, run polling at rapid fallback frequency (1.5s)
-      const pollInterval = connectionState === 'connected' ? 10000 : 1500;
+      const isLiveOrRecovering = connectionState === 'connected' || connectionState === 'recovering';
+      const pollInterval = isLiveOrRecovering ? 10000 : 1500;
       startPolling(activeRun.id, pollInterval);
     } else {
       stopPolling();
@@ -213,6 +218,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             <span style={pulseGreenDotStyle} /> Live Stream
           </span>
         );
+      case 'recovering':
+        return (
+          <span style={badgeWsRecoveringStyle} title="Recovering missed events from server...">
+            ↻ Recovering Events...
+          </span>
+        );
       case 'connecting':
         return (
           <span style={badgeWsConnectingStyle} title="Connecting to agent WebSocket stream...">
@@ -231,7 +242,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         return (
           <span
             style={badgeWsOfflineStyle}
-            title="WebSocket disconnected. Polling fallback is active."
+            title="WebSocket disconnected. Polling fallback is active. Click to reconnect."
             onClick={() => reconnectWs()}
           >
             ○ Offline (Polling Active)
@@ -270,6 +281,19 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       default:
         return <span style={badgePendingStyle}>⏳ {status}</span>;
     }
+  };
+
+  const getEventTypeTagStyle = (eventType: string) => {
+    if (eventType.startsWith('agent.')) {
+      return { backgroundColor: '#e0e7ff', color: '#3730a3' };
+    }
+    if (eventType.startsWith('tool.')) {
+      return { backgroundColor: '#f3e8ff', color: '#6b21a8' };
+    }
+    if (eventType.startsWith('approval.')) {
+      return { backgroundColor: '#fef3c7', color: '#92400e' };
+    }
+    return { backgroundColor: '#f1f5f9', color: '#475569' };
   };
 
   return (
@@ -505,111 +529,185 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             </div>
           )}
 
-          {/* Steps Timeline Stream */}
-          <div style={{ marginTop: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h5 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#334155' }}>
-                ReAct Reasoning & Execution Stream ({activeRun.steps?.length || 0} Steps)
-              </h5>
-              {liveEvents.length > 0 && (
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-                  ⚡ {liveEvents.length} events received (Seq #{liveEvents[liveEvents.length - 1]?.sequence_number})
-                </span>
-              )}
+          {/* Telemetry Stream View Toggle */}
+          <div style={{ marginTop: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setViewMode('steps')}
+                  style={{
+                    ...tabBtnStyle,
+                    backgroundColor: viewMode === 'steps' ? '#4338ca' : '#f1f5f9',
+                    color: viewMode === 'steps' ? '#ffffff' : '#475569',
+                  }}
+                >
+                  ⚡ ReAct Steps ({activeRun.steps?.length || 0})
+                </button>
+                <button
+                  onClick={() => setViewMode('events')}
+                  style={{
+                    ...tabBtnStyle,
+                    backgroundColor: viewMode === 'events' ? '#4338ca' : '#f1f5f9',
+                    color: viewMode === 'events' ? '#ffffff' : '#475569',
+                  }}
+                >
+                  📡 Event Log ({liveEvents.length} Events)
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {highestSequence > 0 && (
+                  <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                    Seq Cursor: #{highestSequence}
+                  </span>
+                )}
+                <button
+                  onClick={() => recoverMissingEvents()}
+                  style={syncBtnStyle}
+                  title="Sync any missed events from backend"
+                >
+                  ↻ Sync Events
+                </button>
+              </div>
             </div>
 
-            {activeRun.steps && activeRun.steps.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {activeRun.steps.map((step: AgentStep) => {
-                  const toolCall = step.tool_calls?.[0];
-                  const isExpanded = expandedStepId === step.id;
-                  const isStepWaiting = step.status === 'waiting';
-                  const isStepFailed = step.status === 'failed';
-                  const isStepCompleted = step.status === 'completed';
+            {/* View Mode: ReAct Steps Timeline */}
+            {viewMode === 'steps' && (
+              activeRun.steps && activeRun.steps.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {activeRun.steps.map((step: AgentStep) => {
+                    const toolCall = step.tool_calls?.[0];
+                    const isExpanded = expandedStepId === step.id;
+                    const isStepWaiting = step.status === 'waiting';
+                    const isStepFailed = step.status === 'failed';
+                    const isStepCompleted = step.status === 'completed';
 
-                  return (
-                    <div
-                      key={step.id}
-                      id={`agent-step-${step.step_number}`}
-                      style={{
-                        ...stepItemStyle,
-                        borderColor: isStepWaiting ? '#fcd34d' : isStepFailed ? '#fca5a5' : '#e2e8f0',
-                        backgroundColor: isStepWaiting ? '#fffbeb' : isStepFailed ? '#fef2f2' : '#ffffff',
-                      }}
-                    >
-                      {/* Step Header Line */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                          <span
-                            style={{
-                              ...stepNumberBadgeStyle,
-                              backgroundColor: isStepWaiting ? '#f59e0b' : isStepFailed ? '#ef4444' : isStepCompleted ? '#10b981' : '#3b82f6',
-                            }}
-                          >
-                            {step.step_number}
-                          </span>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span style={actionTypeTagStyle}>{step.action_type_display}</span>
-                              {toolCall && (
-                                <code style={toolNameCodeStyle}>
-                                  🔧 {toolCall.tool_name}
-                                </code>
-                              )}
-                              {toolCall?.duration_ms !== undefined && (
-                                <span style={{ fontSize: '11px', color: '#64748b' }}>
-                                  ⏱️ {toolCall.duration_ms}ms
-                                </span>
-                              )}
-                            </div>
-                            <p style={stepThoughtStyle}>
-                              {step.thought}
-                            </p>
-                          </div>
-                        </div>
-
-                        {toolCall && (
-                          <button
-                            onClick={() => toggleStepExpand(step.id)}
-                            style={toggleDetailBtnStyle}
-                          >
-                            {isExpanded ? 'Hide Data ▲' : 'View Observation ▼'}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Expandable Tool Call Observation Details */}
-                      {isExpanded && toolCall && (
-                        <div style={toolDetailBoxStyle}>
-                          <div style={{ marginBottom: '8px' }}>
-                            <strong style={{ fontSize: '12px', color: '#475569' }}>Arguments Passed:</strong>
-                            <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_input, null, 2)}</pre>
-                          </div>
-                          {toolCall.error_message ? (
+                    return (
+                      <div
+                        key={step.id}
+                        id={`agent-step-${step.step_number}`}
+                        style={{
+                          ...stepItemStyle,
+                          borderColor: isStepWaiting ? '#fcd34d' : isStepFailed ? '#fca5a5' : '#e2e8f0',
+                          backgroundColor: isStepWaiting ? '#fffbeb' : isStepFailed ? '#fef2f2' : '#ffffff',
+                        }}
+                      >
+                        {/* Step Header Line */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                            <span
+                              style={{
+                                ...stepNumberBadgeStyle,
+                                backgroundColor: isStepWaiting ? '#f59e0b' : isStepFailed ? '#ef4444' : isStepCompleted ? '#10b981' : '#3b82f6',
+                              }}
+                            >
+                              {step.step_number}
+                            </span>
                             <div>
-                              <strong style={{ fontSize: '12px', color: '#dc2626' }}>Error Details:</strong>
-                              <pre style={{ ...codeBlockStyle, color: '#dc2626', backgroundColor: '#fef2f2' }}>
-                                {toolCall.error_message}
-                              </pre>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={actionTypeTagStyle}>{step.action_type_display}</span>
+                                {toolCall && (
+                                  <code style={toolNameCodeStyle}>
+                                    🔧 {toolCall.tool_name}
+                                  </code>
+                                )}
+                                {toolCall?.duration_ms !== undefined && (
+                                  <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                    ⏱️ {toolCall.duration_ms}ms
+                                  </span>
+                                )}
+                              </div>
+                              <p style={stepThoughtStyle}>
+                                {step.thought}
+                              </p>
                             </div>
-                          ) : (
-                            <div>
-                              <strong style={{ fontSize: '12px', color: '#475569' }}>Tool Observation / Output:</strong>
-                              <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_output, null, 2)}</pre>
-                            </div>
+                          </div>
+
+                          {toolCall && (
+                            <button
+                              onClick={() => toggleStepExpand(step.id)}
+                              style={toggleDetailBtnStyle}
+                            >
+                              {isExpanded ? 'Hide Data ▲' : 'View Observation ▼'}
+                            </button>
                           )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={emptyStepsStyle}>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
-                  No execution steps recorded yet. Click "Run Autonomous Agent" to start.
-                </p>
-              </div>
+
+                        {/* Expandable Tool Call Observation Details */}
+                        {isExpanded && toolCall && (
+                          <div style={toolDetailBoxStyle}>
+                            <div style={{ marginBottom: '8px' }}>
+                              <strong style={{ fontSize: '12px', color: '#475569' }}>Arguments Passed:</strong>
+                              <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_input, null, 2)}</pre>
+                            </div>
+                            {toolCall.error_message ? (
+                              <div>
+                                <strong style={{ fontSize: '12px', color: '#dc2626' }}>Error Details:</strong>
+                                <pre style={{ ...codeBlockStyle, color: '#dc2626', backgroundColor: '#fef2f2' }}>
+                                  {toolCall.error_message}
+                                </pre>
+                              </div>
+                            ) : (
+                              <div>
+                                <strong style={{ fontSize: '12px', color: '#475569' }}>Tool Observation / Output:</strong>
+                                <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_output, null, 2)}</pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={emptyStepsStyle}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                    No execution steps recorded yet. Click "Run Autonomous Agent" to start.
+                  </p>
+                </div>
+              )
+            )}
+
+            {/* View Mode: Real-Time Event Log */}
+            {viewMode === 'events' && (
+              liveEvents.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {liveEvents.map((ev) => {
+                    const tagStyle = getEventTypeTagStyle(ev.event_type);
+                    return (
+                      <div key={ev.event_id} style={eventRowStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={sequenceBadgeStyle}>#{ev.sequence_number}</span>
+                          <span style={{ ...eventTagStyle, ...tagStyle }}>{ev.event_type}</span>
+                          {ev.step_number !== null && ev.step_number !== undefined && (
+                            <span style={stepSmallTagStyle}>Step {ev.step_number}</span>
+                          )}
+                          {ev.payload?.tool_name && (
+                            <code style={toolNameCodeStyle}>🔧 {ev.payload.tool_name}</code>
+                          )}
+                          {ev.payload?.duration_ms !== undefined && (
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>
+                              ⏱️ {ev.payload.duration_ms}ms
+                            </span>
+                          )}
+                          {ev.payload?.requires_human_approval && (
+                            <span style={approvalBadgeStyle}>⚠️ Approval Checkpoint</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          {new Date(ev.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={emptyStepsStyle}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                    No real-time events logged for this run yet.
+                  </p>
+                </div>
+              )
             )}
           </div>
         </div>
@@ -826,6 +924,27 @@ const summaryBoxStyle: React.CSSProperties = {
   marginBottom: '20px',
 };
 
+const tabBtnStyle: React.CSSProperties = {
+  padding: '6px 14px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  border: 'none',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+};
+
+const syncBtnStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  borderRadius: '6px',
+  fontSize: '11px',
+  fontWeight: 600,
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
+  border: '1px solid #cbd5e1',
+  cursor: 'pointer',
+};
+
 const stepItemStyle: React.CSSProperties = {
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
@@ -900,6 +1019,51 @@ const codeBlockStyle: React.CSSProperties = {
   maxHeight: '180px',
 };
 
+const eventRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '10px 14px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
+  backgroundColor: '#f8fafc',
+};
+
+const sequenceBadgeStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 800,
+  fontFamily: 'monospace',
+  backgroundColor: '#e2e8f0',
+  color: '#334155',
+  padding: '2px 6px',
+  borderRadius: '4px',
+};
+
+const eventTagStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 700,
+  padding: '2px 8px',
+  borderRadius: '4px',
+};
+
+const stepSmallTagStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 600,
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
+  padding: '2px 6px',
+  borderRadius: '4px',
+};
+
+const approvalBadgeStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 700,
+  backgroundColor: '#fef3c7',
+  color: '#92400e',
+  padding: '2px 8px',
+  borderRadius: '4px',
+};
+
 const emptyRunsCardStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -938,6 +1102,19 @@ const pulseGreenDotStyle: React.CSSProperties = {
   height: '8px',
   borderRadius: '50%',
   backgroundColor: '#10b981',
+};
+
+const badgeWsRecoveringStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  fontSize: '12px',
+  fontWeight: 700,
+  padding: '3px 10px',
+  borderRadius: '12px',
+  backgroundColor: '#f5f3ff',
+  color: '#6d28d9',
+  border: '1px solid #ddd6fe',
 };
 
 const badgeWsConnectingStyle: React.CSSProperties = {

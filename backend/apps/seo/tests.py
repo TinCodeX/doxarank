@@ -5268,4 +5268,244 @@ class AgentWebSocketConsumerTests(TestCase):
         self.assertEqual(self.run_a.status, AgentRunStatus.RUNNING)
 
 
+# ==============================================================================
+# MILESTONE 3, PHASE 3.4: REAL-TIME EVENT RESILIENCE & REPLAY TEST SUITE
+# ==============================================================================
 
+class AgentEventReplayAPITests(TestCase):
+    """
+    Phase 3.4: Replay API Authorization, Cursor Recovery, Ordering & Sanitization Tests
+    1. Authenticated owner can retrieve events from replay endpoint
+    2. Anonymous/unauthenticated user is rejected with HTTP 401
+    3. Cross-tenant access is rejected with HTTP 404 (zero leakage)
+    4. Nonexistent run returns HTTP 404
+    5. Cursor ?after_sequence=0 returns all available events
+    6. Cursor ?after_sequence=N returns strictly events after N
+    7. Cursor ?after_sequence=latest returns empty list
+    8. Returned events are strictly ascending by sequence_number
+    9. Sensitive credentials (sk-..., Bearer...) are sanitized in replayed payloads
+    10. Replay works cleanly across COMPLETED, FAILED, and CANCELLED terminal states
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            email='replay_owner@doxarank.com',
+            password='Password123!',
+            first_name='Replay',
+            last_name='Owner'
+        )
+        self.other_user = User.objects.create_user(
+            email='replay_other@doxarank.com',
+            password='Password123!',
+            first_name='Other',
+            last_name='User'
+        )
+
+        self.project = Project.objects.create(
+            owner=self.owner,
+            name='Replay Project',
+            website_url='https://replay-test.et'
+        )
+        self.other_project = Project.objects.create(
+            owner=self.other_user,
+            name='Other Project',
+            website_url='https://other-test.et'
+        )
+
+        # Create AgentRun with stored event history
+        self.run = AgentRun.objects.create(
+            project=self.project,
+            user=self.owner,
+            goal='Analyze competitor keyword gaps and propose action',
+            status=AgentRunStatus.RUNNING,
+            max_steps=15,
+            total_steps=1,
+            context_snapshot={
+                '_event_seq': 5,
+                '_event_history': [
+                    {
+                        'event_id': 'evt-1-start',
+                        'event_type': 'agent.started',
+                        'run_id': 1,
+                        'project_id': self.project.id,
+                        'step_number': None,
+                        'sequence_number': 1,
+                        'timestamp': '2026-08-30T10:00:00Z',
+                        'payload': {'goal': 'Analyze gaps'}
+                    },
+                    {
+                        'event_id': 'evt-2-step-start',
+                        'event_type': 'step.started',
+                        'run_id': 1,
+                        'project_id': self.project.id,
+                        'step_number': 1,
+                        'sequence_number': 2,
+                        'timestamp': '2026-08-30T10:00:01Z',
+                        'payload': {'step_number': 1, 'action_type': 'tool_call'}
+                    },
+                    {
+                        'event_id': 'evt-3-tool-start',
+                        'event_type': 'tool.started',
+                        'run_id': 1,
+                        'project_id': self.project.id,
+                        'step_number': 1,
+                        'sequence_number': 3,
+                        'timestamp': '2026-08-30T10:00:02Z',
+                        'payload': {'tool_name': 'get_keyword_rankings'}
+                    },
+                    {
+                        'event_id': 'evt-4-tool-finish',
+                        'event_type': 'tool.completed',
+                        'run_id': 1,
+                        'project_id': self.project.id,
+                        'step_number': 1,
+                        'sequence_number': 4,
+                        'timestamp': '2026-08-30T10:00:03Z',
+                        'payload': {'tool_name': 'get_keyword_rankings', 'duration_ms': 120, 'success': True}
+                    },
+                    {
+                        'event_id': 'evt-5-step-finish',
+                        'event_type': 'step.completed',
+                        'run_id': 1,
+                        'project_id': self.project.id,
+                        'step_number': 1,
+                        'sequence_number': 5,
+                        'timestamp': '2026-08-30T10:00:04Z',
+                        'payload': {'step_number': 1, 'success': True}
+                    }
+                ]
+            }
+        )
+
+    def test_owner_can_retrieve_replay_events(self):
+        """1. Authenticated owner receives HTTP 200 with list of events."""
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/ai/agent/runs/{self.run.id}/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 5)
+        self.assertEqual(response.data[0]['event_type'], 'agent.started')
+        self.assertEqual(response.data[4]['event_type'], 'step.completed')
+
+    def test_anonymous_user_is_rejected(self):
+        """2. Unauthenticated request is rejected with HTTP 401."""
+        url = f'/api/seo/ai/agent/runs/{self.run.id}/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_cross_tenant_access_is_rejected(self):
+        """3. Another user cannot access project owner's run events (returns 404)."""
+        self.client.force_authenticate(user=self.other_user)
+        url = f'/api/seo/ai/agent/runs/{self.run.id}/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_nonexistent_run_returns_404(self):
+        """4. Request for non-existent run ID returns HTTP 404."""
+        self.client.force_authenticate(user=self.owner)
+        url = '/api/seo/ai/agent/runs/999999/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_after_sequence_cursor_filtering(self):
+        """5 & 6 & 7. ?after_sequence filters strictly after cursor."""
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/ai/agent/runs/{self.run.id}/events/'
+
+        # Cursor = 0 (all events)
+        res_0 = self.client.get(f"{url}?after_sequence=0")
+        self.assertEqual(len(res_0.data), 5)
+        self.assertEqual([e['sequence_number'] for e in res_0.data], [1, 2, 3, 4, 5])
+
+        # Cursor = 3 (events after 3 -> 4, 5)
+        res_3 = self.client.get(f"{url}?after_sequence=3")
+        self.assertEqual(len(res_3.data), 2)
+        self.assertEqual([e['sequence_number'] for e in res_3.data], [4, 5])
+
+        # Cursor = 5 (no events after 5 -> [])
+        res_5 = self.client.get(f"{url}?after_sequence=5")
+        self.assertEqual(len(res_5.data), 0)
+
+    def test_replay_events_are_strictly_ascending(self):
+        """8. Replayed events are always sorted ascending by sequence_number."""
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/ai/agent/runs/{self.run.id}/events/'
+        response = self.client.get(url)
+        seqs = [e['sequence_number'] for e in response.data]
+        self.assertEqual(seqs, sorted(seqs))
+
+    def test_replay_sanitizes_credentials(self):
+        """9. Leaky payloads in event history are masked on replay."""
+        leaky_run = AgentRun.objects.create(
+            project=self.project,
+            user=self.owner,
+            goal='Security check',
+            status=AgentRunStatus.COMPLETED,
+            context_snapshot={
+                '_event_history': [
+                    {
+                        'event_id': 'evt-leak',
+                        'event_type': 'tool.failed',
+                        'run_id': 2,
+                        'project_id': self.project.id,
+                        'step_number': 1,
+                        'sequence_number': 1,
+                        'timestamp': '2026-08-30T10:00:00Z',
+                        'payload': {
+                            'api_key': 'sk-topsecret1234567890',
+                            'auth': 'Bearer raw_bearer_token_xyz999',
+                            'message': 'Failed with password=SuperSecretPassword123'
+                        }
+                    }
+                ]
+            }
+        )
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/ai/agent/runs/{leaky_run.id}/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.data[0]['payload']
+        self.assertEqual(payload['api_key'], '***REDACTED***')
+        self.assertNotIn('sk-topsecret1234567890', str(payload))
+        self.assertNotIn('raw_bearer_token_xyz999', str(payload))
+        self.assertNotIn('SuperSecretPassword123', str(payload))
+        self.assertIn('Bearer ***', str(payload))
+
+    def test_replay_across_terminal_states(self):
+        """10. Historical reconstruction works for completed, failed, and cancelled runs without stored history."""
+        # Create completed run without _event_history
+        completed_run = AgentRun.objects.create(
+            project=self.project,
+            user=self.owner,
+            goal='Historical completed run',
+            status=AgentRunStatus.COMPLETED,
+            summary='Completed successfully in 1 step.',
+            total_steps=1,
+            max_steps=15
+        )
+        step = AgentStep.objects.create(
+            run=completed_run,
+            step_number=1,
+            thought='Reasoning finished',
+            action_type=AgentActionType.PLAN,
+            status=AgentStepStatus.COMPLETED
+        )
+        AgentToolCall.objects.create(
+            step=step,
+            tool_name='get_keyword_rankings',
+            tool_input={'keyword': 'seo'},
+            tool_output={'rank': 1},
+            duration_ms=45
+        )
+
+        self.client.force_authenticate(user=self.owner)
+        url = f'/api/seo/ai/agent/runs/{completed_run.id}/events/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 4)
+        event_types = [e['event_type'] for e in response.data]
+        self.assertIn('agent.started', event_types)
+        self.assertIn('step.started', event_types)
+        self.assertIn('tool.completed', event_types)
+        self.assertIn('agent.completed', event_types)

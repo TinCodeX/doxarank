@@ -1,6 +1,6 @@
-# DoxaRank — Real-Time Agent Event Architecture (Milestone 3, Phase 3.1 - 3.3)
+# DoxaRank — Real-Time Agent Event Architecture (Milestone 3, Phase 3.1 - 3.4)
 
-This document outlines the transport-independent event contract, lifecycle events, publisher abstraction, sequence ordering, payload security, WebSocket client layer, and architectural relationship between the database source-of-truth and the real-time event stream in DoxaRank.
+This document outlines the transport-independent event contract, lifecycle events, publisher abstraction, sequence ordering, payload security, WebSocket client layer, event resilience and replay recovery mechanisms, and the architectural relationship between the database source-of-truth and the real-time event stream in DoxaRank.
 
 ---
 
@@ -9,6 +9,7 @@ This document outlines the transport-independent event contract, lifecycle event
 ```text
 PostgreSQL AgentRun / AgentStep State  ===>  Authoritative Source of Truth (Persistence & Integrity)
 AgentEvents Notification Stream        ===>  Real-Time Ephemeral Streaming & Observability
+Replay & Recovery REST Layer           ===>  Deterministic Gap Recovery & Reconnection Resilience
 ```
 
 The real-time event layer provides decoupled, transport-independent structured events emitted at deterministic lifecycle boundaries throughout an autonomous agent run.
@@ -19,12 +20,13 @@ The real-time event layer provides decoupled, transport-independent structured e
 3. **Observability Resilience**: Event publication errors are treated as non-fatal observability warnings; transport failures never abort or corrupt an active SEO agent execution.
 4. **Zero Token / Secret Leakage**: Strict sanitization guarantees that OpenAI/Anthropic API keys, Bearer tokens, passwords, and private provider credentials are never placed in event payloads.
 5. **No Private Hidden Reasoning**: Event payloads contain concise, user-facing summary information and action rationale, preventing exposure of internal chain-of-thought tokens.
-6. **Read-Only Real-Time Transport**: The WebSocket channel is strictly a notification/read stream. All state mutations and human approvals occur via authenticated REST APIs.
+6. **Read-Only Real-Time Transport**: The WebSocket and Replay channels are strictly notification/read streams. All state mutations and human approvals occur via authenticated REST APIs.
 
 ---
 
-## 2. End-to-End Real-Time Event Architecture
+## 2. End-to-End Real-Time Event & Replay Flow
 
+### Normal Execution Stream
 ```text
                React Dashboard (AgentOrchestratorPanel)
                                   │
@@ -51,6 +53,36 @@ The real-time event layer provides decoupled, transport-independent structured e
                                   │
                                   ▼
                    PostgreSQL State (Authoritative)
+```
+
+### Disconnection & Gap Recovery Stream (Phase 3.4)
+```text
+React Dashboard (Disconnect Detected / Seq Gap Detected)
+                      │
+                      ▼
+            useAgentEvents Hook
+                      │
+             (highestSequence = N)
+                      │
+                      ▼
+GET /api/seo/ai/agent/runs/{run_id}/events/?after_sequence=N
+                      │
+                      ▼
+               AgentRunViewSet
+            (Tenant Authorization)
+                      │
+                      ▼
+         get_agent_run_events(run, N)
+                      │
+            [ Missing Events N+1..M ]
+                      │
+                      ▼
+            useAgentEvents Merge
+          (Deduplicate via event_id
+           + Sort by sequence_number)
+                      │
+                      ▼
+            Resume Live WS Stream
 ```
 
 ---
@@ -110,51 +142,44 @@ Every event implements the `AgentEvent` data structure:
 
 ---
 
-## 5. Sequence Ordering Strategy
+## 5. Sequence Ordering & Deduplication Strategy
 
-1. **Ordering Mechanism**: Ordering is determined **exclusively** by the monotonically increasing integer `sequence_number` per `AgentRun` (1, 2, 3, 4...).
+1. **Monotonic Sequence Ordering**: Ordering is determined **exclusively** by the integer `sequence_number` per `AgentRun` (1, 2, 3, 4...).
 2. **Timestamps as Metadata**: Timestamps provide chronological context for humans and logging, but must not be used for ordering.
-3. **Frontend De-duplication & Sorting**: The React client uses `seenEventIds` to reject duplicates and sorts incoming events strictly by `sequence_number` ascending.
-4. **Resumption Continuity**:
+3. **Frontend De-duplication (`event_id`)**: The React client uses `seenEventIdsRef` to reject duplicates and sorts incoming events strictly by `sequence_number` ascending.
+4. **Race Condition Immunity**: When replay responses arrive while live WebSocket events are in-flight, `seenEventIdsRef` ensures that late-arriving duplicates are dropped seamlessly.
+5. **Resumption Continuity**:
    - When an `AgentRun` pauses on `approval.required` (e.g. at sequence #6), the last sequence number is tracked in `run.context_snapshot['_event_seq']`.
-   - When resumed in a subsequent Celery worker or process, the orchestrator initializes from `_event_seq` and emits `approval.approved` as sequence #7.
+   - When resumed in a subsequent process, the orchestrator initializes from `_event_seq` and emits `approval.approved` as sequence #7.
    - Resumed runs **never** reset sequence numbers to 1 and **never** re-emit `agent.started`.
-
-```text
-Sequence Flow:
-Sequence 1 → agent.started
-Sequence 2 → step.started
-Sequence 3 → tool.started
-Sequence 4 → tool.completed
-Sequence 5 → step.completed
-Sequence 6 → approval.required  ───[ PAUSE FOR REVIEW ]───
-Sequence 7 → approval.approved  ───[ RESUME APPROVED ]───
-Sequence 8 → step.started
-Sequence 9 → step.completed
-Sequence 10 → agent.completed
-```
 
 ---
 
-## 6. Frontend Client & Hook Layer (Phase 3.3)
+## 6. Event Resilience & Replay (Phase 3.4)
 
-### WebSocket Client (`dashboard/src/api/agentEvents.ts`)
-- Reusable `AgentEventClient` class managing connection state (`connecting`, `connected`, `reconnecting`, `disconnected`, `error`).
-- Reuses authenticated JWT access tokens from storage via `?token=<access_token>`.
-- Exponential backoff reconnection (`1s, 2s, 4s, 8s, 16s...` capped at `30s`).
-- Immediately terminates retry loops on terminal authentication/authorization close codes (`4001`, `4003`, `4004`).
+### Replay API Endpoint
+`GET /api/seo/ai/agent/runs/{run_id}/events/?after_sequence=N`
 
-### React Hook (`dashboard/src/hooks/useAgentEvents.ts`)
-- Hook `useAgentEvents(runId)` automatically connects and subscribes on mount / run selection.
-- Validates event contract and maintains state: `{ events, connectionState, error, lastEvent, connect, disconnect, clearEvents }`.
-- Guarantees ascending sequence order and eliminates duplicate `event_id` entries.
+- **Multi-Tenant Isolation**: Verified strictly via `run.project.owner == request.user`. Cross-user access returns HTTP 404 without leaking run metadata.
+- **Cursor Filtering**:
+  - `?after_sequence=0`: Returns all events from start of run.
+  - `?after_sequence=N`: Returns strictly events where `sequence_number > N`.
+  - `?after_sequence=latest`: Returns empty list `[]`.
+- **Deterministic Reconstruction**: If `_event_history` is not present in `run.context_snapshot`, events are deterministically reconstructed from PostgreSQL `AgentRun`, `AgentStep`, `AgentToolCall`, and `SEOAction` records.
 
-### Fallback Polling & Authoritative State
-- **Primary Transport**: WebSocket streaming for instantaneous sub-second UI reactivity.
-- **Fallback Polling**: If the WebSocket is disconnected, in error, or reconnecting, the dashboard automatically maintains polling at 1.5s intervals.
-- When WebSocket is connected, polling is reduced to a relaxed 10s heartbeat.
-- **Authoritative Source**: PostgreSQL remains the authoritative source of record. WebSocket events trigger reactive re-fetching or incremental updates without duplicating state.
-- **Server-Controlled Approval**: `approval.required` events notify the UI to display the review card, but approvals/rejections are submitted strictly via authenticated POST endpoints (`/api/seo/ai/agent/runs/{id}/resume/`).
+### Gap Detection & Reconnection
+- `useAgentEvents` continuously monitors sequence numbers.
+- If an incoming live event has `sequence_number > highestSeenSequence + 1`, a sequence gap is detected and replay recovery is automatically triggered.
+- Upon WebSocket reconnection, the client automatically requests `fetchReplayEvents(runId, highestSeenSequence)` and seamlessly merges missing events.
+
+### Fallback Transport Hierarchy
+```text
+WebSocket (Primary Real-Time Transport)
+      ↓
+Event Replay (Gap Recovery Mechanism)
+      ↓
+REST Polling (Fallback when WebSocket Offline)
+```
 
 ---
 
@@ -180,4 +205,4 @@ Sequence 10 → agent.completed
 - **Phase 3.2.1 (Completed)**: `RedisEventPublisher` implementing Pub/Sub on `agent:run:{run_id}`.
 - **Phase 3.2.2 (Completed)**: Django Channels ASGI setup, channel layers, and `AgentEventConsumer` WebSocket consumer.
 - **Phase 3.3 (Completed)**: Frontend Real-Time Agent Event Client (`AgentEventClient`, `useAgentEvents`, `AgentOrchestratorPanel` integration, fallback polling, connection indicator).
-- **Phase 3.4**: Reconnection resilience, missed event replay buffer, and detailed step telemetry visualization.
+- **Phase 3.4 (Completed)**: Real-Time Event Resilience & Replay (Replay API endpoint, cursor filtering, gap detection, reconnect recovery, enhanced telemetry visualization).

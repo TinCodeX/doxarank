@@ -3,12 +3,12 @@ DoxaRank Core Agent Orchestrator & ReAct Execution Engine.
 
 Coordinates autonomous, bounded, multi-step agent execution for a specific Project.
 Enforces multi-tenant isolation, step bounding (max_steps=15), loop detection,
-error recovery, and human-in-the-loop approval gating.
+error recovery, structured real-time AgentEvent emission, and human-in-the-loop approval gating.
 """
 
 import logging
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from django.utils import timezone
 
 from apps.projects.models import Project
@@ -25,6 +25,9 @@ from apps.seo.services.tool_registry import (
 from apps.seo.services.ai_providers import (
     BaseAIProvider, get_ai_provider
 )
+from apps.seo.services.agent_events import (
+    AgentEvent, AgentEventType, AgentEventPublisher, get_event_publisher
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +36,8 @@ class AgentOrchestrator:
     """
     Autonomous ReAct Agent Orchestrator for DoxaRank.
     Takes high-level user goals, breaks them into iterative reasoning steps,
-    executes tools through the ToolRegistry, records observations, and pauses
-    for human approval on high-impact actions.
+    executes tools through the ToolRegistry, records observations, emits structured
+    real-time AgentEvents, and pauses for human approval on high-impact actions.
     """
 
     def __init__(
@@ -43,13 +46,59 @@ class AgentOrchestrator:
         user: Any,
         provider: Optional[BaseAIProvider] = None,
         registry: Optional[ToolRegistry] = None,
+        publisher: Optional[AgentEventPublisher] = None,
         max_steps: int = 15
     ):
         self.project = project
         self.user = user
         self.provider = provider or get_ai_provider()
         self.registry = registry or get_tool_registry()
+        self.publisher = publisher or get_event_publisher()
         self.max_steps = max_steps
+        self._sequence_counter = 0
+
+    def _emit_event(
+        self,
+        run: AgentRun,
+        event_type: Union[AgentEventType, str],
+        payload: Optional[Dict[str, Any]] = None,
+        step_number: Optional[int] = None
+    ) -> Optional[AgentEvent]:
+        """
+        Construct and publish an AgentEvent with monotonically increasing run-scoped sequence numbering.
+        Guarantees that event publication failures do not corrupt or fail the core agent execution state.
+        """
+        if self._sequence_counter == 0 and run.context_snapshot and '_event_seq' in run.context_snapshot:
+            self._sequence_counter = int(run.context_snapshot['_event_seq'])
+
+        self._sequence_counter += 1
+
+        if run.context_snapshot is None:
+            run.context_snapshot = {}
+        run.context_snapshot['_event_seq'] = self._sequence_counter
+
+        event = AgentEvent(
+            event_type=event_type,
+            run_id=run.id,
+            project_id=self.project.id,
+            step_number=step_number,
+            sequence_number=self._sequence_counter,
+            payload=payload or {}
+        )
+
+        if '_event_history' not in run.context_snapshot or not isinstance(run.context_snapshot['_event_history'], list):
+            run.context_snapshot['_event_history'] = []
+        run.context_snapshot['_event_history'].append(event.to_dict())
+
+        try:
+            self.publisher.publish(event)
+        except Exception as exc:
+            logger.warning(
+                f"[AgentOrchestrator] Event publication failed for run #{run.id} "
+                f"(event: {event.event_type}, seq: {event.sequence_number}): {exc}"
+            )
+
+        return event
 
     def start_run(
         self,
@@ -73,6 +122,19 @@ class AgentOrchestrator:
         )
 
         logger.info(f"Started AgentRun #{run.id} for project #{self.project.id} with goal: '{goal[:60]}'")
+
+        # Emit agent.started lifecycle event
+        self._emit_event(
+            run,
+            AgentEventType.AGENT_STARTED,
+            {
+                "goal": goal,
+                "project_id": self.project.id,
+                "max_steps": self.max_steps
+            }
+        )
+        run.save(update_fields=['context_snapshot', 'updated_at'])
+
         return self.execute_loop(run)
 
     def execute_loop(self, run: AgentRun) -> AgentRun:
@@ -80,6 +142,10 @@ class AgentOrchestrator:
         Execute iterative ReAct loop until run reaches a terminal state
         or pauses for human approval.
         """
+        # Ensure sequence counter is synced with run state
+        if self._sequence_counter == 0 and run.context_snapshot and '_event_seq' in run.context_snapshot:
+            self._sequence_counter = int(run.context_snapshot['_event_seq'])
+
         while run.status == AgentRunStatus.RUNNING:
             should_continue = self.step(run)
             run.refresh_from_db()
@@ -97,14 +163,19 @@ class AgentOrchestrator:
         if run.status != AgentRunStatus.WAITING_FOR_APPROVAL:
             raise ValueError(f"AgentRun #{run.id} is not waiting for approval (current status: {run.status}).")
 
+        # Sync sequence counter
+        if self._sequence_counter == 0 and run.context_snapshot and '_event_seq' in run.context_snapshot:
+            self._sequence_counter = int(run.context_snapshot['_event_seq'])
+
         latest_step = run.steps.order_by('-step_number').first()
+        step_num = latest_step.step_number if latest_step else run.total_steps
         decision = (approval_decision or "approved").lower()
 
         from apps.seo.services.action_executors import get_action_executor
 
         if decision == "approved":
             logger.info(f"AgentRun #{run.id} approved by user. Executing action and resuming loop.")
-            
+
             # Execute the proposed action safely
             proposed_action = SEOAction.objects.filter(
                 project=self.project,
@@ -122,12 +193,23 @@ class AgentOrchestrator:
                 latest_step.thought += "\n[Human Approval]: SEO Action was reviewed, approved, and executed by safe action executor."
                 latest_step.save()
 
+            # Emit approval.approved event
+            self._emit_event(
+                run,
+                AgentEventType.APPROVAL_APPROVED,
+                {
+                    "action_id": proposed_action.id if proposed_action else None,
+                    "action_type": proposed_action.action_type if proposed_action else None
+                },
+                step_number=step_num
+            )
+
             run.status = AgentRunStatus.RUNNING
             run.save()
             return self.execute_loop(run)
         else:
             logger.info(f"AgentRun #{run.id} rejected by user. Terminating run.")
-            
+
             # Mark proposed action as rejected
             proposed_action = SEOAction.objects.filter(
                 project=self.project,
@@ -146,6 +228,26 @@ class AgentOrchestrator:
             run.status = AgentRunStatus.CANCELLED
             run.summary = f"Run terminated because human user rejected the proposed SEO Action."
             run.completed_at = timezone.now()
+
+            # Emit approval.rejected and agent.cancelled events
+            self._emit_event(
+                run,
+                AgentEventType.APPROVAL_REJECTED,
+                {
+                    "action_id": proposed_action.id if proposed_action else None,
+                    "action_type": proposed_action.action_type if proposed_action else None
+                },
+                step_number=step_num
+            )
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_CANCELLED,
+                {
+                    "summary": run.summary
+                },
+                step_number=step_num
+            )
+
             run.save()
             return run
 
@@ -160,6 +262,17 @@ class AgentOrchestrator:
             run.status = AgentRunStatus.FAILED
             run.summary = f"Agent reached maximum execution step limit ({run.max_steps}) without finishing."
             run.completed_at = timezone.now()
+
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_FAILED,
+                {
+                    "summary": run.summary,
+                    "reason": "max_steps_exceeded",
+                    "max_steps": run.max_steps
+                },
+                step_number=run.total_steps
+            )
             run.save()
             return False
 
@@ -174,6 +287,16 @@ class AgentOrchestrator:
             run.status = AgentRunStatus.FAILED
             run.summary = f"AI Provider decision error: {exc}"
             run.completed_at = timezone.now()
+
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_FAILED,
+                {
+                    "summary": run.summary,
+                    "error": str(exc)
+                },
+                step_number=run.total_steps + 1
+            )
             run.save()
             return False
 
@@ -193,6 +316,25 @@ class AgentOrchestrator:
             run.status = AgentRunStatus.FAILED
             run.summary = "Agent terminated due to malformed AI decision output."
             run.completed_at = timezone.now()
+
+            self._emit_event(
+                run,
+                AgentEventType.STEP_FAILED,
+                {
+                    "step_number": step_num,
+                    "error": "malformed_ai_decision"
+                },
+                step_number=step_num
+            )
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_FAILED,
+                {
+                    "summary": run.summary,
+                    "error": "malformed_ai_decision"
+                },
+                step_number=step_num
+            )
             run.save()
             return False
 
@@ -201,6 +343,16 @@ class AgentOrchestrator:
             summary = decision.get("summary") or "Goal completed."
             reason = decision.get("reason") or "Goal successfully achieved."
             step_num = run.total_steps + 1
+
+            self._emit_event(
+                run,
+                AgentEventType.STEP_STARTED,
+                {
+                    "step_number": step_num,
+                    "action_type": "finish"
+                },
+                step_number=step_num
+            )
 
             AgentStep.objects.create(
                 run=run,
@@ -211,10 +363,31 @@ class AgentOrchestrator:
                 completed_at=timezone.now()
             )
 
+            self._emit_event(
+                run,
+                AgentEventType.STEP_COMPLETED,
+                {
+                    "step_number": step_num,
+                    "action_type": "finish",
+                    "reason": reason
+                },
+                step_number=step_num
+            )
+
             run.total_steps += 1
             run.status = AgentRunStatus.COMPLETED
             run.summary = summary
             run.completed_at = timezone.now()
+
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_COMPLETED,
+                {
+                    "summary": summary,
+                    "total_steps": run.total_steps
+                },
+                step_number=step_num
+            )
             run.save()
             logger.info(f"AgentRun #{run.id} finished successfully in {run.total_steps} steps.")
             return False
@@ -228,6 +401,18 @@ class AgentOrchestrator:
         if self._detect_repeated_tool_loop(run, tool_name, arguments):
             logger.warning(f"Detected repetitive tool failure loop on '{tool_name}' for AgentRun #{run.id}.")
             step_num = run.total_steps + 1
+
+            self._emit_event(
+                run,
+                AgentEventType.STEP_STARTED,
+                {
+                    "step_number": step_num,
+                    "action_type": "tool",
+                    "tool_name": tool_name
+                },
+                step_number=step_num
+            )
+
             AgentStep.objects.create(
                 run=run,
                 step_number=step_num,
@@ -236,21 +421,66 @@ class AgentOrchestrator:
                 status=AgentStepStatus.FAILED,
                 completed_at=timezone.now()
             )
+
+            self._emit_event(
+                run,
+                AgentEventType.STEP_FAILED,
+                {
+                    "step_number": step_num,
+                    "tool_name": tool_name,
+                    "error": f"Repetitive tool failure loop on '{tool_name}'"
+                },
+                step_number=step_num
+            )
+
             run.total_steps += 1
             run.status = AgentRunStatus.FAILED
             run.summary = f"Terminated due to repetitive tool loop on tool '{tool_name}'."
             run.completed_at = timezone.now()
+
+            self._emit_event(
+                run,
+                AgentEventType.AGENT_FAILED,
+                {
+                    "summary": run.summary,
+                    "error": "repetitive_tool_loop"
+                },
+                step_number=step_num
+            )
             run.save()
             return False
 
-        # Create AgentStep record
+        # Step Started Event & Record
         step_num = run.total_steps + 1
+        self._emit_event(
+            run,
+            AgentEventType.STEP_STARTED,
+            {
+                "step_number": step_num,
+                "action_type": "tool_call",
+                "tool_name": tool_name
+            },
+            step_number=step_num
+        )
+
         step = AgentStep.objects.create(
             run=run,
             step_number=step_num,
             thought=reason,
             action_type=AgentActionType.TOOL_CALL,
             status=AgentStepStatus.RUNNING
+        )
+
+        # Tool Started Event
+        self._emit_event(
+            run,
+            AgentEventType.TOOL_STARTED,
+            {
+                "step_number": step_num,
+                "tool_name": tool_name,
+                "arguments": arguments
+            },
+            step_number=step_num
         )
 
         # Execute tool via registry
@@ -268,6 +498,54 @@ class AgentOrchestrator:
             completed_at=timezone.now()
         )
 
+        # Tool Completed / Failed Event
+        if exec_res["success"]:
+            self._emit_event(
+                run,
+                AgentEventType.TOOL_COMPLETED,
+                {
+                    "step_number": step_num,
+                    "tool_name": tool_name,
+                    "duration_ms": exec_res.get("duration_ms", 0),
+                    "success": True
+                },
+                step_number=step_num
+            )
+            self._emit_event(
+                run,
+                AgentEventType.STEP_COMPLETED,
+                {
+                    "step_number": step_num,
+                    "tool_name": tool_name,
+                    "success": True
+                },
+                step_number=step_num
+            )
+        else:
+            self._emit_event(
+                run,
+                AgentEventType.TOOL_FAILED,
+                {
+                    "step_number": step_num,
+                    "tool_name": tool_name,
+                    "duration_ms": exec_res.get("duration_ms", 0),
+                    "success": False,
+                    "error_code": exec_res.get("error", {}).get("code", "EXECUTION_ERROR"),
+                    "error_message": exec_res.get("error", {}).get("message", "")
+                },
+                step_number=step_num
+            )
+            self._emit_event(
+                run,
+                AgentEventType.STEP_FAILED,
+                {
+                    "step_number": step_num,
+                    "tool_name": tool_name,
+                    "error": exec_res.get("error", {}).get("message", "")
+                },
+                step_number=step_num
+            )
+
         step.status = AgentStepStatus.COMPLETED if exec_res["success"] else AgentStepStatus.FAILED
         step.completed_at = timezone.now()
         step.save()
@@ -284,6 +562,19 @@ class AgentOrchestrator:
                 step.save()
 
                 run.status = AgentRunStatus.WAITING_FOR_APPROVAL
+
+                action_data = exec_res.get("data") or {}
+                self._emit_event(
+                    run,
+                    AgentEventType.APPROVAL_REQUIRED,
+                    {
+                        "action_id": action_data.get("id"),
+                        "action_type": action_data.get("action_type"),
+                        "requires_human_approval": True,
+                        "title": action_data.get("title")
+                    },
+                    step_number=step_num
+                )
                 run.save()
                 return False  # Pause execution loop
 

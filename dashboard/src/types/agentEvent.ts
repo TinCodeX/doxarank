@@ -37,6 +37,7 @@ export type AgentEventConnectionState =
   | 'connecting'
   | 'connected'
   | 'reconnecting'
+  | 'recovering'
   | 'disconnected'
   | 'error';
 

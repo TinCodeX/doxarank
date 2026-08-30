@@ -1,10 +1,22 @@
-import { getStoredTokens } from './client';
+import { apiFetch, getStoredTokens } from './client';
 import type {
   AgentEvent,
   AgentEventHandler,
   AgentEventConnectionState,
   AgentConnectionStatusHandler,
 } from '../types/agentEvent';
+
+/**
+ * Fetch historical or missed AgentEvents for an AgentRun filtered strictly after a sequence cursor.
+ * Used for client-side event replay, gap recovery, and reconnect synchronization.
+ */
+export async function fetchReplayEvents(
+  runId: number,
+  afterSequence: number = 0
+): Promise<AgentEvent[]> {
+  const query = afterSequence > 0 ? `?after_sequence=${afterSequence}` : '';
+  return apiFetch<AgentEvent[]>(`/api/seo/ai/agent/runs/${runId}/events/${query}`);
+}
 
 /**
  * Derives the base WebSocket URL matching backend API configuration.

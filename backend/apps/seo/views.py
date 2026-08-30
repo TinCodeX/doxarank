@@ -1230,11 +1230,20 @@ class AgentRunViewSet(viewsets.ModelViewSet):
         response_serializer = AgentRunSerializer(locked_run, context={'request': request})
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'], url_path='events')
+    def events(self, request, pk=None):
+        """
+        Retrieve historical/replayed AgentEvents for an AgentRun.
+        Supports sequence cursor filtering: ?after_sequence=<int>.
+        Guarantees strict tenant isolation, ascending sequence order, and payload sanitization.
+        """
+        run = self.get_object()
+        after_seq_raw = request.query_params.get('after_sequence', '0')
+        try:
+            after_seq = int(after_seq_raw)
+        except (TypeError, ValueError):
+            after_seq = 0
 
-
-
-
-
-
-
-
+        from .services.agent_events import get_agent_run_events
+        events_data = get_agent_run_events(run, after_sequence=after_seq)
+        return Response(events_data, status=status.HTTP_200_OK)
