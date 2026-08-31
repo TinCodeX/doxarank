@@ -3305,7 +3305,7 @@ class ToolRegistryTests(TestCase):
         )
 
     def test_default_registry_has_all_8_tools(self):
-        """1. Default ToolRegistry is populated with exactly the 8 core tools."""
+        """1. Default ToolRegistry is populated with all registered tools."""
         expected_tools = [
             'get_keyword_rankings',
             'get_search_console_analytics',
@@ -3313,6 +3313,8 @@ class ToolRegistryTests(TestCase):
             'gsc_search_analytics',
             'gsc_top_queries',
             'gsc_top_pages',
+            'gsc_opportunity_audit',
+            'gsc_performance_comparison',
             'run_intelligence_analysis',
             'generate_recommendation',
             'generate_content_brief',
@@ -3320,7 +3322,7 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 11)
+        self.assertEqual(len(registered_names), 13)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3330,7 +3332,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 11)
+        self.assertEqual(len(schemas), 13)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -6523,3 +6525,400 @@ class GoogleSearchConsoleApiAndToolsTests(TestCase):
         self.assertNotIn("1//04_secret_xyz999", err_msg)
         self.assertNotIn("secret_access_token_123", err_msg)
         self.assertIn("[REDACTED", err_msg)
+
+
+# ==============================================================================
+# MILESTONE 4 — PHASE 4.1.4: AGENTIC GSC INTELLIGENCE & REASONING TESTS
+# ==============================================================================
+
+class GSCIntelligenceServiceTests(TestCase):
+    """
+    Unit test suite for GSCIntelligenceService heuristics, statistical detectors,
+    period-over-period comparisons, and SEOInsight persistence.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='gsc_intel_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Intelligence',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='GSC Intelligence Project',
+            website_url='https://intel-project.doxarank.com'
+        )
+        from apps.seo.services.gsc_intelligence import GSCIntelligenceService
+        self.service = GSCIntelligenceService(project=self.project)
+
+    def test_detect_page_two_opportunities(self):
+        """1. Detects queries ranking on Page 2 (pos 10.1 - 20.0) with notable impression volume."""
+        sample_rows = [
+            {"query": "enterprise seo platform", "position": 12.4, "impressions": 450, "clicks": 8, "ctr": 0.0178, "ctr_percent": 1.78},
+            {"query": "rank tracker tool", "position": 3.2, "impressions": 800, "clicks": 45, "ctr": 0.056, "ctr_percent": 5.6},
+            {"query": "keyword cannibalization audit", "position": 18.5, "impressions": 220, "clicks": 2, "ctr": 0.009, "ctr_percent": 0.9},
+            {"query": "zero impression query", "position": 14.0, "impressions": 2, "clicks": 0, "ctr": 0.0, "ctr_percent": 0.0},
+        ]
+
+        result = self.service.analyze_opportunities(query_rows=sample_rows, min_impressions=10)
+        findings = result["findings"]
+        p2_findings = [f for f in findings if f["finding_type"] == "gsc_page_two_opportunity"]
+
+        self.assertEqual(len(p2_findings), 2)
+        # Verify first page 2 finding
+        f1 = next(f for f in p2_findings if f["target_query"] == "enterprise seo platform")
+        self.assertEqual(f1["severity"], "opportunity")
+        self.assertGreaterEqual(f1["confidence"], 0.70)
+        self.assertIn("12.4", f1["title"])
+        self.assertIn("FAQ", f1["recommendation"])
+        self.assertEqual(f1["suggested_action_type"], "optimize_existing_content")
+
+    def test_detect_high_impressions_low_ctr(self):
+        """2. Detects queries ranking in top 10 with CTR significantly below position benchmark."""
+        sample_rows = [
+            # Top 3 ranking but CTR only 2.0% (expected >= 15%)
+            {"query": "best seo rank tracker", "position": 2.1, "impressions": 1200, "clicks": 24, "ctr": 0.02, "ctr_percent": 2.0},
+            # Page 1 ranking (pos 5) but CTR only 0.8% (expected >= 3%)
+            {"query": "serp tracking software", "position": 5.0, "impressions": 600, "clicks": 5, "ctr": 0.008, "ctr_percent": 0.8},
+            # Healthy CTR on pos 1
+            {"query": "doxarank login", "position": 1.1, "impressions": 500, "clicks": 200, "ctr": 0.40, "ctr_percent": 40.0},
+        ]
+
+        result = self.service.analyze_opportunities(query_rows=sample_rows, min_impressions=10)
+        findings = result["findings"]
+        ctr_findings = [f for f in findings if f["finding_type"] == "gsc_high_impressions_low_ctr"]
+
+        self.assertEqual(len(ctr_findings), 2)
+        top_ctr = next(f for f in ctr_findings if f["target_query"] == "best seo rank tracker")
+        self.assertEqual(top_ctr["severity"], "warning")
+        self.assertIn("SERP Snippet Underperformance", top_ctr["title"])
+        self.assertIn("Rewrite meta title", top_ctr["recommendation"])
+        self.assertEqual(top_ctr["suggested_action_type"], "update_meta_description")
+
+    def test_detect_keyword_cannibalization(self):
+        """3. Detects queries where 2+ landing pages rank simultaneously, splitting search traffic."""
+        combined_rows = [
+            {"query": "saas seo guide", "page": "https://intel-project.doxarank.com/blog/saas-seo", "clicks": 15, "impressions": 300, "position": 8.0},
+            {"query": "saas seo guide", "page": "https://intel-project.doxarank.com/services/saas-seo", "clicks": 10, "impressions": 250, "position": 11.2},
+            {"query": "single page query", "page": "https://intel-project.doxarank.com/single", "clicks": 20, "impressions": 100, "position": 4.0},
+        ]
+
+        result = self.service.analyze_opportunities(combined_rows=combined_rows, min_impressions=10)
+        findings = result["findings"]
+        cannibalization_findings = [f for f in findings if f["finding_type"] == "gsc_keyword_cannibalization"]
+
+        self.assertEqual(len(cannibalization_findings), 1)
+        cf = cannibalization_findings[0]
+        self.assertEqual(cf["target_query"], "saas seo guide")
+        self.assertEqual(cf["severity"], "warning")
+        self.assertIn("competing pages", cf["title"])
+        self.assertIn("canonical tag", cf["recommendation"])
+        self.assertEqual(cf["metrics"]["competing_pages_count"], 2)
+
+    def test_detect_emerging_queries(self):
+        """4. Detects long-tail queries demonstrating early high CTR engagement (>10%) at pos >= 4."""
+        sample_rows = [
+            {"query": "how to automate gsc intelligence", "position": 6.5, "impressions": 40, "clicks": 6, "ctr": 0.15, "ctr_percent": 15.0},
+            {"query": "standard keyword", "position": 7.0, "impressions": 100, "clicks": 3, "ctr": 0.03, "ctr_percent": 3.0},
+        ]
+
+        result = self.service.analyze_opportunities(query_rows=sample_rows, min_impressions=10)
+        findings = result["findings"]
+        emerging = [f for f in findings if f["finding_type"] == "gsc_emerging_query"]
+
+        self.assertEqual(len(emerging), 1)
+        ef = emerging[0]
+        self.assertEqual(ef["target_query"], "how to automate gsc intelligence")
+        self.assertEqual(ef["severity"], "opportunity")
+        self.assertIn("High-Intent Emerging Query", ef["title"])
+
+    def test_compare_periods_calculation(self):
+        """5. Compares search performance between two date ranges and calculates metric deltas."""
+        mock_gsc = MagicMock()
+        # Base period (recent)
+        mock_gsc.query_search_analytics.side_effect = [
+            {
+                "summary": {"total_clicks": 150, "total_impressions": 5000, "average_ctr_percent": 3.0, "average_position": 8.5},
+                "rows": [
+                    {"query": "seo tool", "clicks": 100, "impressions": 3000, "ctr": 0.033, "position": 6.0},
+                    {"query": "new query", "clicks": 50, "impressions": 2000, "ctr": 0.025, "position": 12.0},
+                ]
+            },
+            # Comparison period (prior)
+            {
+                "summary": {"total_clicks": 200, "total_impressions": 4000, "average_ctr_percent": 5.0, "average_position": 7.0},
+                "rows": [
+                    {"query": "seo tool", "clicks": 180, "impressions": 3500, "ctr": 0.051, "position": 4.5},
+                    {"query": "lost query", "clicks": 20, "impressions": 500, "ctr": 0.04, "position": 9.0},
+                ]
+            }
+        ]
+
+        comparison = self.service.compare_periods(
+            base_start="2026-08-01",
+            base_end="2026-08-28",
+            comp_start="2026-07-04",
+            comp_end="2026-07-31",
+            gsc_service=mock_gsc
+        )
+
+        deltas = comparison["summary_deltas"]
+        self.assertEqual(deltas["base_clicks"], 150)
+        self.assertEqual(deltas["comp_clicks"], 200)
+        self.assertEqual(deltas["clicks_delta"], -50)
+        self.assertEqual(deltas["clicks_change_percent"], -25.0)
+        self.assertEqual(deltas["impressions_delta"], 1000)
+        self.assertEqual(deltas["impressions_change_percent"], 25.0)
+
+        # Verify top decliners and new/lost queries
+        self.assertGreaterEqual(len(comparison["top_decliners"]), 1)
+        self.assertEqual(comparison["top_decliners"][0]["query"], "seo tool")
+        self.assertEqual(comparison["top_decliners"][0]["clicks_delta"], -80)
+
+        self.assertEqual(len(comparison["new_queries"]), 1)
+        self.assertEqual(comparison["new_queries"][0]["query"], "new query")
+
+        self.assertEqual(len(comparison["lost_queries"]), 1)
+        self.assertEqual(comparison["lost_queries"][0]["query"], "lost query")
+
+        # Significant click drop (-25%) should produce a warning finding
+        findings = comparison["findings"]
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["finding_type"], "gsc_period_comparison_decline")
+        self.assertEqual(findings[0]["severity"], "warning")
+
+    def test_sync_findings_to_insights_idempotent(self):
+        """6. Idempotently syncs GSC findings to persistent SEOInsight database records."""
+        sample_findings = [
+            {
+                "finding_type": "gsc_page_two_opportunity",
+                "severity": "opportunity",
+                "confidence": 0.85,
+                "title": "Page 2 Opportunity: \"enterprise rank tracking\"",
+                "insight": "Ranks at pos 12.2 with 300 impressions.",
+                "recommendation": "Add FAQ and on-page headings.",
+                "target_query": "enterprise rank tracking",
+                "target_url": "https://intel-project.doxarank.com/enterprise",
+                "metrics": {"position": 12.2, "impressions": 300},
+                "evidence": [{"query": "enterprise rank tracking"}],
+                "suggested_action_type": "optimize_existing_content"
+            }
+        ]
+
+        # Initial sync
+        insights_run_1 = self.service.sync_findings_to_insights(sample_findings)
+        self.assertEqual(len(insights_run_1), 1)
+        insight = SEOInsight.objects.get(id=insights_run_1[0].id)
+        self.assertEqual(insight.project, self.project)
+        self.assertEqual(insight.source, InsightSource.SEARCH_CONSOLE)
+        self.assertEqual(insight.insight_type, InsightType.PAGE_TWO_KEYWORD)
+        self.assertEqual(insight.severity, InsightSeverity.OPPORTUNITY)
+
+        # Repeated sync with same finding produces NO duplicate rows
+        insights_run_2 = self.service.sync_findings_to_insights(sample_findings)
+        self.assertEqual(len(insights_run_2), 1)
+        self.assertEqual(SEOInsight.objects.filter(project=self.project).count(), 1)
+
+    def test_empty_or_malformed_gsc_data_graceful_handling(self):
+        """7. Handles empty or malformed rows without crashing or raising unhandled exceptions."""
+        malformed_rows = [
+            {},
+            {"query": None, "impressions": None, "position": "invalid"},
+            {"query": "broken row", "position": None, "impressions": "bad_int"},
+        ]
+
+        result = self.service.analyze_opportunities(query_rows=malformed_rows, min_impressions=10)
+        self.assertEqual(result["total_findings"], 0)
+        self.assertEqual(result["findings"], [])
+
+
+class GSCIntelligenceToolRegistryTests(TestCase):
+    """
+    Test suite for gsc_opportunity_audit and gsc_performance_comparison tools in ToolRegistry.
+    """
+
+    def setUp(self):
+        self.user_a = User.objects.create_user(email='user_a_tools@doxarank.com', password='TestPassword123!')
+        self.user_b = User.objects.create_user(email='user_b_tools@doxarank.com', password='TestPassword123!')
+        self.project_a = Project.objects.create(owner=self.user_a, name='Project A', website_url='https://project-a.com')
+        self.project_b = Project.objects.create(owner=self.user_b, name='Project B', website_url='https://project-b.com')
+
+    @patch('apps.seo.services.gsc_intelligence.GSCIntelligenceService.analyze_opportunities')
+    def test_gsc_opportunity_audit_tool_execution(self, mock_analyze):
+        """8. Executes gsc_opportunity_audit tool via ToolRegistry and returns structured output."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        mock_analyze.return_value = {
+            "project_id": self.project_a.id,
+            "analyzed_at": "2026-08-31T12:00:00Z",
+            "total_queries_analyzed": 25,
+            "total_findings": 2,
+            "findings_by_type": {"page_two": 1, "low_ctr": 1, "cannibalization": 0, "emerging": 0},
+            "findings": [
+                {
+                    "finding_type": "gsc_page_two_opportunity",
+                    "severity": "opportunity",
+                    "confidence": 0.85,
+                    "title": "Page 2 Opportunity: \"audit tool\"",
+                    "insight": "Ranking #12.0",
+                    "recommendation": "Optimize content",
+                    "target_query": "audit tool",
+                    "target_url": "https://project-a.com/audit",
+                    "metrics": {"position": 12.0, "impressions": 200},
+                    "evidence": []
+                }
+            ]
+        }
+
+        registry = get_tool_registry()
+        res = registry.execute("gsc_opportunity_audit", self.project_a, {
+            "min_impressions": 15,
+            "sync_to_insights": True
+        })
+
+        self.assertTrue(res["success"])
+        self.assertEqual(res["tool_name"], "gsc_opportunity_audit")
+        self.assertEqual(res["data"]["total_findings"], 2)
+        self.assertEqual(res["data"]["persisted_insights_count"], 1)
+        self.assertEqual(SEOInsight.objects.filter(project=self.project_a).count(), 1)
+
+    @patch('apps.seo.services.gsc_intelligence.GSCIntelligenceService.compare_periods')
+    def test_gsc_performance_comparison_tool_execution(self, mock_compare):
+        """9. Executes gsc_performance_comparison tool via ToolRegistry."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        mock_compare.return_value = {
+            "project_id": self.project_a.id,
+            "summary_deltas": {"clicks_delta": 40, "clicks_change_percent": 15.0},
+            "top_gainers": [{"query": "growth keyword", "clicks_delta": 30}],
+            "top_decliners": [],
+            "findings": []
+        }
+
+        registry = get_tool_registry()
+        res = registry.execute("gsc_performance_comparison", self.project_a, {
+            "base_start_date": "2026-08-01",
+            "base_end_date": "2026-08-28",
+            "comp_start_date": "2026-07-04",
+            "comp_end_date": "2026-07-31",
+            "row_limit": 50
+        })
+
+        self.assertTrue(res["success"])
+        self.assertEqual(res["tool_name"], "gsc_performance_comparison")
+        self.assertEqual(res["data"]["summary_deltas"]["clicks_delta"], 40)
+
+
+class GSCAgentOrchestratorIntegrationTests(TestCase):
+    """
+    End-to-end integration tests verifying ReAct Agent reasoning on GSC intelligence,
+    dynamic multi-step workflows, and human approval boundary gating.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='gsc_agent_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Agent',
+            last_name='Runner'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Agent GSC Testing Project',
+            website_url='https://gsc-agent-test.doxarank.com'
+        )
+        # Create baseline connection, insight and recommendation for downstream generation tools
+        SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url='sc-domain:gsc-agent-test.doxarank.com',
+            is_connected=True,
+            google_account_email='agent@doxarank.com',
+            scopes=['https://www.googleapis.com/auth/webmasters.readonly']
+        )
+        self.insight = SEOInsight.objects.create(
+            project=self.project,
+            fingerprint='gsc_test_insight_1',
+            insight_type=InsightType.PAGE_TWO_KEYWORD,
+            severity=InsightSeverity.OPPORTUNITY,
+            title='Page 2 Opportunity: "doxarank ai seo"',
+            description='Query ranks at #13.5 with 500 impressions.',
+            recommendation='Optimize on-page copy and internal linking.',
+            source=InsightSource.SEARCH_CONSOLE,
+            related_url='https://gsc-agent-test.doxarank.com/ai-seo',
+            status=InsightStatus.OPEN
+        )
+
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_top_queries')
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_top_pages')
+    def test_multi_step_gsc_opportunity_reasoning_loop(self, mock_get_top_pages, mock_get_top_queries):
+        """10. Agent autonomously plans and executes multi-step GSC intelligence workflow."""
+        mock_get_top_queries.return_value = {
+            "top_queries": [
+                {"query": "doxarank ai seo", "clicks": 12, "impressions": 500, "ctr": 0.024, "position": 13.5}
+            ]
+        }
+        mock_get_top_pages.return_value = {
+            "top_pages": [
+                {"page": "https://gsc-agent-test.doxarank.com/ai-seo", "clicks": 12, "impressions": 500, "ctr": 0.024, "position": 13.5}
+            ]
+        }
+
+        orchestrator = AgentOrchestrator(project=self.project, user=self.user, max_steps=10)
+        run = orchestrator.start_run(
+            goal="Analyze Google Search Console queries to identify high-impact Page 2 opportunities and propose metadata optimizations."
+        )
+
+        # Agent should progress through multi-step exploration and pause at approval checkpoint
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+        self.assertGreaterEqual(run.total_steps, 4)
+
+        # Verify steps and tool calls
+        tool_names = list(AgentToolCall.objects.filter(step__run=run).values_list('tool_name', flat=True))
+        self.assertIn("gsc_top_queries", tool_names)
+        self.assertIn("gsc_top_pages", tool_names)
+        self.assertIn("gsc_opportunity_audit", tool_names)
+        self.assertIn("propose_seo_action", tool_names)
+
+        # Verify proposed action exists in waiting_for_approval
+        action = SEOAction.objects.filter(project=self.project).first()
+        self.assertIsNotNone(action)
+        self.assertEqual(action.status, ActionStatus.PROPOSED)
+
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.query_search_analytics')
+    def test_multi_step_gsc_trend_comparison_reasoning_loop(self, mock_query_search):
+        """11. Agent autonomously plans and executes GSC performance trend comparison workflow."""
+        mock_query_search.side_effect = [
+            {"summary": {"total_clicks": 100, "total_impressions": 3000, "average_ctr_percent": 3.3, "average_position": 8.0}, "rows": []},
+            {"summary": {"total_clicks": 150, "total_impressions": 3500, "average_ctr_percent": 4.2, "average_position": 7.0}, "rows": []}
+        ]
+
+        orchestrator = AgentOrchestrator(project=self.project, user=self.user, max_steps=8)
+        run = orchestrator.start_run(
+            goal="Compare Google Search Console search performance over the last 28 days vs previous period and detect traffic declines."
+        )
+
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+        tool_calls = AgentToolCall.objects.filter(step__run=run).values_list('tool_name', flat=True)
+        self.assertIn("gsc_performance_comparison", tool_calls)
+        self.assertIn("gsc_opportunity_audit", tool_calls)
+        self.assertIn("propose_seo_action", tool_calls)
+
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_top_queries')
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_top_pages')
+    def test_gsc_proposed_action_human_approval_gate(self, mock_pages, mock_queries):
+        """12. Human approval resumes run and safely transitions proposal to execution."""
+        mock_queries.return_value = {"top_queries": [{"query": "gsc rank test", "clicks": 5, "impressions": 100, "position": 14.0}]}
+        mock_pages.return_value = {"top_pages": [{"page": "https://gsc-agent-test.doxarank.com/ai-seo", "clicks": 5, "impressions": 100, "position": 14.0}]}
+
+        orchestrator = AgentOrchestrator(project=self.project, user=self.user, max_steps=10)
+        run = orchestrator.start_run(
+            goal="Inspect Google Search Console queries and propose an action."
+        )
+
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Human approves proposal
+        resumed_run = orchestrator.resume_run(run=run, approval_decision="approved")
+        self.assertEqual(resumed_run.status, AgentRunStatus.COMPLETED)
+        self.assertIn("Successfully completed", resumed_run.summary)

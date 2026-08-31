@@ -16,9 +16,10 @@ interface AgentOrchestratorPanelProps {
 }
 
 const SAMPLE_GOALS = [
-  'Analyze ranking drops for tracked keywords and synthesize a recovery plan.',
+  'Analyze Google Search Console queries to identify high-impact Page 2 opportunities and propose metadata optimizations.',
+  'Compare Google Search Console search performance over the last 28 days vs previous period and detect traffic declines.',
   'Inspect Google Search Console queries with high impressions but low CTR and draft meta tag optimizations.',
-  'Perform deep SEO intelligence analysis, generate an article brief, and draft publish-ready content.',
+  'Analyze ranking drops for tracked keywords and synthesize an organic recovery plan.',
   'Inspect site audit diagnostic issues and propose technical fixes for the developer team.',
 ];
 
@@ -649,6 +650,55 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                               </div>
                             ) : (
                               <div>
+                                {/* Rich Findings Display for GSC Intelligence Tools */}
+                                {Array.isArray(toolCall.tool_output?.findings) && toolCall.tool_output.findings.length > 0 && (
+                                  <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+                                      🎯 Discovered GSC Intelligence Opportunities ({toolCall.tool_output.findings.length})
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {toolCall.tool_output.findings.slice(0, 5).map((f: any, fIdx: number) => (
+                                        <div key={fIdx} style={{ padding: '8px 10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>{f.title || f.finding_type}</span>
+                                            <span style={{
+                                              fontSize: '10px',
+                                              fontWeight: 700,
+                                              textTransform: 'uppercase',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px',
+                                              backgroundColor: f.severity === 'critical' ? '#fee2e2' : f.severity === 'warning' ? '#fef3c7' : '#e0f2fe',
+                                              color: f.severity === 'critical' ? '#991b1b' : f.severity === 'warning' ? '#92400e' : '#0369a1'
+                                            }}>
+                                              {f.severity || 'info'}
+                                            </span>
+                                          </div>
+                                          <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#475569' }}>{f.insight}</p>
+                                          {f.recommendation && (
+                                            <p style={{ margin: 0, fontSize: '11px', color: '#166534', backgroundColor: '#f0fdf4', padding: '4px 6px', borderRadius: '4px' }}>
+                                              💡 <strong>Recommendation:</strong> {f.recommendation}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Period-over-Period Deltas Display */}
+                                {toolCall.tool_output?.summary_deltas && (
+                                  <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
+                                      📊 Period-over-Period Performance Deltas
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px', color: '#1e293b' }}>
+                                      <span><strong>Clicks:</strong> {toolCall.tool_output.summary_deltas.clicks_delta > 0 ? '+' : ''}{toolCall.tool_output.summary_deltas.clicks_delta} ({toolCall.tool_output.summary_deltas.clicks_change_percent}%)</span>
+                                      <span><strong>Impressions:</strong> {toolCall.tool_output.summary_deltas.impressions_delta > 0 ? '+' : ''}{toolCall.tool_output.summary_deltas.impressions_delta} ({toolCall.tool_output.summary_deltas.impressions_change_percent}%)</span>
+                                      <span><strong>CTR:</strong> {toolCall.tool_output.summary_deltas.ctr_delta_percent > 0 ? '+' : ''}{toolCall.tool_output.summary_deltas.ctr_delta_percent}%</span>
+                                    </div>
+                                  </div>
+                                )}
+
                                 <strong style={{ fontSize: '12px', color: '#475569' }}>Tool Observation / Output:</strong>
                                 <pre style={codeBlockStyle}>{JSON.stringify(toolCall.tool_output, null, 2)}</pre>
                               </div>

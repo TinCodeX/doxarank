@@ -570,12 +570,47 @@ def handle_gsc_top_pages(project: Project, args: Dict[str, Any]) -> Dict[str, An
     )
 
 
+def handle_gsc_opportunity_audit(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute GSC intelligence heuristics across query and page data to detect actionable SEO opportunities."""
+    from apps.seo.services.gsc_intelligence import GSCIntelligenceService
+    min_impressions = args.get("min_impressions", 10)
+    sync_to_insights = bool(args.get("sync_to_insights", True))
+
+    service = GSCIntelligenceService(project=project)
+    results = service.analyze_opportunities(min_impressions=min_impressions)
+
+    if sync_to_insights and results.get("findings"):
+        persisted = service.sync_findings_to_insights(results["findings"])
+        results["persisted_insights_count"] = len(persisted)
+
+    return results
+
+
+def handle_gsc_performance_comparison(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Compare search performance across two date ranges to analyze trends and traffic movements."""
+    from apps.seo.services.gsc_intelligence import GSCIntelligenceService
+    base_start = args.get("base_start_date")
+    base_end = args.get("base_end_date")
+    comp_start = args.get("comp_start_date")
+    comp_end = args.get("comp_end_date")
+    row_limit = args.get("row_limit", 50)
+
+    service = GSCIntelligenceService(project=project)
+    return service.compare_periods(
+        base_start=base_start,
+        base_end=base_end,
+        comp_start=comp_start,
+        comp_end=comp_end,
+        row_limit=row_limit
+    )
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
 
 def create_default_tool_registry() -> ToolRegistry:
-    """Build and return the standard ToolRegistry populated with all 11 core tools."""
+    """Build and return the standard ToolRegistry populated with all core tools."""
     registry = ToolRegistry()
 
     # 1. get_keyword_rankings
@@ -703,7 +738,46 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_gsc_top_pages
     ))
 
-    # 7. run_intelligence_analysis
+    # 7. gsc_opportunity_audit (GSC Intelligence Analyzer)
+    registry.register(AgentToolDefinition(
+        name="gsc_opportunity_audit",
+        description="Analyze Search Console performance metrics using intelligence heuristics to discover Page 2 keyword opportunities, low-CTR SERP snippets, keyword cannibalization, and emerging search queries.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "min_impressions": {"type": "integer", "description": "Minimum impressions threshold for opportunity evaluation (default 10)."},
+                "sync_to_insights": {"type": "boolean", "description": "Whether to sync detected opportunities into persistent SEOInsight records (default true)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_gsc_opportunity_audit
+    ))
+
+    # 8. gsc_performance_comparison (GSC Trend & Period Comparison)
+    registry.register(AgentToolDefinition(
+        name="gsc_performance_comparison",
+        description="Compare Search Console performance between two date ranges (base period vs comparison period) to calculate traffic deltas, top gainers, top decliners, and search momentum trends.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "base_start_date": {"type": "string", "description": "Start date of recent/base period in YYYY-MM-DD format (required)."},
+                "base_end_date": {"type": "string", "description": "End date of recent/base period in YYYY-MM-DD format (required)."},
+                "comp_start_date": {"type": "string", "description": "Start date of comparison/prior period in YYYY-MM-DD format (required)."},
+                "comp_end_date": {"type": "string", "description": "End date of comparison/prior period in YYYY-MM-DD format (required)."},
+                "row_limit": {"type": "integer", "description": "Maximum queries to evaluate for delta comparison (default 50, max 250)."}
+            },
+            "required": ["base_start_date", "base_end_date", "comp_start_date", "comp_end_date"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_gsc_performance_comparison
+    ))
+
+    # 9. run_intelligence_analysis
     registry.register(AgentToolDefinition(
         name="run_intelligence_analysis",
         description="Run the deterministic SEO intelligence heuristic engine to analyze ranking movements, CTR anomalies, and audit issues, generating updated SEOInsight records.",
@@ -720,7 +794,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_run_intelligence_analysis
     ))
 
-    # 8. generate_recommendation
+    # 10. generate_recommendation
     registry.register(AgentToolDefinition(
         name="generate_recommendation",
         description="Generate an AI-powered, grounded SEO recommendation with strategy, checklist, and impact prediction based on an SEO insight.",
@@ -737,7 +811,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_recommendation
     ))
 
-    # 9. generate_content_brief
+    # 11. generate_content_brief
     registry.register(AgentToolDefinition(
         name="generate_content_brief",
         description="Generate a comprehensive SEO content brief (outline, secondary keywords, search intent, FAQ, link suggestions) based on an approved recommendation.",
@@ -759,7 +833,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_content_brief
     ))
 
-    # 10. generate_content_draft
+    # 12. generate_content_draft
     registry.register(AgentToolDefinition(
         name="generate_content_draft",
         description="Generate a full-length, publish-ready SEO content draft in Markdown with schema markup and keyword density mapping based on a content brief.",
@@ -777,7 +851,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_content_draft
     ))
 
-    # 11. propose_seo_action
+    # 13. propose_seo_action
     registry.register(AgentToolDefinition(
         name="propose_seo_action",
         description="Create a formal, structured SEOAction task proposal for human review and approval. Does NOT execute the action.",

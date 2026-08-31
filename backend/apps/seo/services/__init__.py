@@ -1,5 +1,6 @@
 from .search_console import GoogleSearchConsoleService, MockGoogleSearchConsoleClient
 from .seo_intelligence import SEOIntelligenceService
+from .gsc_intelligence import GSCIntelligenceService, GSCFinding, GSCFindingType
 from .ai_providers import BaseAIProvider, MockAIProvider, OpenAIProvider, get_ai_provider
 from .ai_seo_agent import AISeoAgentService
 from .content_brief_service import SEOContentBriefService
@@ -17,6 +18,9 @@ __all__ = [
     'GoogleSearchConsoleService',
     'MockGoogleSearchConsoleClient',
     'SEOIntelligenceService',
+    'GSCIntelligenceService',
+    'GSCFinding',
+    'GSCFindingType',
     'BaseAIProvider',
     'MockAIProvider',
     'OpenAIProvider',

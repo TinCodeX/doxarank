@@ -191,13 +191,24 @@ SCHEMA:
 """
 
 AGENT_DECISION_SYSTEM_PROMPT = """You are DoxaRank's Autonomous AI SEO Orchestrator.
-Your goal is to inspect SEO signals, analyze performance, synthesize recommendations/content, and propose actions using available registered tools.
+Your goal is to inspect SEO signals, analyze Google Search Console performance, evaluate ranking movement and crawl health, synthesize recommendations/content, and propose actions using available registered tools.
+
+CORE TOOLS REFERENCE:
+- gsc_top_queries: Retrieve highest performing search queries from live Google Search Console API.
+- gsc_top_pages: Retrieve highest traffic landing pages from live Google Search Console API.
+- gsc_search_analytics: Query live multidimensional Search Console metrics (query, page, device, country, date).
+- gsc_opportunity_audit: Run statistical intelligence heuristics on GSC data to detect Page 2 keywords, SERP snippet low CTR, and cannibalization.
+- gsc_performance_comparison: Compare search performance between two date ranges to evaluate traffic deltas and trends.
+- get_keyword_rankings / get_audit_issues / get_search_console_analytics: Retrieve stored project rankings and audit diagnostics.
+- run_intelligence_analysis: Run deterministic SEO heuristic engine to generate updated SEOInsight records.
+- generate_recommendation / generate_content_brief / generate_content_draft: Synthesize AI strategy, briefs, and drafts.
+- propose_seo_action: Propose formal SEO action task for human review and approval.
 
 SAFETY & GOVERNANCE RULES:
 1. NEVER invent parameters or call tools that are not in the provided tool registry.
 2. Ground all arguments in previous observations and database context.
 3. When creating mutating actions, use propose_seo_action so the user can review and approve them.
-4. Output MUST be valid JSON adhering strictly to one of the two decision schemas:
+4. Keep reasoning internal and concise. Output MUST be valid JSON adhering strictly to one of the two decision schemas:
 
 TOOL SELECTION SCHEMA:
 {
@@ -1290,6 +1301,7 @@ class MockAIProvider(BaseAIProvider):
         """
         Deterministic Mock reasoning logic for Agent Orchestrator.
         Inspects goal and prior step history to decide the next logical tool call or finish.
+        Supports dynamic multi-step exploration for GSC intelligence, audit diagnostics, and rank tracking.
         """
         goal = (context.get('goal') or '').lower()
         history = context.get('history') or []
@@ -1300,16 +1312,179 @@ class MockAIProvider(BaseAIProvider):
         if context.get('mock_decision'):
             return context['mock_decision']
 
-        # 1. First Step: Inspection
-        if not tool_calls:
-            if any(term in goal for term in ['gsc', 'search console', 'ctr', 'impressions']):
+        # Extract returned IDs and data from history observations
+        insight_id = context.get('target_insight_id')
+        rec_id = context.get('target_recommendation_id')
+        brief_id = context.get('target_brief_id')
+        draft_id = context.get('target_draft_id')
+        top_query_extracted = None
+
+        for h in history:
+            t_name = h.get('tool_name')
+            t_out = h.get('tool_output') or {}
+            if isinstance(t_out, dict):
+                if t_name == 'generate_recommendation' and t_out.get('id'):
+                    rec_id = t_out['id']
+                elif t_name == 'generate_content_brief' and t_out.get('id'):
+                    brief_id = t_out['id']
+                elif t_name == 'generate_content_draft' and t_out.get('id'):
+                    draft_id = t_out['id']
+                elif t_name == 'gsc_top_queries' and t_out.get('top_queries'):
+                    top_query_extracted = t_out['top_queries'][0].get('query')
+                elif t_name == 'gsc_search_analytics' and t_out.get('rows'):
+                    top_query_extracted = t_out['rows'][0].get('query')
+
+        # ---------------------------------------------------------------------
+        # BRANCH 1: GSC Performance Comparison / Period Trend Goal
+        # ---------------------------------------------------------------------
+        is_comparison_goal = any(term in goal for term in ['compare', 'comparison', 'trend', 'period', 'previous period', 'over time', 'last 28'])
+        if is_comparison_goal and ('gsc_performance_comparison' in available_tools or 'gsc_opportunity_audit' in available_tools):
+            if 'gsc_performance_comparison' not in tool_calls and 'gsc_performance_comparison' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "gsc_performance_comparison",
+                    "arguments": {
+                        "base_start_date": "2026-08-01",
+                        "base_end_date": "2026-08-28",
+                        "comp_start_date": "2026-07-04",
+                        "comp_end_date": "2026-07-31",
+                        "row_limit": 50
+                    },
+                    "reason": "Compare Search Console performance across consecutive 28-day periods to detect traffic and ranking deltas."
+                }
+
+            if 'gsc_opportunity_audit' not in tool_calls and 'gsc_opportunity_audit' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "gsc_opportunity_audit",
+                    "arguments": {"min_impressions": 10, "sync_to_insights": True},
+                    "reason": "Execute GSC intelligence audit to identify specific page 2 keywords and CTR underperformance contributing to trend."
+                }
+
+            if 'generate_recommendation' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_recommendation",
+                    "arguments": {"insight_id": insight_id or 1},
+                    "reason": "Generate grounded AI recovery strategy for highest-priority search decline insight."
+                }
+
+            if 'propose_seo_action' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "propose_seo_action",
+                    "arguments": {"source_type": "recommendation", "source_id": rec_id or 1},
+                    "reason": "Propose formal SEO recovery action for human review and approval."
+                }
+
+            return {
+                "action": "finish",
+                "summary": (
+                    f"Completed Google Search Console trend comparison workflow for goal: \"{context.get('goal', '')}\". "
+                    "Analyzed period-over-period search metrics, evaluated opportunity findings, synthesized a strategic recovery recommendation, "
+                    "and proposed a formal SEO Action awaiting human approval."
+                )
+            }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 2: GSC Queries & Opportunity Intelligence Goal
+        # ---------------------------------------------------------------------
+        is_gsc_goal = any(term in goal for term in ['gsc', 'search console', 'ctr', 'impressions', 'page 2', 'queries', 'snippet'])
+        if is_gsc_goal:
+            # 1. Inspect top queries from live GSC API
+            if 'gsc_top_queries' not in tool_calls and 'gsc_top_queries' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "gsc_top_queries",
+                    "arguments": {"start_date": "2026-08-01", "end_date": "2026-08-28", "limit": 20},
+                    "reason": "Query highest-impression organic search queries from Google Search Console."
+                }
+
+            # 2. Correlate with top landing pages for the top search query
+            if 'gsc_top_pages' not in tool_calls and 'gsc_top_pages' in available_tools:
+                args = {"start_date": "2026-08-01", "end_date": "2026-08-28", "limit": 10}
+                if top_query_extracted:
+                    args["query_filter"] = top_query_extracted
+                return {
+                    "action": "tool",
+                    "tool_name": "gsc_top_pages",
+                    "arguments": args,
+                    "reason": f"Retrieve landing pages ranking for '{top_query_extracted or 'top queries'}' to evaluate CTR and cannibalization."
+                }
+
+            # 3. Run GSC opportunity audit
+            if 'gsc_opportunity_audit' not in tool_calls and 'gsc_opportunity_audit' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "gsc_opportunity_audit",
+                    "arguments": {"min_impressions": 10, "sync_to_insights": True},
+                    "reason": "Run GSC intelligence heuristics to detect Page 2 opportunities, SERP low-CTR snippets, and cannibalization."
+                }
+
+            # Fallback inspection if live GSC tools not in available tools
+            if not tool_calls and 'get_search_console_analytics' in available_tools:
                 return {
                     "action": "tool",
                     "tool_name": "get_search_console_analytics",
                     "arguments": {"min_impressions": 100, "limit": 10},
-                    "reason": "Inspect Google Search Console query impressions and click-through rates to find opportunities."
+                    "reason": "Inspect stored Search Console queries to find low-CTR targets."
                 }
-            elif any(term in goal for term in ['audit', 'technical', 'issue', 'health', 'broken']):
+
+            if 'run_intelligence_analysis' not in tool_calls and 'gsc_opportunity_audit' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "run_intelligence_analysis",
+                    "arguments": {},
+                    "reason": "Run SEO intelligence heuristic analysis to generate fresh anomaly and opportunity insights."
+                }
+
+            if 'generate_recommendation' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_recommendation",
+                    "arguments": {"insight_id": insight_id or 1},
+                    "reason": "Generate grounded AI strategy recommendation for highest-impact GSC search opportunity."
+                }
+
+            if 'generate_content_brief' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_content_brief",
+                    "arguments": {"recommendation_id": rec_id or 1, "content_type": "blog_post"},
+                    "reason": "Synthesize content brief with optimized headings, secondary keywords, and SERP snippet copy."
+                }
+
+            if 'generate_content_draft' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "generate_content_draft",
+                    "arguments": {"content_brief_id": brief_id or 1},
+                    "reason": "Draft full-length optimized content with schema markup and keyword density mapping."
+                }
+
+            if 'propose_seo_action' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "propose_seo_action",
+                    "arguments": {"source_type": "draft", "source_id": draft_id or 1},
+                    "reason": "Create formal SEOAction proposal for human review and approval."
+                }
+
+            return {
+                "action": "finish",
+                "summary": (
+                    f"Successfully completed autonomous GSC intelligence workflow for goal: \"{context.get('goal', '')}\". "
+                    "Retrieved live search analytics, identified high-impact Page 2 and CTR opportunities, synthesized grounded recommendations, "
+                    "drafted full content optimizations, and submitted a formal proposal for human approval."
+                )
+            }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 3: Technical Audit / Crawl Diagnostics Goal
+        # ---------------------------------------------------------------------
+        # 1. First Step: Inspection
+        if not tool_calls:
+            if any(term in goal for term in ['audit', 'technical', 'issue', 'health', 'broken']):
                 return {
                     "action": "tool",
                     "tool_name": "get_audit_issues",
@@ -1332,23 +1507,6 @@ class MockAIProvider(BaseAIProvider):
                 "arguments": {},
                 "reason": "Run SEO intelligence heuristic analysis to generate fresh anomaly and opportunity insights."
             }
-
-        # Extract returned IDs from history observations if available
-        insight_id = context.get('target_insight_id')
-        rec_id = context.get('target_recommendation_id')
-        brief_id = context.get('target_brief_id')
-        draft_id = context.get('target_draft_id')
-
-        for h in history:
-            t_name = h.get('tool_name')
-            t_out = h.get('tool_output') or {}
-            if isinstance(t_out, dict):
-                if t_name == 'generate_recommendation' and t_out.get('id'):
-                    rec_id = t_out['id']
-                elif t_name == 'generate_content_brief' and t_out.get('id'):
-                    brief_id = t_out['id']
-                elif t_name == 'generate_content_draft' and t_out.get('id'):
-                    draft_id = t_out['id']
 
         # 3. Third Step: Generate Recommendation
         if 'generate_recommendation' not in tool_calls:
