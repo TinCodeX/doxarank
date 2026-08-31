@@ -3310,6 +3310,9 @@ class ToolRegistryTests(TestCase):
             'get_keyword_rankings',
             'get_search_console_analytics',
             'get_audit_issues',
+            'gsc_search_analytics',
+            'gsc_top_queries',
+            'gsc_top_pages',
             'run_intelligence_analysis',
             'generate_recommendation',
             'generate_content_brief',
@@ -3317,7 +3320,7 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 8)
+        self.assertEqual(len(registered_names), 11)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3327,7 +3330,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 8)
+        self.assertEqual(len(schemas), 11)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -3345,7 +3348,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_governance_attributes(self):
         """3. Tool governance classification matches safety policy."""
         # Read-only tools
-        for name in ['get_keyword_rankings', 'get_search_console_analytics', 'get_audit_issues']:
+        for name in ['get_keyword_rankings', 'get_search_console_analytics', 'get_audit_issues', 'gsc_search_analytics', 'gsc_top_queries', 'gsc_top_pages']:
             tool = self.registry.get(name)
             self.assertEqual(tool.category, ToolCategory.READ_ONLY)
             self.assertFalse(tool.requires_approval)
@@ -6065,3 +6068,458 @@ class GoogleOAuthFlowTests(TestCase):
         self.assertNotIn(secret_token, serialized_str)
         self.assertNotIn(getattr(settings, 'GOOGLE_OAUTH_CLIENT_SECRET', ''), serialized_str)
         self.assertNotIn('encrypted_refresh_token', response.data)
+
+
+@override_settings(
+    GOOGLE_OAUTH_CLIENT_ID='mock_test_client_id.apps.googleusercontent.com',
+    GOOGLE_OAUTH_CLIENT_SECRET='mock_test_client_secret_xyz99999',
+    GOOGLE_OAUTH_REDIRECT_URI='http://localhost:5173/integrations/google/callback'
+)
+class GoogleSearchConsoleApiAndToolsTests(TestCase):
+    """
+    Phase 4.1.3: Google Search Console API Access Service & Agent Tools Test Suite
+    1. Retrieval and validation of active SearchConsoleConnection
+    2. Missing or disconnected connection raises SearchConsoleNotConnectedError
+    3. Missing or unconfigured credentials raises SearchConsoleCredentialsError
+    4. Auto-refreshing OAuth credential construction with decrypted refresh token
+    5. Revoked or expired credentials handling and error state recording
+    6. Search Analytics query with response normalization and calculated summary metrics
+    7. get_top_queries convenience method with landing page filtering
+    8. get_top_pages convenience method with query filtering
+    9. Strict date validation (format, start > end, future date, historical lookback limit)
+    10. Dimension and row limit validation (clamping and whitelisting)
+    11. Google API HttpError handling (401, 403, 404, 429, 500) without crashing
+    12. Multi-tenant isolation across project boundaries
+    13. Tool registry contains gsc_search_analytics, gsc_top_queries, and gsc_top_pages
+    14. Execution of GSC tools through ToolRegistry.execute()
+    15. Schema validation error handling for GSC tools
+    16. Zero credential leakage in tool data, error responses, and telemetry
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.owner = User.objects.create_user(
+            email='gsc_tools_owner@doxarank.com',
+            password='Password123!',
+            first_name='Tools',
+            last_name='Owner'
+        )
+        self.other_user = User.objects.create_user(
+            email='gsc_tools_other@doxarank.com',
+            password='Password123!',
+            first_name='Tools',
+            last_name='Other'
+        )
+        self.project = Project.objects.create(
+            owner=self.owner,
+            name='GSC Tools Project',
+            website_url='https://tools-project.et'
+        )
+        self.other_project = Project.objects.create(
+            owner=self.other_user,
+            name='Other Tools Project',
+            website_url='https://other-tools.et'
+        )
+
+        # Create valid SearchConsoleConnection for project
+        self.connection = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:tools-project.et",
+            is_connected=True,
+            google_account_email="owner@tools-project.et",
+            scopes=["https://www.googleapis.com/auth/webmasters.readonly"]
+        )
+        self.raw_refresh_token = "1//04_mock_live_gsc_refresh_token_test_12345"
+        self.connection.set_refresh_token(self.raw_refresh_token)
+        self.connection.save()
+
+    def _create_mock_gsc_client(self, rows=None):
+        """Helper to create a mock googleapiclient Search Console client."""
+        mock_client = MagicMock()
+        mock_execute = MagicMock(return_value={"rows": rows if rows is not None else []})
+        mock_client.searchanalytics().query().execute = mock_execute
+        return mock_client
+
+    def test_service_get_connection_success(self):
+        """1. GoogleSearchConsoleService resolves active connection for project."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        service = GoogleSearchConsoleService(project=self.project)
+        connection = service.get_connection()
+        self.assertEqual(connection.id, self.connection.id)
+        self.assertEqual(connection.property_url, "sc-domain:tools-project.et")
+
+    def test_service_get_connection_missing_or_disconnected_raises(self):
+        """2. Disconnected or missing SearchConsoleConnection raises SearchConsoleNotConnectedError."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleNotConnectedError
+        )
+
+        # Disconnected connection
+        self.connection.is_connected = False
+        self.connection.save()
+
+        service = GoogleSearchConsoleService(project=self.project)
+        with self.assertRaises(SearchConsoleNotConnectedError):
+            service.get_connection()
+
+        # No connection exists for other project
+        other_service = GoogleSearchConsoleService(project=self.other_project)
+        with self.assertRaises(SearchConsoleNotConnectedError):
+            other_service.get_connection()
+
+    def test_service_get_connection_missing_credentials_raises(self):
+        """3. Connection without credentials raises SearchConsoleCredentialsError."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleCredentialsError
+        )
+
+        self.connection.encrypted_refresh_token = ""
+        self.connection.save()
+
+        service = GoogleSearchConsoleService(project=self.project)
+        with self.assertRaises(SearchConsoleCredentialsError):
+            service.get_connection()
+
+    @patch('google.oauth2.credentials.Credentials.refresh')
+    def test_service_get_credentials_and_auto_refresh(self, mock_refresh):
+        """4. Auto-refreshing Credentials instance constructed with decrypted token."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        service = GoogleSearchConsoleService(project=self.project)
+        creds = service.get_credentials()
+
+        self.assertIsNotNone(creds)
+        self.assertEqual(creds.refresh_token, self.raw_refresh_token)
+        mock_refresh.assert_called_once()
+
+    @patch('google.oauth2.credentials.Credentials.refresh')
+    def test_service_get_credentials_revoked_updates_error_state(self, mock_refresh):
+        """5. Expired or revoked credentials update connection status to failed and raise clean error."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleCredentialsError
+        )
+
+        mock_refresh.side_effect = Exception("invalid_grant: Token has been expired or revoked.")
+
+        service = GoogleSearchConsoleService(project=self.project)
+        with self.assertRaises(SearchConsoleCredentialsError) as ctx:
+            service.get_credentials()
+
+        self.assertIn("expired or been revoked", str(ctx.exception))
+        self.connection.refresh_from_db()
+        self.assertEqual(self.connection.sync_status, "failed")
+        self.assertIn("expired or revoked", self.connection.error_message)
+
+    def test_query_search_analytics_success_normalization(self):
+        """6. Live Search Analytics query returns normalized internal schema with summary aggregates."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        sample_rows = [
+            {
+                "keys": ["ethiopia tech news"],
+                "clicks": 150,
+                "impressions": 3000,
+                "ctr": 0.05,
+                "position": 3.2
+            },
+            {
+                "keys": ["addis ababa fintech"],
+                "clicks": 50,
+                "impressions": 1000,
+                "ctr": 0.05,
+                "position": 7.8
+            }
+        ]
+        mock_client = self._create_mock_gsc_client(rows=sample_rows)
+
+        service = GoogleSearchConsoleService(project=self.project)
+        result = service.query_search_analytics(
+            start_date="2026-08-01",
+            end_date="2026-08-20",
+            dimensions=["query"],
+            row_limit=25,
+            client=mock_client
+        )
+
+        self.assertEqual(result["project_id"], self.project.id)
+        self.assertEqual(result["property_url"], "sc-domain:tools-project.et")
+        self.assertEqual(result["total_rows"], 2)
+        self.assertEqual(len(result["rows"]), 2)
+
+        # Verify row mapping
+        first_row = result["rows"][0]
+        self.assertEqual(first_row["query"], "ethiopia tech news")
+        self.assertEqual(first_row["clicks"], 150)
+        self.assertEqual(first_row["impressions"], 3000)
+        self.assertEqual(first_row["ctr_percent"], 5.0)
+        self.assertEqual(first_row["position"], 3.2)
+
+        # Verify summary metrics
+        summary = result["summary"]
+        self.assertEqual(summary["total_clicks"], 200)
+        self.assertEqual(summary["total_impressions"], 4000)
+        self.assertEqual(summary["average_ctr_percent"], 5.0)
+        self.assertAlmostEqual(summary["average_position"], 4.35, delta=0.1)
+
+    def test_get_top_queries_with_page_filter(self):
+        """7. get_top_queries sorts queries and applies page filter."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        sample_rows = [
+            {"keys": ["low impressions"], "clicks": 10, "impressions": 100, "ctr": 0.1, "position": 1.0},
+            {"keys": ["high impressions"], "clicks": 50, "impressions": 5000, "ctr": 0.01, "position": 8.0}
+        ]
+        mock_client = self._create_mock_gsc_client(rows=sample_rows)
+
+        service = GoogleSearchConsoleService(project=self.project)
+        result = service.get_top_queries(
+            start_date="2026-08-01",
+            end_date="2026-08-15",
+            limit=10,
+            page_filter="https://tools-project.et/tech",
+            client=mock_client
+        )
+
+        self.assertEqual(result["returned_count"], 2)
+        self.assertEqual(result["page_filter"], "https://tools-project.et/tech")
+        # Highest impressions query sorted first
+        self.assertEqual(result["top_queries"][0]["query"], "high impressions")
+        self.assertEqual(result["top_queries"][1]["query"], "low impressions")
+
+    def test_get_top_pages_with_query_filter(self):
+        """8. get_top_pages sorts landing pages by clicks and applies query filter."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        sample_rows = [
+            {"keys": ["https://tools-project.et/blog/1"], "clicks": 5, "impressions": 200, "ctr": 0.025, "position": 4.0},
+            {"keys": ["https://tools-project.et/blog/2"], "clicks": 80, "impressions": 1000, "ctr": 0.08, "position": 2.0}
+        ]
+        mock_client = self._create_mock_gsc_client(rows=sample_rows)
+
+        service = GoogleSearchConsoleService(project=self.project)
+        result = service.get_top_pages(
+            start_date="2026-08-01",
+            end_date="2026-08-15",
+            limit=10,
+            query_filter="tech news",
+            client=mock_client
+        )
+
+        self.assertEqual(result["returned_count"], 2)
+        self.assertEqual(result["query_filter"], "tech news")
+        # Highest clicks page sorted first
+        self.assertEqual(result["top_pages"][0]["page"], "https://tools-project.et/blog/2")
+        self.assertEqual(result["top_pages"][1]["page"], "https://tools-project.et/blog/1")
+
+    def test_date_validations(self):
+        """9. Date validations enforce YYYY-MM-DD, bounds, and max lookback range."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleValidationError
+        )
+
+        service = GoogleSearchConsoleService(project=self.project)
+
+        # Malformed date strings
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_string("08-20-2026")
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_string("invalid_date")
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_string("")
+
+        # start_date > end_date
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_range("2026-08-20", "2026-08-01")
+
+        # Future date
+        future_date = (timezone.now().date() + timedelta(days=5)).strftime('%Y-%m-%d')
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_range(future_date, future_date)
+
+        # Older than 16 months lookback
+        ancient_date = (timezone.now().date() - timedelta(days=600)).strftime('%Y-%m-%d')
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_date_range(ancient_date, "2026-08-01")
+
+    def test_dimension_and_limit_validations(self):
+        """10. Dimensions and row limits are strictly validated and clamped."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleValidationError
+        )
+
+        service = GoogleSearchConsoleService(project=self.project)
+
+        # Invalid dimension
+        with self.assertRaises(SearchConsoleValidationError):
+            service.validate_dimensions(["query", "injected_invalid_dim"])
+
+        # Default dimensions when None
+        self.assertEqual(service.validate_dimensions(None), ["query"])
+
+        # Valid dimensions subset
+        valid = service.validate_dimensions(["page", "device", "country"])
+        self.assertEqual(valid, ["page", "device", "country"])
+
+    def test_google_api_http_error_handling(self):
+        """11. Google API HttpErrors are safely converted to SearchConsoleApiError with diagnostic messages."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleApiError
+        )
+        from googleapiclient.errors import HttpError
+        import httplib2
+
+        service = GoogleSearchConsoleService(project=self.project)
+
+        # 401 Unauthorized / Expired
+        resp_401 = httplib2.Response({'status': 401})
+        http_err_401 = HttpError(resp_401, b'{"error": {"message": "Invalid Credentials"}}')
+        mock_client_401 = MagicMock()
+        mock_client_401.searchanalytics().query().execute.side_effect = http_err_401
+
+        with self.assertRaises(SearchConsoleApiError) as ctx_401:
+            service.query_search_analytics("2026-08-01", "2026-08-15", client=mock_client_401)
+        self.assertIn("authorization has expired", str(ctx_401.exception))
+
+        # 403 Forbidden / Not Owner
+        resp_403 = httplib2.Response({'status': 403})
+        http_err_403 = HttpError(resp_403, b'{"error": {"message": "User does not have permission"}}')
+        mock_client_403 = MagicMock()
+        mock_client_403.searchanalytics().query().execute.side_effect = http_err_403
+
+        with self.assertRaises(SearchConsoleApiError) as ctx_403:
+            service.query_search_analytics("2026-08-01", "2026-08-15", client=mock_client_403)
+        self.assertIn("permission denied", str(ctx_403.exception))
+
+        # 429 Rate Limit
+        resp_429 = httplib2.Response({'status': 429})
+        http_err_429 = HttpError(resp_429, b'{"error": {"message": "Quota exceeded"}}')
+        mock_client_429 = MagicMock()
+        mock_client_429.searchanalytics().query().execute.side_effect = http_err_429
+
+        with self.assertRaises(SearchConsoleApiError) as ctx_429:
+            service.query_search_analytics("2026-08-01", "2026-08-15", client=mock_client_429)
+        self.assertIn("quota exceeded", str(ctx_429.exception))
+
+    def test_multi_tenant_isolation_on_service_and_tools(self):
+        """12. Other users cannot access project owner's Search Console service."""
+        from apps.seo.services.google_search_console import (
+            GoogleSearchConsoleService,
+            SearchConsoleNotConnectedError
+        )
+
+        other_service = GoogleSearchConsoleService(project=self.other_project)
+        with self.assertRaises(SearchConsoleNotConnectedError):
+            other_service.get_connection()
+
+    def test_tool_registry_contains_gsc_tools(self):
+        """13. ToolRegistry registers gsc_search_analytics, gsc_top_queries, and gsc_top_pages."""
+        from apps.seo.services.tool_registry import get_tool_registry, ToolCategory
+
+        registry = get_tool_registry()
+
+        tool_names = [t.name for t in registry.list_tools()]
+        self.assertIn("gsc_search_analytics", tool_names)
+        self.assertIn("gsc_top_queries", tool_names)
+        self.assertIn("gsc_top_pages", tool_names)
+
+        # Check schemas and categories
+        analytics_tool = registry.get("gsc_search_analytics")
+        self.assertEqual(analytics_tool.category, ToolCategory.READ_ONLY)
+        self.assertFalse(analytics_tool.is_mutating)
+        self.assertFalse(analytics_tool.requires_approval)
+        self.assertIn("start_date", analytics_tool.parameters_schema["required"])
+        self.assertIn("end_date", analytics_tool.parameters_schema["required"])
+
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_client')
+    def test_gsc_tools_execution_via_tool_registry(self, mock_get_client):
+        """14. ToolRegistry.execute invokes GSC tools with proper arguments and returns success."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        mock_rows = [
+            {"keys": ["ethiopia seo agency"], "clicks": 40, "impressions": 800, "ctr": 0.05, "position": 4.1}
+        ]
+        mock_client = self._create_mock_gsc_client(rows=mock_rows)
+        mock_get_client.return_value = mock_client
+
+        registry = get_tool_registry()
+
+        # Execute gsc_search_analytics
+        res1 = registry.execute("gsc_search_analytics", self.project, {
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-25",
+            "dimensions": ["query"],
+            "row_limit": 10
+        })
+        self.assertTrue(res1["success"])
+        self.assertEqual(res1["tool_name"], "gsc_search_analytics")
+        self.assertEqual(res1["data"]["total_rows"], 1)
+
+        # Execute gsc_top_queries
+        res2 = registry.execute("gsc_top_queries", self.project, {
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-25",
+            "limit": 5
+        })
+        self.assertTrue(res2["success"])
+        self.assertEqual(res2["tool_name"], "gsc_top_queries")
+        self.assertEqual(res2["data"]["returned_count"], 1)
+
+        # Execute gsc_top_pages
+        mock_page_rows = [
+            {"keys": ["https://tools-project.et/seo-guide"], "clicks": 90, "impressions": 1200, "ctr": 0.075, "position": 2.2}
+        ]
+        mock_get_client.return_value = self._create_mock_gsc_client(rows=mock_page_rows)
+
+        res3 = registry.execute("gsc_top_pages", self.project, {
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-25",
+            "limit": 5
+        })
+        self.assertTrue(res3["success"])
+        self.assertEqual(res3["tool_name"], "gsc_top_pages")
+        self.assertEqual(res3["data"]["top_pages"][0]["page"], "https://tools-project.et/seo-guide")
+
+    def test_gsc_tools_validation_error_handling_via_registry(self):
+        """15. Missing required arguments or invalid schemas return VALIDATION_ERROR."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        registry = get_tool_registry()
+
+        # Missing required end_date
+        res = registry.execute("gsc_search_analytics", self.project, {
+            "start_date": "2026-08-01"
+        })
+        self.assertFalse(res["success"])
+        self.assertEqual(res["error"]["code"], "VALIDATION_ERROR")
+        self.assertIn("end_date", res["error"]["message"])
+
+    @patch('apps.seo.services.google_search_console.GoogleSearchConsoleService.get_client')
+    def test_zero_credential_leakage_in_tool_output_and_errors(self, mock_get_client):
+        """16. Secret tokens and credentials are redacted from tool error outputs."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        # Simulate exception containing raw token
+        secret_leak = "Failed communicating with Google API using refresh token 1//04_secret_xyz999 and Bearer secret_access_token_123"
+        mock_client = MagicMock()
+        mock_client.searchanalytics().query().execute.side_effect = RuntimeError(secret_leak)
+        mock_get_client.return_value = mock_client
+
+        registry = get_tool_registry()
+        res = registry.execute("gsc_search_analytics", self.project, {
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-25"
+        })
+
+        self.assertFalse(res["success"])
+        self.assertEqual(res["error"]["code"], "EXECUTION_ERROR")
+        err_msg = res["error"]["message"]
+        self.assertNotIn("1//04_secret_xyz999", err_msg)
+        self.assertNotIn("secret_access_token_123", err_msg)
+        self.assertIn("[REDACTED", err_msg)

@@ -497,12 +497,85 @@ def handle_propose_seo_action(project: Project, args: Dict[str, Any]) -> Dict[st
     }
 
 
+def handle_gsc_search_analytics(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Query live Google Search Console performance metrics for the project."""
+    from apps.seo.services.google_search_console import GoogleSearchConsoleService
+    start_date = args.get("start_date")
+    end_date = args.get("end_date")
+    dimensions = args.get("dimensions")
+    row_limit = args.get("row_limit", 25)
+    query_filter = args.get("query_filter")
+    page_filter = args.get("page_filter")
+    site_url = args.get("site_url")
+
+    dimension_filter_groups = None
+    filters = []
+    if query_filter and isinstance(query_filter, str) and query_filter.strip():
+        filters.append({
+            "dimension": "query",
+            "operator": "contains",
+            "expression": query_filter.strip()
+        })
+    if page_filter and isinstance(page_filter, str) and page_filter.strip():
+        filters.append({
+            "dimension": "page",
+            "operator": "contains",
+            "expression": page_filter.strip()
+        })
+    if filters:
+        dimension_filter_groups = [{"filters": filters}]
+
+    service = GoogleSearchConsoleService(project=project)
+    return service.query_search_analytics(
+        start_date=start_date,
+        end_date=end_date,
+        dimensions=dimensions,
+        row_limit=row_limit,
+        dimension_filter_groups=dimension_filter_groups,
+        site_url=site_url
+    )
+
+
+def handle_gsc_top_queries(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve highest performing search queries from Google Search Console."""
+    from apps.seo.services.google_search_console import GoogleSearchConsoleService
+    start_date = args.get("start_date")
+    end_date = args.get("end_date")
+    limit = args.get("limit", 20)
+    page_filter = args.get("page_filter")
+
+    service = GoogleSearchConsoleService(project=project)
+    return service.get_top_queries(
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        page_filter=page_filter
+    )
+
+
+def handle_gsc_top_pages(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve highest traffic landing pages from Google Search Console."""
+    from apps.seo.services.google_search_console import GoogleSearchConsoleService
+    start_date = args.get("start_date")
+    end_date = args.get("end_date")
+    limit = args.get("limit", 20)
+    query_filter = args.get("query_filter")
+
+    service = GoogleSearchConsoleService(project=project)
+    return service.get_top_pages(
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        query_filter=query_filter
+    )
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
 
 def create_default_tool_registry() -> ToolRegistry:
-    """Build and return the standard ToolRegistry populated with all 8 core tools."""
+    """Build and return the standard ToolRegistry populated with all 11 core tools."""
     registry = ToolRegistry()
 
     # 1. get_keyword_rankings
@@ -528,7 +601,7 @@ def create_default_tool_registry() -> ToolRegistry:
     # 2. get_search_console_analytics
     registry.register(AgentToolDefinition(
         name="get_search_console_analytics",
-        description="Retrieve Google Search Console performance queries, impressions, clicks, CTR, and positions for the current project.",
+        description="Retrieve cached/stored Google Search Console performance queries, impressions, clicks, CTR, and positions for the current project.",
         category=ToolCategory.READ_ONLY,
         parameters_schema={
             "type": "object",
@@ -564,7 +637,73 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_get_audit_issues
     ))
 
-    # 4. run_intelligence_analysis
+    # 4. gsc_search_analytics (Live GSC API Query)
+    registry.register(AgentToolDefinition(
+        name="gsc_search_analytics",
+        description="Query live Google Search Console performance metrics (clicks, impressions, CTR, average position) across custom dimensions (query, page, date, device, country) for a given date range.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format (required)."},
+                "end_date": {"type": "string", "description": "End date in YYYY-MM-DD format (required)."},
+                "dimensions": {
+                    "type": "array",
+                    "description": "Dimensions to group by (e.g. ['query', 'page', 'country', 'device', 'date']). Defaults to ['query']."
+                },
+                "row_limit": {"type": "integer", "description": "Maximum rows to return (default 25, max 250)."},
+                "query_filter": {"type": "string", "description": "Optional substring filter for search query."},
+                "page_filter": {"type": "string", "description": "Optional substring filter for landing page URL."},
+                "site_url": {"type": "string", "description": "Optional custom Search Console property URL override."}
+            },
+            "required": ["start_date", "end_date"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_gsc_search_analytics
+    ))
+
+    # 5. gsc_top_queries (Live GSC Top Queries)
+    registry.register(AgentToolDefinition(
+        name="gsc_top_queries",
+        description="Retrieve the highest performing organic search queries by impressions and clicks from Google Search Console for a specific date range.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format (required)."},
+                "end_date": {"type": "string", "description": "End date in YYYY-MM-DD format (required)."},
+                "limit": {"type": "integer", "description": "Maximum queries to return (default 20, max 100)."},
+                "page_filter": {"type": "string", "description": "Optional filter for a specific landing page URL."}
+            },
+            "required": ["start_date", "end_date"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_gsc_top_queries
+    ))
+
+    # 6. gsc_top_pages (Live GSC Top Pages)
+    registry.register(AgentToolDefinition(
+        name="gsc_top_pages",
+        description="Retrieve the highest-traffic landing pages from Google Search Console by clicks and impressions for a specific date range.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format (required)."},
+                "end_date": {"type": "string", "description": "End date in YYYY-MM-DD format (required)."},
+                "limit": {"type": "integer", "description": "Maximum pages to return (default 20, max 100)."},
+                "query_filter": {"type": "string", "description": "Optional filter for a specific search query phrase."}
+            },
+            "required": ["start_date", "end_date"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_gsc_top_pages
+    ))
+
+    # 7. run_intelligence_analysis
     registry.register(AgentToolDefinition(
         name="run_intelligence_analysis",
         description="Run the deterministic SEO intelligence heuristic engine to analyze ranking movements, CTR anomalies, and audit issues, generating updated SEOInsight records.",
@@ -581,7 +720,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_run_intelligence_analysis
     ))
 
-    # 5. generate_recommendation
+    # 8. generate_recommendation
     registry.register(AgentToolDefinition(
         name="generate_recommendation",
         description="Generate an AI-powered, grounded SEO recommendation with strategy, checklist, and impact prediction based on an SEO insight.",
@@ -598,7 +737,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_recommendation
     ))
 
-    # 6. generate_content_brief
+    # 9. generate_content_brief
     registry.register(AgentToolDefinition(
         name="generate_content_brief",
         description="Generate a comprehensive SEO content brief (outline, secondary keywords, search intent, FAQ, link suggestions) based on an approved recommendation.",
@@ -620,7 +759,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_content_brief
     ))
 
-    # 7. generate_content_draft
+    # 10. generate_content_draft
     registry.register(AgentToolDefinition(
         name="generate_content_draft",
         description="Generate a full-length, publish-ready SEO content draft in Markdown with schema markup and keyword density mapping based on a content brief.",
@@ -638,7 +777,7 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_generate_content_draft
     ))
 
-    # 8. propose_seo_action
+    # 11. propose_seo_action
     registry.register(AgentToolDefinition(
         name="propose_seo_action",
         description="Create a formal, structured SEOAction task proposal for human review and approval. Does NOT execute the action.",
