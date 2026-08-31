@@ -1,4 +1,10 @@
+import logging
+import re
+from dataclasses import dataclass, field, asdict
 from decimal import Decimal
+from typing import Dict, Any, List, Optional, Tuple, Set, Union
+from urllib.parse import urlparse
+
 from django.db.models import Sum, Avg, Count, Min, Max
 from django.utils import timezone
 from apps.projects.models import Project
@@ -7,6 +13,11 @@ from apps.seo.models import (
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, InsightSeverity, InsightStatus, InsightSource, InsightType
 )
+from apps.seo.services.agent_events import (
+    AgentEvent, AgentEventType, get_event_publisher, AgentEventPublisher
+)
+
+logger = logging.getLogger(__name__)
 
 
 class CandidateInsight:
@@ -424,3 +435,678 @@ class SEOIntelligenceService:
             ))
 
         return candidates
+
+
+# =============================================================================
+# URL NORMALIZATION HELPER FOR EVIDENCE MATCHING
+# =============================================================================
+
+def normalize_url_path_for_matching(url: Optional[str]) -> str:
+    """
+    Normalizes a URL or path for consistent mapping across GSC analytics and SiteAudit issues.
+    - Strips scheme and default ports.
+    - Normalizes lowercase host and path.
+    - Removes trailing slashes.
+    """
+    if not url or not isinstance(url, str):
+        return ""
+    clean = url.strip()
+    if not clean:
+        return ""
+    try:
+        parsed = urlparse(clean)
+        path = parsed.path or "/"
+        netloc = (parsed.netloc or "").lower().split(':')[0]
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        if len(path) > 1 and path.endswith("/"):
+            path = path[:-1]
+        if netloc:
+            return f"{netloc}{path}"
+        return path
+    except Exception:
+        return clean.rstrip("/").lower()
+
+
+class OpportunityType:
+    LOW_CTR_HIGH_IMPRESSIONS = "LOW_CTR_HIGH_IMPRESSIONS"
+    RANKING_TECHNICAL_DECAY = "RANKING_TECHNICAL_DECAY"
+    HIGH_VALUE_PAGE_MAINTENANCE = "HIGH_VALUE_PAGE_MAINTENANCE"
+    QUERY_PAGE_OPPORTUNITY = "QUERY_PAGE_OPPORTUNITY"
+
+
+@dataclass
+class SEOCorrelationOpportunity:
+    """
+    Structured, deterministic SEO opportunity produced by correlating
+    Google Search Console search analytics with live Site Audit diagnostics.
+    """
+    type: str
+    severity: str  # 'critical', 'high', 'warning', 'medium', 'low', 'info'
+    confidence: float  # 0.0 to 1.0
+    title: str
+    explanation: str
+    evidence: Dict[str, Any] = field(default_factory=dict)
+    recommended_action: str = ""
+    suggested_action_type: Optional[str] = None
+    target_url: Optional[str] = None
+    target_query: Optional[str] = None
+    affected_pages: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize opportunity to JSON-compatible dictionary."""
+        return {
+            "type": self.type,
+            "severity": self.severity,
+            "confidence": round(self.confidence, 2),
+            "title": self.title,
+            "explanation": self.explanation,
+            "evidence": self.evidence,
+            "recommended_action": self.recommended_action,
+            "suggested_action_type": self.suggested_action_type,
+            "target_url": self.target_url,
+            "target_query": self.target_query,
+            "affected_pages": self.affected_pages
+        }
+
+
+class SEOCorrelationIntelligenceService:
+    """
+    Live SEO Intelligence Correlation Service for DoxaRank.
+    Correlates Google Search Console performance data with live website audit issues
+    to identify prioritized, high-leverage SEO opportunities.
+    """
+
+    ONPAGE_SNIPPET_ISSUES = {
+        'missing_title', 'short_title', 'long_title',
+        'missing_meta_description', 'short_meta_description', 'long_meta_description',
+        'missing_h1', 'multiple_h1'
+    }
+
+    TECHNICAL_CRAWL_ISSUES = {
+        'broken_internal_link', 'broken_link', 'crawl_error',
+        'missing_canonical', 'canonical_mismatch',
+        'redirect_chain', 'redirect_loop', 'redirecting_internal_link',
+        'slow_response', 'missing_structured_data', 'missing_image_alt'
+    }
+
+    def __init__(
+        self,
+        project: Project,
+        publisher: Optional[AgentEventPublisher] = None
+    ):
+        if not project or not project.id:
+            raise ValueError("Valid Project context is required for SEOCorrelationIntelligenceService.")
+        self.project = project
+        self.publisher = publisher or get_event_publisher()
+
+    def _emit_event(
+        self,
+        event_type: Union[AgentEventType, str],
+        payload: Dict[str, Any],
+        run_id: Optional[int] = None
+    ) -> None:
+        """Safely emit an AgentEvent if publisher is active."""
+        try:
+            event = AgentEvent(
+                event_type=event_type,
+                run_id=run_id or 0,
+                project_id=self.project.id,
+                payload=payload
+            )
+            self.publisher.publish(event)
+        except Exception as exc:
+            logger.debug(f"[SEOCorrelationIntelligenceService] Event emission skipped/failed: {exc}")
+
+    @staticmethod
+    def _safe_int(val: Any) -> int:
+        try:
+            return int(val) if val is not None else 0
+        except (ValueError, TypeError):
+            return 0
+
+    @staticmethod
+    def _safe_float(val: Any) -> float:
+        try:
+            return float(val) if val is not None else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
+    def analyze_correlated_opportunities(
+        self,
+        page_rows: Optional[List[Dict[str, Any]]] = None,
+        query_rows: Optional[List[Dict[str, Any]]] = None,
+        combined_rows: Optional[List[Dict[str, Any]]] = None,
+        audit_id: Optional[int] = None,
+        min_impressions: int = 20,
+        limit: int = 10,
+        page_filter: Optional[str] = None,
+        sync_to_insights: bool = False,
+        run_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute deterministic cross-source correlation between GSC performance and SiteAudit diagnostics.
+        """
+        # 1. Emit start event
+        self._emit_event(
+            AgentEventType.SEO_INTELLIGENCE_STARTED,
+            {"min_impressions": min_impressions, "limit": limit, "page_filter": page_filter},
+            run_id=run_id
+        )
+
+        gsc_connected = False
+        audit_available = False
+
+        # 2. Fetch or prepare GSC data
+        pages = page_rows
+        queries = query_rows
+        combined = combined_rows
+
+        if pages is None and combined is None:
+            pages, queries, combined, gsc_connected = self._fetch_gsc_data(min_impressions)
+        else:
+            gsc_connected = bool(pages or combined or queries)
+
+        pages = pages or []
+        queries = queries or []
+        combined = combined or []
+
+        # Filter pages if page_filter provided
+        if page_filter:
+            norm_filter = page_filter.strip().lower()
+            pages = [p for p in pages if norm_filter in str(p.get("page", "")).lower()]
+            combined = [c for c in combined if norm_filter in str(c.get("page", "")).lower()]
+
+        # 3. Fetch SiteAudit and AuditIssues
+        audit_qs = SiteAudit.objects.filter(project=self.project)
+        if audit_id:
+            audit = audit_qs.filter(id=audit_id).first()
+        else:
+            audit = audit_qs.order_by('-created_at').first()
+
+        issues_by_url: Dict[str, List[AuditIssue]] = {}
+        all_issues: List[AuditIssue] = []
+
+        if audit:
+            audit_available = True
+            all_issues = list(AuditIssue.objects.filter(audit=audit))
+            for issue in all_issues:
+                norm_p = normalize_url_path_for_matching(issue.page_url)
+                if norm_p not in issues_by_url:
+                    issues_by_url[norm_p] = []
+                issues_by_url[norm_p].append(issue)
+
+        # 4. Emit evidence collected event
+        self._emit_event(
+            AgentEventType.SEO_EVIDENCE_COLLECTED,
+            {
+                "gsc_connected": gsc_connected,
+                "gsc_pages_count": len(pages),
+                "gsc_combined_count": len(combined),
+                "audit_available": audit_available,
+                "audit_issues_count": len(all_issues),
+                "distinct_pages_with_issues": len(issues_by_url)
+            },
+            run_id=run_id
+        )
+
+        # 5. Evaluate Correlation Rules
+        opportunities: List[SEOCorrelationOpportunity] = []
+
+        # Rule 1: High Impressions, Low CTR + Metadata/Snippet Issues
+        r1_opps = self._correlate_low_ctr_high_impressions(pages, combined, issues_by_url, min_impressions)
+        opportunities.extend(r1_opps)
+
+        # Rule 2: Ranking Decay + Technical Crawl Defect
+        r2_opps = self._correlate_ranking_technical_decay(pages, combined, issues_by_url, min_impressions)
+        opportunities.extend(r2_opps)
+
+        # Rule 3: High-Value Page Maintenance
+        r3_opps = self._correlate_high_value_page_maintenance(pages, issues_by_url)
+        opportunities.extend(r3_opps)
+
+        # Rule 4: Query-to-Landing-Page Opportunity
+        r4_opps = self._correlate_query_page_opportunities(combined, issues_by_url, min_impressions)
+        opportunities.extend(r4_opps)
+
+        # Emit detected events for opportunities
+        for opp in opportunities:
+            self._emit_event(
+                AgentEventType.SEO_OPPORTUNITY_DETECTED,
+                {
+                    "type": opp.type,
+                    "severity": opp.severity,
+                    "title": opp.title,
+                    "target_url": opp.target_url,
+                    "confidence": opp.confidence
+                },
+                run_id=run_id
+            )
+
+        # Sort opportunities by severity and confidence descending
+        severity_rank = {
+            'critical': 5,
+            'high': 4,
+            'warning': 3,
+            'opportunity': 2,
+            'medium': 2,
+            'info': 1,
+            'low': 1
+        }
+        sorted_opps = sorted(
+            opportunities,
+            key=lambda o: (severity_rank.get(o.severity.lower(), 0), o.confidence),
+            reverse=True
+        )
+
+        # Apply limit
+        bounded_opps = sorted_opps[:max(1, limit)]
+
+        # 6. Optional Persistence to SEOInsight
+        persisted_count = 0
+        if sync_to_insights and bounded_opps:
+            persisted_count = self._sync_to_insights(bounded_opps)
+
+        # 7. Emit completion event
+        self._emit_event(
+            AgentEventType.SEO_INTELLIGENCE_COMPLETED,
+            {
+                "total_opportunities": len(opportunities),
+                "returned_opportunities": len(bounded_opps),
+                "persisted_insights": persisted_count
+            },
+            run_id=run_id
+        )
+
+        return {
+            "status": "success",
+            "project_id": self.project.id,
+            "gsc_connected": gsc_connected,
+            "audit_available": audit_available,
+            "total_opportunities_found": len(opportunities),
+            "opportunities_count": len(bounded_opps),
+            "opportunities": [o.to_dict() for o in bounded_opps],
+            "persisted_insights_count": persisted_count
+        }
+
+    # =========================================================================
+    # INTERNAL GSC DATA RETRIEVAL
+    # =========================================================================
+
+    def _fetch_gsc_data(self, min_impressions: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], bool]:
+        """Fetch page and query analytics from live GoogleSearchConsoleService or local SearchAnalyticsData."""
+        from apps.seo.services.google_search_console import GoogleSearchConsoleService
+
+        pages: List[Dict[str, Any]] = []
+        queries: List[Dict[str, Any]] = []
+        combined: List[Dict[str, Any]] = []
+        gsc_connected = False
+
+        # First check connection
+        conn = SearchConsoleConnection.objects.filter(project=self.project, is_connected=True).first()
+        if not conn:
+            return pages, queries, combined, False
+
+        # Try live query via GoogleSearchConsoleService
+        try:
+            service = GoogleSearchConsoleService(project=self.project)
+            end_date = timezone.now().date()
+            start_date = end_date - timezone.timedelta(days=28)
+            s_str = start_date.strftime("%Y-%m-%d")
+            e_str = end_date.strftime("%Y-%m-%d")
+
+            # 1. Top Pages
+            pages_res = service.get_top_pages(start_date=s_str, end_date=e_str, limit=50)
+            pages = pages_res.get("pages", [])
+
+            # 2. Combined Query + Page
+            comb_res = service.query_search_analytics(
+                start_date=s_str,
+                end_date=e_str,
+                dimensions=["query", "page"],
+                row_limit=100
+            )
+            combined = comb_res.get("rows", [])
+
+            # 3. Top Queries
+            queries_res = service.get_top_queries(start_date=s_str, end_date=e_str, limit=50)
+            queries = queries_res.get("queries", [])
+
+            gsc_connected = True
+        except Exception as exc:
+            logger.debug(f"[SEOCorrelationIntelligenceService] Live GSC fetch failed: {exc}. Falling back to DB.")
+            # Fallback to local SearchAnalyticsData if available
+            db_pages = SearchAnalyticsData.objects.filter(connection=conn).exclude(page='').values('page').annotate(
+                total_clicks=Sum('clicks'),
+                total_impressions=Sum('impressions'),
+                avg_pos=Avg('position')
+            ).filter(total_impressions__gte=min_impressions)
+
+            for p in db_pages:
+                imp = p['total_impressions']
+                clk = p['total_clicks']
+                ctr = (clk / imp) if imp > 0 else 0.0
+                pages.append({
+                    "page": p['page'],
+                    "clicks": clk,
+                    "impressions": imp,
+                    "ctr": ctr,
+                    "position": float(p['avg_pos']) if p['avg_pos'] is not None else 0.0
+                })
+            gsc_connected = bool(pages)
+
+        return pages, queries, combined, gsc_connected
+
+    # =========================================================================
+    # CORRELATION RULE EVALUATORS
+    # =========================================================================
+
+    def _correlate_low_ctr_high_impressions(
+        self,
+        pages: List[Dict[str, Any]],
+        combined: List[Dict[str, Any]],
+        issues_by_url: Dict[str, List[AuditIssue]],
+        min_impressions: int
+    ) -> List[SEOCorrelationOpportunity]:
+        """
+        Rule 1: High impressions + low CTR correlated with on-page snippet/metadata defects.
+        """
+        opps: List[SEOCorrelationOpportunity] = []
+        for p in pages:
+            page_url = p.get("page") or p.get("keys", [""])[0] if isinstance(p.get("keys"), list) else p.get("page", "")
+            if not page_url:
+                continue
+
+            imp = self._safe_int(p.get("impressions"))
+            clk = self._safe_int(p.get("clicks"))
+            pos = self._safe_float(p.get("position"))
+            ctr = self._safe_float(p.get("ctr"))
+
+            if imp < min_impressions or pos > 20.0:
+                continue
+
+            # Position CTR threshold: < 3.5% for Top 10, < 1.5% for Page 2
+            max_expected_ctr = 0.035 if pos <= 10.0 else 0.015
+            if ctr > max_expected_ctr:
+                continue
+
+            norm_url = normalize_url_path_for_matching(page_url)
+            page_issues = issues_by_url.get(norm_url, [])
+            matching_snippet_issues = [
+                i.issue_type for i in page_issues if i.issue_type in self.ONPAGE_SNIPPET_ISSUES
+            ]
+
+            # Also check queries for this page
+            page_queries = [
+                c.get("query") for c in combined
+                if normalize_url_path_for_matching(c.get("page")) == norm_url and c.get("query")
+            ][:3]
+            top_query_str = page_queries[0] if page_queries else None
+
+            # Calculate confidence and severity
+            confidence = 0.88 if matching_snippet_issues else 0.75
+            is_critical = imp >= 1000 and pos <= 10.0
+            severity = "critical" if is_critical else ("high" if imp >= 100 else "warning")
+
+            issues_desc = ", ".join(matching_snippet_issues) if matching_snippet_issues else "sub-optimal SERP snippet metadata"
+            ctr_pct = round(ctr * 100, 2)
+
+            opps.append(SEOCorrelationOpportunity(
+                type=OpportunityType.LOW_CTR_HIGH_IMPRESSIONS,
+                severity=severity,
+                confidence=confidence,
+                title=f"Optimize SERP snippet for {page_url}",
+                explanation=(
+                    f"Page receives {imp:,} impressions with average position #{pos:.1f}, "
+                    f"but achieves a low CTR of {ctr_pct}%. Site audit identified on-page snippet defects: {issues_desc}."
+                ),
+                evidence={
+                    "impressions": imp,
+                    "clicks": clk,
+                    "ctr": round(ctr, 4),
+                    "position": round(pos, 1),
+                    "audit_issues": matching_snippet_issues,
+                    "top_queries": page_queries
+                },
+                recommended_action="Review and rewrite meta title and meta description to include compelling value hooks and match user search intent.",
+                suggested_action_type="update_meta_description" if any("description" in it for it in matching_snippet_issues) else "update_title",
+                target_url=page_url,
+                target_query=top_query_str,
+                affected_pages=[page_url]
+            ))
+
+        return opps
+
+    def _correlate_ranking_technical_decay(
+        self,
+        pages: List[Dict[str, Any]],
+        combined: List[Dict[str, Any]],
+        issues_by_url: Dict[str, List[AuditIssue]],
+        min_impressions: int
+    ) -> List[SEOCorrelationOpportunity]:
+        """
+        Rule 2: Ranking friction (Page 2 or low clicks) correlated with technical crawl defects.
+        """
+        opps: List[SEOCorrelationOpportunity] = []
+        for p in pages:
+            page_url = p.get("page") or p.get("keys", [""])[0] if isinstance(p.get("keys"), list) else p.get("page", "")
+            if not page_url:
+                continue
+
+            imp = self._safe_int(p.get("impressions"))
+            clk = self._safe_int(p.get("clicks"))
+            pos = self._safe_float(p.get("position"))
+
+            # Check pages ranking between 8.0 and 30.0 or experiencing traffic bottlenecks
+            if imp < max(10, min_impressions // 2):
+                continue
+
+            norm_url = normalize_url_path_for_matching(page_url)
+            page_issues = issues_by_url.get(norm_url, [])
+            tech_issues = [
+                i.issue_type for i in page_issues
+                if i.issue_type in self.TECHNICAL_CRAWL_ISSUES or i.severity in [IssueSeverity.CRITICAL, IssueSeverity.WARNING]
+            ]
+
+            if not tech_issues:
+                continue
+
+            has_critical = any(i.severity == IssueSeverity.CRITICAL for i in page_issues)
+            severity = "critical" if has_critical else "high"
+            confidence = 0.86
+
+            tech_str = ", ".join(tech_issues[:4])
+
+            opps.append(SEOCorrelationOpportunity(
+                type=OpportunityType.RANKING_TECHNICAL_DECAY,
+                severity=severity,
+                confidence=confidence,
+                title=f"Resolve technical crawl blockers on {page_url}",
+                explanation=(
+                    f"Page has ranking friction (average position #{pos:.1f}, {imp:,} impressions) "
+                    f"while suffering from technical crawl/canonical defects: {tech_str}."
+                ),
+                evidence={
+                    "impressions": imp,
+                    "clicks": clk,
+                    "position": round(pos, 1),
+                    "audit_issues": tech_issues
+                },
+                recommended_action=f"Resolve {len(tech_issues)} technical audit defects on {page_url} to ensure clean search engine crawling and canonical indexing.",
+                suggested_action_type="fix_canonical" if any("canonical" in it for it in tech_issues) else "fix_technical",
+                target_url=page_url,
+                affected_pages=[page_url]
+            ))
+
+        return opps
+
+    def _correlate_high_value_page_maintenance(
+        self,
+        pages: List[Dict[str, Any]],
+        issues_by_url: Dict[str, List[AuditIssue]]
+    ) -> List[SEOCorrelationOpportunity]:
+        """
+        Rule 3: High-traffic landing pages correlated with any technical SEO warnings to protect search equity.
+        """
+        opps: List[SEOCorrelationOpportunity] = []
+        if not pages:
+            return opps
+
+        # Determine high-traffic thresholds
+        sorted_by_clicks = sorted(pages, key=lambda x: self._safe_int(x.get("clicks")), reverse=True)
+        top_tier = sorted_by_clicks[:max(3, len(sorted_by_clicks) // 5)]
+
+        for p in top_tier:
+            page_url = p.get("page") or p.get("keys", [""])[0] if isinstance(p.get("keys"), list) else p.get("page", "")
+            if not page_url:
+                continue
+
+            clk = self._safe_int(p.get("clicks"))
+            imp = self._safe_int(p.get("impressions"))
+            pos = self._safe_float(p.get("position"))
+
+            if clk < 5 and imp < 100:
+                continue
+
+            norm_url = normalize_url_path_for_matching(page_url)
+            page_issues = issues_by_url.get(norm_url, [])
+            if not page_issues:
+                continue
+
+            has_critical = any(i.severity == IssueSeverity.CRITICAL for i in page_issues)
+            severity = "critical" if has_critical else "high"
+            issue_types = [i.issue_type for i in page_issues]
+
+            opps.append(SEOCorrelationOpportunity(
+                type=OpportunityType.HIGH_VALUE_PAGE_MAINTENANCE,
+                severity=severity,
+                confidence=0.92,
+                title=f"High-priority technical maintenance for top page {page_url}",
+                explanation=(
+                    f"Page is a top organic traffic asset ({clk:,} clicks, {imp:,} impressions), "
+                    f"but contains technical SEO issues: {', '.join(issue_types[:3])}. Technical decay on core assets creates major revenue risk."
+                ),
+                evidence={
+                    "clicks": clk,
+                    "impressions": imp,
+                    "position": round(pos, 1),
+                    "audit_issues": issue_types
+                },
+                recommended_action="Prioritize technical remediations on this top-performing URL before working on lower-traffic assets.",
+                suggested_action_type="fix_technical",
+                target_url=page_url,
+                affected_pages=[page_url]
+            ))
+
+        return opps
+
+    def _correlate_query_page_opportunities(
+        self,
+        combined: List[Dict[str, Any]],
+        issues_by_url: Dict[str, List[AuditIssue]],
+        min_impressions: int
+    ) -> List[SEOCorrelationOpportunity]:
+        """
+        Rule 4: High-leverage search queries correlated with on-page landing page gaps.
+        """
+        opps: List[SEOCorrelationOpportunity] = []
+        for c in combined:
+            query = c.get("query")
+            page_url = c.get("page")
+            if not query or not page_url:
+                continue
+
+            imp = self._safe_int(c.get("impressions"))
+            clk = self._safe_int(c.get("clicks"))
+            pos = self._safe_float(c.get("position"))
+
+            # Target high-intent queries between positions 4.0 and 20.0 with notable volume
+            if imp < min_impressions or not (3.5 <= pos <= 20.0):
+                continue
+
+            norm_url = normalize_url_path_for_matching(page_url)
+            page_issues = issues_by_url.get(norm_url, [])
+            if not page_issues:
+                continue
+
+            issue_types = [i.issue_type for i in page_issues]
+
+            opps.append(SEOCorrelationOpportunity(
+                type=OpportunityType.QUERY_PAGE_OPPORTUNITY,
+                severity="opportunity",
+                confidence=0.85,
+                title=f"Optimize {page_url} for query '{query}'",
+                explanation=(
+                    f"Query '{query}' generates {imp:,} impressions at position #{pos:.1f}. "
+                    f"Landing page {page_url} has on-page gaps ({', '.join(issue_types[:3])}) preventing it from reaching Top 3."
+                ),
+                evidence={
+                    "query": query,
+                    "landing_page": page_url,
+                    "impressions": imp,
+                    "clicks": clk,
+                    "position": round(pos, 1),
+                    "audit_issues": issue_types
+                },
+                recommended_action=f"Enrich landing page {page_url} content and headings to explicitly target '{query}' and resolve identified audit issues.",
+                suggested_action_type="optimize_content",
+                target_url=page_url,
+                target_query=query,
+                affected_pages=[page_url]
+            ))
+
+        return opps
+
+    # =========================================================================
+    # PERSISTENCE SYNC
+    # =========================================================================
+
+    def _sync_to_insights(self, opportunities: List[SEOCorrelationOpportunity]) -> int:
+        """Idempotently persist correlated opportunities to SEOInsight records."""
+        count = 0
+        type_mapping = {
+            OpportunityType.LOW_CTR_HIGH_IMPRESSIONS: InsightType.HIGH_IMPRESSIONS_LOW_CTR,
+            OpportunityType.RANKING_TECHNICAL_DECAY: InsightType.TECHNICAL_SEO_ISSUE,
+            OpportunityType.HIGH_VALUE_PAGE_MAINTENANCE: InsightType.TECHNICAL_SEO_ISSUE,
+            OpportunityType.QUERY_PAGE_OPPORTUNITY: InsightType.PAGE_TWO_KEYWORD,
+        }
+
+        sev_mapping = {
+            'critical': InsightSeverity.CRITICAL,
+            'high': InsightSeverity.WARNING,
+            'warning': InsightSeverity.WARNING,
+            'opportunity': InsightSeverity.OPPORTUNITY,
+            'medium': InsightSeverity.OPPORTUNITY,
+            'low': InsightSeverity.INFO,
+            'info': InsightSeverity.INFO,
+        }
+
+        for opp in opportunities:
+            fingerprint = f"correlated_opp:{opp.type}:{opp.target_url or 'site'}:{opp.target_query or ''}"
+            itype = type_mapping.get(opp.type, InsightType.CONTENT_OPPORTUNITY)
+            isev = sev_mapping.get(opp.severity.lower(), InsightSeverity.OPPORTUNITY)
+            source = (
+                InsightSource.SEARCH_CONSOLE
+                if opp.type in (OpportunityType.LOW_CTR_HIGH_IMPRESSIONS, OpportunityType.QUERY_PAGE_OPPORTUNITY)
+                else InsightSource.SITE_AUDIT
+            )
+
+            SEOInsight.objects.update_or_create(
+                project=self.project,
+                fingerprint=fingerprint,
+                defaults={
+                    'insight_type': itype,
+                    'severity': isev,
+                    'title': opp.title,
+                    'description': opp.explanation,
+                    'recommendation': opp.recommended_action,
+                    'status': InsightStatus.OPEN,
+                    'source': source,
+                    'related_url': opp.target_url or '',
+                    'metadata': opp.to_dict(),
+                    'detected_at': timezone.now()
+                }
+            )
+            count += 1
+
+        return count

@@ -21,7 +21,15 @@ from apps.seo.models import (
     SEOAction, ActionType, ActionStatus, ActionPriority,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
-from apps.seo.services.seo_intelligence import SEOIntelligenceService
+from apps.seo.services.seo_intelligence import (
+    SEOIntelligenceService,
+    SEOCorrelationIntelligenceService,
+    SEOCorrelationOpportunity,
+    OpportunityType
+)
+from apps.seo.services.agent_events import (
+    AgentEvent, AgentEventType, InMemoryEventPublisher
+)
 from apps.seo.services.ai_providers import MockAIProvider
 from apps.seo.services.ai_seo_agent import AISeoAgentService
 from apps.seo.services.content_brief_service import SEOContentBriefService
@@ -3318,6 +3326,7 @@ class ToolRegistryTests(TestCase):
             'gsc_top_pages',
             'gsc_opportunity_audit',
             'gsc_performance_comparison',
+            'analyze_seo_opportunities',
             'run_intelligence_analysis',
             'generate_recommendation',
             'generate_content_brief',
@@ -3325,7 +3334,7 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 15)
+        self.assertEqual(len(registered_names), 16)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3335,7 +3344,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 15)
+        self.assertEqual(len(schemas), 16)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -8545,3 +8554,320 @@ class SiteAuditAgentToolTests(TestCase):
             self.assertIn("trigger_site_audit", called_tools)
             self.assertIn("get_site_audit_summary", called_tools)
             self.assertIn("get_audit_issues", called_tools)
+
+
+class SEOCorrelationIntelligenceTests(TestCase):
+    """
+    Comprehensive test suite for Phase 4.2.3.2:
+    Cross-Source Live SEO Intelligence & GSC + Site Audit Correlation.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="intel@example.com", password="Password123!")
+        self.project = Project.objects.create(
+            name="Correlated SEO Project",
+            owner=self.user,
+            website_url="https://example.com"
+        )
+        self.other_user = User.objects.create_user(email="other_intel@example.com", password="Password123!")
+        self.other_project = Project.objects.create(
+            name="Other Isolated Project",
+            owner=self.other_user,
+            website_url="https://other-example.com"
+        )
+
+        self.registry = create_default_tool_registry()
+
+    def test_low_ctr_high_impressions_opportunity_with_audit_issues(self):
+        """1. Detects high-impression low-CTR opportunity and correlates on-page snippet audit issues."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=80
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_meta_description",
+            severity=IssueSeverity.WARNING,
+            title="Missing Meta Description on /pricing",
+            page_url="https://example.com/pricing"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="long_title",
+            severity=IssueSeverity.WARNING,
+            title="Long Title on /pricing",
+            page_url="https://example.com/pricing"
+        )
+
+        page_rows = [{
+            "page": "https://example.com/pricing",
+            "impressions": 12450,
+            "clicks": 310,
+            "ctr": 0.0249,
+            "position": 8.4
+        }]
+        combined_rows = [{
+            "query": "pricing plans",
+            "page": "https://example.com/pricing",
+            "impressions": 8500,
+            "clicks": 210,
+            "ctr": 0.0247,
+            "position": 8.1
+        }]
+
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(
+            page_rows=page_rows,
+            combined_rows=combined_rows,
+            min_impressions=50
+        )
+
+        self.assertEqual(res["status"], "success")
+        self.assertGreaterEqual(res["total_opportunities_found"], 1)
+
+        low_ctr_opps = [o for o in res["opportunities"] if o["type"] == OpportunityType.LOW_CTR_HIGH_IMPRESSIONS]
+        self.assertTrue(len(low_ctr_opps) >= 1)
+        opp = low_ctr_opps[0]
+        self.assertEqual(opp["severity"], "critical")  # >= 1000 imp on top 10 pos
+        self.assertEqual(opp["target_url"], "https://example.com/pricing")
+        self.assertIn("missing_meta_description", opp["evidence"]["audit_issues"])
+        self.assertIn("long_title", opp["evidence"]["audit_issues"])
+        self.assertGreaterEqual(opp["confidence"], 0.85)
+
+    def test_ranking_technical_decay_opportunity(self):
+        """2. Detects ranking decay correlated with technical crawl and canonical defects."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=65
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="broken_internal_link",
+            severity=IssueSeverity.CRITICAL,
+            title="Broken Internal Link on /products",
+            page_url="https://example.com/products"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_canonical",
+            severity=IssueSeverity.WARNING,
+            title="Missing Canonical Tag on /products",
+            page_url="https://example.com/products"
+        )
+
+        page_rows = [{
+            "page": "https://example.com/products",
+            "impressions": 650,
+            "clicks": 4,
+            "ctr": 0.0061,
+            "position": 14.8
+        }]
+
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(
+            page_rows=page_rows,
+            min_impressions=20
+        )
+
+        self.assertEqual(res["status"], "success")
+        decay_opps = [o for o in res["opportunities"] if o["type"] == OpportunityType.RANKING_TECHNICAL_DECAY]
+        self.assertTrue(len(decay_opps) >= 1)
+        opp = decay_opps[0]
+        self.assertEqual(opp["severity"], "critical")
+        self.assertEqual(opp["suggested_action_type"], "fix_canonical")
+        self.assertIn("broken_internal_link", opp["evidence"]["audit_issues"])
+
+    def test_high_value_page_maintenance_opportunity(self):
+        """3. Prioritizes maintenance for high-traffic landing pages with technical warnings."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=88
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing H1 on Top Landing Page",
+            page_url="https://example.com/features"
+        )
+
+        page_rows = [
+            {"page": "https://example.com/features", "clicks": 520, "impressions": 4800, "ctr": 0.108, "position": 2.1},
+            {"page": "https://example.com/blog/low-traffic", "clicks": 2, "impressions": 40, "ctr": 0.05, "position": 8.0}
+        ]
+
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(page_rows=page_rows)
+
+        self.assertEqual(res["status"], "success")
+        maint_opps = [o for o in res["opportunities"] if o["type"] == OpportunityType.HIGH_VALUE_PAGE_MAINTENANCE]
+        self.assertTrue(len(maint_opps) >= 1)
+        opp = maint_opps[0]
+        self.assertEqual(opp["target_url"], "https://example.com/features")
+        self.assertEqual(opp["severity"], "critical")
+        self.assertGreaterEqual(opp["confidence"], 0.90)
+
+    def test_query_page_opportunity(self):
+        """4. Correlates high-intent query opportunity with landing page gaps."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=75
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.WARNING,
+            title="Missing H1 on /software",
+            page_url="https://example.com/software"
+        )
+
+        combined_rows = [{
+            "query": "best enterprise seo platform",
+            "page": "https://example.com/software",
+            "impressions": 450,
+            "clicks": 18,
+            "ctr": 0.04,
+            "position": 6.8
+        }]
+
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(
+            combined_rows=combined_rows,
+            min_impressions=20
+        )
+
+        self.assertEqual(res["status"], "success")
+        query_opps = [o for o in res["opportunities"] if o["type"] == OpportunityType.QUERY_PAGE_OPPORTUNITY]
+        self.assertTrue(len(query_opps) >= 1)
+        opp = query_opps[0]
+        self.assertEqual(opp["target_query"], "best enterprise seo platform")
+        self.assertEqual(opp["target_url"], "https://example.com/software")
+
+    def test_missing_gsc_and_audit_safe_handling(self):
+        """5. Safely handles absent GSC connection or missing SiteAudit without exceptions."""
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities()
+
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["gsc_connected"], False)
+        self.assertEqual(res["audit_available"], False)
+        self.assertEqual(res["total_opportunities_found"], 0)
+        self.assertEqual(res["opportunities"], [])
+
+    def test_empty_datasets_safe_handling(self):
+        """6. Handles empty list inputs cleanly."""
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(
+            page_rows=[],
+            query_rows=[],
+            combined_rows=[]
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["opportunities_count"], 0)
+
+    def test_multi_tenant_isolation_boundary(self):
+        """7. Enforces strict multi-tenant boundary: does not leak or cross other project audits."""
+        # Project A audit
+        audit_a = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=90)
+        AuditIssue.objects.create(audit=audit_a, issue_type="missing_title", severity=IssueSeverity.WARNING, page_url="https://example.com/page-a")
+
+        # Project B audit
+        audit_b = SiteAudit.objects.create(project=self.other_project, status=AuditStatus.COMPLETED, score=40)
+        AuditIssue.objects.create(audit=audit_b, issue_type="broken_internal_link", severity=IssueSeverity.CRITICAL, page_url="https://other-example.com/secret")
+
+        service_a = SEOCorrelationIntelligenceService(project=self.project)
+        res_a = service_a.analyze_correlated_opportunities(
+            page_rows=[{"page": "https://example.com/page-a", "impressions": 500, "clicks": 2, "ctr": 0.004, "position": 8.0}]
+        )
+
+        for opp in res_a["opportunities"]:
+            self.assertNotEqual(opp.get("target_url"), "https://other-example.com/secret")
+            self.assertNotIn("other-example.com", str(opp))
+
+    def test_tool_registry_analyze_seo_opportunities_execution(self):
+        """8. ToolRegistry executes analyze_seo_opportunities tool cleanly."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(audit=audit, issue_type="missing_meta_description", severity=IssueSeverity.WARNING, page_url="https://example.com/pricing")
+
+        res = self.registry.execute(
+            "analyze_seo_opportunities",
+            self.project,
+            {"min_impressions": 10, "limit": 5}
+        )
+
+        self.assertTrue(res["success"])
+        self.assertEqual(res["tool_name"], "analyze_seo_opportunities")
+        self.assertEqual(res["data"]["status"], "success")
+        self.assertIn("opportunities", res["data"])
+
+    def test_event_emission_lifecycle(self):
+        """9. Emits strongly typed real-time events across correlation pipeline."""
+        in_memory_publisher = InMemoryEventPublisher()
+        service = SEOCorrelationIntelligenceService(project=self.project, publisher=in_memory_publisher)
+
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=85)
+        AuditIssue.objects.create(audit=audit, issue_type="short_title", severity=IssueSeverity.WARNING, page_url="https://example.com/demo")
+
+        service.analyze_correlated_opportunities(
+            page_rows=[{"page": "https://example.com/demo", "impressions": 1000, "clicks": 10, "ctr": 0.01, "position": 5.0}],
+            run_id=987
+        )
+
+        events = in_memory_publisher.get_events(run_id=987)
+        event_types = [e.event_type for e in events]
+
+        self.assertIn(AgentEventType.SEO_INTELLIGENCE_STARTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_EVIDENCE_COLLECTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_OPPORTUNITY_DETECTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_INTELLIGENCE_COMPLETED.value, event_types)
+
+    def test_sync_to_insights_persistence(self):
+        """10. Correctly persists detected opportunities to SEOInsight database records."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=70)
+        AuditIssue.objects.create(audit=audit, issue_type="missing_title", severity=IssueSeverity.WARNING, page_url="https://example.com/services")
+
+        page_rows = [{"page": "https://example.com/services", "impressions": 800, "clicks": 5, "ctr": 0.0062, "position": 9.0}]
+
+        service = SEOCorrelationIntelligenceService(project=self.project)
+        res = service.analyze_correlated_opportunities(
+            page_rows=page_rows,
+            sync_to_insights=True
+        )
+
+        self.assertEqual(res["status"], "success")
+        self.assertGreaterEqual(res["persisted_insights_count"], 1)
+
+        insights = SEOInsight.objects.filter(project=self.project, related_url="https://example.com/services")
+        self.assertTrue(insights.exists())
+        insight = insights.first()
+        self.assertEqual(insight.status, InsightStatus.OPEN)
+
+    def test_react_agent_correlation_loop_execution(self):
+        """11. ReAct AgentOrchestrator executes cross-source correlation workflow end-to-end."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(audit=audit, issue_type="missing_meta_description", severity=IssueSeverity.WARNING, page_url="https://example.com/pricing")
+
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            provider=MockAIProvider(),
+            registry=self.registry,
+            max_steps=5
+        )
+
+        run = orchestrator.start_run(goal="Execute cross-source SEO intelligence correlation on GSC and site audit opportunities")
+
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        self.assertIn("Completed cross-source SEO intelligence correlation", run.summary)
+        self.assertIn("Observed Facts", run.summary)
+        self.assertIn("Inferences", run.summary)
+        self.assertIn("Recommendations", run.summary)
+
+        # Check tool calls
+        tool_calls = AgentToolCall.objects.filter(step__run=run)
+        called_tools = [tc.tool_name for tc in tool_calls]
+        self.assertIn("analyze_seo_opportunities", called_tools)

@@ -755,6 +755,29 @@ def handle_gsc_performance_comparison(project: Project, args: Dict[str, Any]) ->
     )
 
 
+def handle_analyze_seo_opportunities(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Correlate Google Search Console search performance data with live website audit diagnostics
+    to identify prioritized, deterministic SEO opportunities.
+    """
+    from apps.seo.services.seo_intelligence import SEOCorrelationIntelligenceService
+
+    min_impressions = args.get("min_impressions", 20)
+    limit = args.get("limit", 10)
+    page_filter = args.get("page_filter")
+    audit_id = args.get("audit_id")
+    sync_to_insights = bool(args.get("sync_to_insights", False))
+
+    service = SEOCorrelationIntelligenceService(project=project)
+    return service.analyze_correlated_opportunities(
+        audit_id=audit_id,
+        min_impressions=min_impressions,
+        limit=limit,
+        page_filter=page_filter,
+        sync_to_insights=sync_to_insights
+    )
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -965,7 +988,28 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_gsc_performance_comparison
     ))
 
-    # 9. run_intelligence_analysis
+    # 9. analyze_seo_opportunities (GSC + Audit Cross-Source Intelligence Correlation)
+    registry.register(AgentToolDefinition(
+        name="analyze_seo_opportunities",
+        description="Correlate Google Search Console performance metrics with live website audit diagnostics to discover high-leverage SEO opportunities (low CTR with on-page defects, ranking decay with technical crawl blockers, high-value page vulnerabilities, and query-to-page optimizations).",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "min_impressions": {"type": "integer", "description": "Minimum impressions threshold for opportunity evaluation (default 20)."},
+                "limit": {"type": "integer", "description": "Maximum prioritized opportunities to return (default 10, max 50)."},
+                "page_filter": {"type": "string", "description": "Optional substring filter for landing page URL."},
+                "audit_id": {"type": "integer", "description": "Optional specific SiteAudit ID to evaluate."},
+                "sync_to_insights": {"type": "boolean", "description": "Whether to sync detected opportunities into persistent SEOInsight records (default false)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_analyze_seo_opportunities
+    ))
+
+    # 10. run_intelligence_analysis
     registry.register(AgentToolDefinition(
         name="run_intelligence_analysis",
         description="Run the deterministic SEO intelligence heuristic engine to analyze ranking movements, CTR anomalies, and audit issues, generating updated SEOInsight records.",

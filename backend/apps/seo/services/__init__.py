@@ -1,5 +1,11 @@
 from .search_console import GoogleSearchConsoleService, MockGoogleSearchConsoleClient
-from .seo_intelligence import SEOIntelligenceService
+from .seo_intelligence import (
+    SEOIntelligenceService,
+    SEOCorrelationIntelligenceService,
+    SEOCorrelationOpportunity,
+    OpportunityType,
+    normalize_url_path_for_matching
+)
 from .gsc_intelligence import GSCIntelligenceService, GSCFinding, GSCFindingType
 from .ai_providers import BaseAIProvider, MockAIProvider, OpenAIProvider, get_ai_provider
 from .ai_seo_agent import AISeoAgentService
@@ -32,6 +38,10 @@ __all__ = [
     'GoogleSearchConsoleService',
     'MockGoogleSearchConsoleClient',
     'SEOIntelligenceService',
+    'SEOCorrelationIntelligenceService',
+    'SEOCorrelationOpportunity',
+    'OpportunityType',
+    'normalize_url_path_for_matching',
     'GSCIntelligenceService',
     'GSCFinding',
     'GSCFindingType',

@@ -191,9 +191,10 @@ SCHEMA:
 """
 
 AGENT_DECISION_SYSTEM_PROMPT = """You are DoxaRank's Autonomous AI SEO Orchestrator.
-Your goal is to inspect SEO signals, analyze Google Search Console performance, evaluate ranking movement and crawl health, synthesize recommendations/content, and propose actions using available registered tools.
+Your goal is to inspect SEO signals, analyze Google Search Console performance, evaluate ranking movement and crawl health, correlate cross-source intelligence, synthesize recommendations/content, and propose actions using available registered tools.
 
 CORE TOOLS REFERENCE:
+- analyze_seo_opportunities: Correlate Google Search Console metrics with live website audit diagnostics to discover high-leverage SEO opportunities (low CTR with on-page defects, ranking decay with technical crawl blockers, high-value page vulnerabilities, query-to-page gaps).
 - trigger_site_audit: Trigger an asynchronous website crawl and technical SEO audit for the current project.
 - get_site_audit_summary: Retrieve a compact summary of the latest technical SEO site audit, including health score and issue breakdown.
 - get_audit_issues: Retrieve site audit technical SEO issues, warnings, and crawl diagnostics with optional severity/rule_code filtering.
@@ -206,6 +207,17 @@ CORE TOOLS REFERENCE:
 - run_intelligence_analysis: Run deterministic SEO heuristic engine to generate updated SEOInsight records.
 - generate_recommendation / generate_content_brief / generate_content_draft: Synthesize AI strategy, briefs, and drafts.
 - propose_seo_action: Propose formal SEO action task for human review and approval.
+
+EVIDENCE HIERARCHY & REASONING GUIDELINES:
+1. Grounding hierarchy:
+   - Primary: Measured GSC performance metrics (impressions, clicks, CTR, position).
+   - Secondary: Live site audit diagnostic findings (AuditIssues, crawl codes).
+   - Tertiary: Deterministic cross-source correlation (analyze_seo_opportunities).
+   - Quaternary: LLM synthesis and strategy formulation.
+2. Explicitly distinguish:
+   - Observed Facts (e.g. "Page receives 12,450 impressions with 2.4% CTR at position #8.4 and has a missing meta description").
+   - Inferences (e.g. "Under-optimized snippet causes searchers to skip the result despite strong Page 1 visibility").
+   - Recommendations (e.g. "Rewrite meta description to highlight unique value proposition and clear CTA").
 
 SAFETY & GOVERNANCE RULES:
 1. NEVER invent parameters or call tools that are not in the provided tool registry.
@@ -1336,6 +1348,44 @@ class MockAIProvider(BaseAIProvider):
                     top_query_extracted = t_out['top_queries'][0].get('query')
                 elif t_name == 'gsc_search_analytics' and t_out.get('rows'):
                     top_query_extracted = t_out['rows'][0].get('query')
+
+        # ---------------------------------------------------------------------
+        # BRANCH 0: Cross-Source SEO Intelligence & GSC + Audit Correlation
+        # ---------------------------------------------------------------------
+        is_correlation_goal = any(term in goal for term in [
+            'correlate', 'correlation', 'cross-source', 'gsc + audit', 'gsc and audit',
+            'cross source', 'seo opportunities', 'analyze opportunities', 'intelligence opportunities'
+        ])
+        if is_correlation_goal and 'analyze_seo_opportunities' in available_tools:
+            if 'analyze_seo_opportunities' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "analyze_seo_opportunities",
+                    "arguments": {"min_impressions": 20, "limit": 5},
+                    "reason": "Execute cross-source deterministic correlation between GSC performance metrics and live site audit issues to discover high-leverage SEO opportunities."
+                }
+            if 'get_audit_issues' not in tool_calls and 'get_audit_issues' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_audit_issues",
+                    "arguments": {"severity": "critical", "limit": 5},
+                    "reason": "Inspect specific critical audit issues on prioritized target pages."
+                }
+            return {
+                "action": "finish",
+                "summary": (
+                    f"Completed cross-source SEO intelligence correlation for goal: \"{context.get('goal', '')}\".\n\n"
+                    "### Observed Facts:\n"
+                    "- Correlated Google Search Console search performance with live site audit diagnostics.\n"
+                    "- Identified high-impression / low-CTR landing pages and ranking decay linked to technical crawl issues.\n\n"
+                    "### Inferences:\n"
+                    "- On-page snippet gaps (missing title/meta description) are suppressing organic CTR despite Page 1 visibility.\n"
+                    "- Technical crawl friction (broken links, canonical issues) threatens top-traffic URL equity.\n\n"
+                    "### Recommendations:\n"
+                    "1. Optimize meta titles and descriptions for high-impression pages.\n"
+                    "2. Resolve technical audit issues on top revenue/traffic landing pages to protect rankings."
+                )
+            }
 
         # ---------------------------------------------------------------------
         # BRANCH 1: GSC Performance Comparison / Period Trend Goal

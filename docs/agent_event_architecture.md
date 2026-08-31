@@ -257,3 +257,47 @@ Phase 4.2.3.1 connects the deterministic `LiveSiteCrawlerService` and `SEOAuditE
 - Server-side authorization guarantees that the agent can **only** trigger or inspect audits belonging to the authenticated project (`project.owner == request.user`).
 - Never trusts client-supplied `user_id` or `owner_id`.
 - Zero credentials or tokens exposed in tool outputs.
+
+---
+
+## 10. Live SEO Intelligence: GSC + Website Audit Correlation (Phase 4.2.3.2)
+
+Phase 4.2.3.2 introduces cross-source deterministic correlation between Google Search Console performance data and live technical website audit diagnostics.
+
+```
++-----------------------------------------------------------------------------------+
+|                        CROSS-SOURCE CORRELATION PIPELINE                          |
+|                                                                                   |
+|  Google Search Console Data                 Live Site Audit & Diagnostics         |
+|  (impressions, clicks, CTR, pos)            (missing H1, broken links, canonical) |
+|               │                                              │                    |
+|               └───────────────────────┬──────────────────────┘                    |
+|                                       │                                           |
+|                                       ↓                                           |
+|                     SEOCorrelationIntelligenceService                             |
+|                                       │                                           |
+|        ┌──────────────────────────────┼──────────────────────────────┐            |
+|        ↓                              ↓                              ↓            |
+|  Rule 1: LOW_CTR_HIGH_IMP      Rule 2: RANKING_DECAY         Rule 3: HIGH_VAL_PAGE|
+|  (High imp, low CTR +          (Pos > 10 + broken links,     (Top traffic page +  |
+|   title/meta description gaps)  missing canonical blockers)   technical warnings) |
+|        └──────────────────────────────┬──────────────────────────────┘            |
+|                                       │                                           |
+|                                       ↓                                           |
+|                     SEOCorrelationOpportunity / Agent Tool                        |
+|                                       │                                           |
+|                         analyze_seo_opportunities                                 |
++-----------------------------------------------------------------------------------+
+```
+
+### Registered Correlation Tool:
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `analyze_seo_opportunities` | `READ_ONLY` | No | No | Correlates Google Search Console performance metrics with live website audit diagnostics to discover high-leverage SEO opportunities (low CTR with on-page defects, ranking decay with technical crawl blockers, high-value page vulnerabilities, and query-to-page optimizations). |
+
+### Real-Time SEO Intelligence Lifecycle Events:
+- `seo.intelligence.started`: Emitted when correlation analysis begins with filter parameters.
+- `seo.evidence.collected`: Emitted after aggregating GSC and SiteAudit evidence metrics.
+- `seo.opportunity.detected`: Emitted for each prioritized candidate opportunity.
+- `seo.intelligence.completed`: Emitted upon pipeline completion with summary counts.

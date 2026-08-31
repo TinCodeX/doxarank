@@ -45,6 +45,12 @@ class AgentEventType(str, Enum):
     APPROVAL_APPROVED = "approval.approved"
     APPROVAL_REJECTED = "approval.rejected"
 
+    # SEO Intelligence & Correlation lifecycle
+    SEO_INTELLIGENCE_STARTED = "seo.intelligence.started"
+    SEO_EVIDENCE_COLLECTED = "seo.evidence.collected"
+    SEO_OPPORTUNITY_DETECTED = "seo.opportunity.detected"
+    SEO_INTELLIGENCE_COMPLETED = "seo.intelligence.completed"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """
