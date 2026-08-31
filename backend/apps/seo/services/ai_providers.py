@@ -194,12 +194,15 @@ AGENT_DECISION_SYSTEM_PROMPT = """You are DoxaRank's Autonomous AI SEO Orchestra
 Your goal is to inspect SEO signals, analyze Google Search Console performance, evaluate ranking movement and crawl health, synthesize recommendations/content, and propose actions using available registered tools.
 
 CORE TOOLS REFERENCE:
+- trigger_site_audit: Trigger an asynchronous website crawl and technical SEO audit for the current project.
+- get_site_audit_summary: Retrieve a compact summary of the latest technical SEO site audit, including health score and issue breakdown.
+- get_audit_issues: Retrieve site audit technical SEO issues, warnings, and crawl diagnostics with optional severity/rule_code filtering.
 - gsc_top_queries: Retrieve highest performing search queries from live Google Search Console API.
 - gsc_top_pages: Retrieve highest traffic landing pages from live Google Search Console API.
 - gsc_search_analytics: Query live multidimensional Search Console metrics (query, page, device, country, date).
 - gsc_opportunity_audit: Run statistical intelligence heuristics on GSC data to detect Page 2 keywords, SERP snippet low CTR, and cannibalization.
 - gsc_performance_comparison: Compare search performance between two date ranges to evaluate traffic deltas and trends.
-- get_keyword_rankings / get_audit_issues / get_search_console_analytics: Retrieve stored project rankings and audit diagnostics.
+- get_keyword_rankings / get_search_console_analytics: Retrieve stored project rankings and performance data.
 - run_intelligence_analysis: Run deterministic SEO heuristic engine to generate updated SEOInsight records.
 - generate_recommendation / generate_content_brief / generate_content_draft: Synthesize AI strategy, briefs, and drafts.
 - propose_seo_action: Propose formal SEO action task for human review and approval.
@@ -1482,9 +1485,47 @@ class MockAIProvider(BaseAIProvider):
         # ---------------------------------------------------------------------
         # BRANCH 3: Technical Audit / Crawl Diagnostics Goal
         # ---------------------------------------------------------------------
+        is_live_audit_goal = any(term in goal for term in ['crawl', 'crawler', 'live audit', 'trigger audit', 'full audit'])
+        if is_live_audit_goal and 'trigger_site_audit' in available_tools:
+            if 'trigger_site_audit' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "trigger_site_audit",
+                    "arguments": {"max_pages": 50, "max_depth": 3},
+                    "reason": "Trigger live website crawl and technical SEO audit for the project."
+                }
+            if 'get_site_audit_summary' not in tool_calls and 'get_site_audit_summary' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_site_audit_summary",
+                    "arguments": {},
+                    "reason": "Retrieve compact health score and aggregated technical issue breakdown for the audit."
+                }
+            if 'get_audit_issues' not in tool_calls and 'get_audit_issues' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_audit_issues",
+                    "arguments": {"limit": 10},
+                    "reason": "Retrieve specific technical SEO issues and page diagnostic details."
+                }
+            return {
+                "action": "finish",
+                "summary": (
+                    f"Completed live website audit analysis for goal: \"{context.get('goal', '')}\". "
+                    "Triggered crawl, retrieved health score summary, and analyzed technical SEO diagnostic issues."
+                )
+            }
+
         # 1. First Step: Inspection
         if not tool_calls:
             if any(term in goal for term in ['audit', 'technical', 'issue', 'health', 'broken']):
+                if 'get_site_audit_summary' in available_tools and 'get_site_audit_summary' not in tool_calls:
+                    return {
+                        "action": "tool",
+                        "tool_name": "get_site_audit_summary",
+                        "arguments": {},
+                        "reason": "Retrieve high-level site audit health score and severity distribution."
+                    }
                 return {
                     "action": "tool",
                     "tool_name": "get_audit_issues",
@@ -1497,6 +1538,15 @@ class MockAIProvider(BaseAIProvider):
                     "tool_name": "get_keyword_rankings",
                     "arguments": {"limit": 10},
                     "reason": "Query current tracked keyword ranking positions to evaluate baseline search visibility."
+                }
+
+        if any(term in goal for term in ['audit', 'technical', 'issue', 'health', 'broken']):
+            if 'get_audit_issues' not in tool_calls and 'get_audit_issues' in available_tools:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_audit_issues",
+                    "arguments": {"limit": 10},
+                    "reason": "Retrieve specific technical SEO issues and page diagnostic details."
                 }
 
         # 2. Second Step: Intelligence Heuristic Run

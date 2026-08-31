@@ -206,3 +206,54 @@ REST Polling (Fallback when WebSocket Offline)
 - **Phase 3.2.2 (Completed)**: Django Channels ASGI setup, channel layers, and `AgentEventConsumer` WebSocket consumer.
 - **Phase 3.3 (Completed)**: Frontend Real-Time Agent Event Client (`AgentEventClient`, `useAgentEvents`, `AgentOrchestratorPanel` integration, fallback polling, connection indicator).
 - **Phase 3.4 (Completed)**: Real-Time Event Resilience & Replay (Replay API endpoint, cursor filtering, gap detection, reconnect recovery, enhanced telemetry visualization).
+- **Phase 4.2.3.1 (Completed)**: Live Website Audit Agent Tools & Intelligence Foundation (`trigger_site_audit`, `get_site_audit_summary`, `get_audit_issues`, ReAct agent integration).
+
+---
+
+## 9. Live Website Audit Agent Tools & Intelligence Foundation (Phase 4.2.3.1)
+
+Phase 4.2.3.1 connects the deterministic `LiveSiteCrawlerService` and `SEOAuditEngine` with the `AgentOrchestrator` ReAct loop via safe, provider-neutral tools in `ToolRegistry`.
+
+### Architecture Flow:
+```text
+                    ┌───────────────────────────┐
+                    │        ReAct Agent        │
+                    │   (AgentOrchestrator)     │
+                    └─────────────┬─────────────┘
+                                  │
+                            Tool Registry
+                                  │
+           ┌──────────────────────┼──────────────────────┐
+           ↓                      ↓                      ↓
+  trigger_site_audit    get_site_audit_summary    get_audit_issues
+  (Async Celery Task)   (Compact Findings)        (Filtered Findings)
+           │                      │                      │
+           ↓                      └──────────┬───────────┘
+      Celery Task                            │
+  (run_site_audit.delay)                     │
+           │                                 │
+           ↓                                 │
+  LiveSiteCrawlerService                     │
+           │                                 │
+           ↓                                 │
+     CrawlResult                             │
+           │                                 │
+           ↓                                 │
+     SEOAuditEngine ─────────────────────────┘
+           │
+           ↓
+    SiteAudit / AuditIssue (PostgreSQL)
+```
+
+### Agent-Callable Audit Tools:
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `trigger_site_audit` | `SAFE_INTERNAL` | Yes (creates pending audit) | No | Dispatches asynchronous Celery live website crawl and audit task. Validates `start_url` against project domain and bounds `max_pages` (1..200) and `max_depth` (0..10). |
+| `get_site_audit_summary` | `READ_ONLY` | No | No | Retrieves compact summary of latest or specified site audit: health score (0..100), issue counts by severity (`critical`, `warning`, `notice`), and top issue groups. Optimized for LLM observations. |
+| `get_audit_issues` | `READ_ONLY` | No | No | Retrieves detailed technical SEO issues with optional filtering by `audit_id`, `severity` (`critical`/`warning`/`notice`), `issue_type`, and `page_url`. |
+
+### Multi-Tenant Security & Isolation:
+- Server-side authorization guarantees that the agent can **only** trigger or inspect audits belonging to the authenticated project (`project.owner == request.user`).
+- Never trusts client-supplied `user_id` or `owner_id`.
+- Zero credentials or tokens exposed in tool outputs.

@@ -3305,11 +3305,13 @@ class ToolRegistryTests(TestCase):
             target_keyword='competitor term'
         )
 
-    def test_default_registry_has_all_8_tools(self):
+    def test_default_registry_has_all_registered_tools(self):
         """1. Default ToolRegistry is populated with all registered tools."""
         expected_tools = [
             'get_keyword_rankings',
             'get_search_console_analytics',
+            'trigger_site_audit',
+            'get_site_audit_summary',
             'get_audit_issues',
             'gsc_search_analytics',
             'gsc_top_queries',
@@ -3323,7 +3325,7 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 13)
+        self.assertEqual(len(registered_names), 15)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3333,7 +3335,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 13)
+        self.assertEqual(len(schemas), 15)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -8224,3 +8226,322 @@ class SiteAuditCeleryTaskTests(TestCase):
         self.assertTrue(res_b["success"])
         self.assertEqual(res_b["data"]["returned_count"], 1)
         self.assertEqual(res_b["data"]["issues"][0]["title"], "Secret Tenant B Issue")
+
+
+# ==============================================================================
+# MILESTONE 4, PHASE 4.2.3.1: LIVE WEBSITE AUDIT AGENT TOOLS & INTELLIGENCE TESTS
+# ==============================================================================
+
+class SiteAuditAgentToolTests(TestCase):
+    """
+    Test suite for agent-facing site audit tools:
+    - trigger_site_audit
+    - get_site_audit_summary
+    - get_audit_issues (enhanced)
+    - ReAct agent integration & multi-tenant isolation
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='audit_agent_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Agent',
+            last_name='Auditor'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Agent Audit Project',
+            website_url='https://example.com'
+        )
+        self.registry = get_tool_registry()
+
+    @patch('apps.seo.tasks.run_site_audit.delay')
+    def test_trigger_site_audit_valid_project_and_celery_dispatch(self, mock_delay):
+        """1. Valid project triggers site audit and dispatches Celery task."""
+        mock_task = MagicMock()
+        mock_task.id = "celery-task-audit-12345"
+        mock_delay.return_value = mock_task
+
+        res = self.registry.execute("trigger_site_audit", self.project, {
+            "start_url": "https://example.com/blog",
+            "max_pages": 40,
+            "max_depth": 2
+        })
+
+        self.assertTrue(res["success"])
+        data = res["data"]
+        self.assertEqual(data["status"], "queued")
+        self.assertEqual(data["project_id"], self.project.id)
+        self.assertEqual(data["start_url"], "https://example.com/blog")
+        self.assertEqual(data["max_pages"], 40)
+        self.assertEqual(data["max_depth"], 2)
+        self.assertEqual(data["task_id"], "celery-task-audit-12345")
+
+        # Verify SiteAudit was created in database
+        audit = SiteAudit.objects.get(id=data["audit_id"])
+        self.assertEqual(audit.project, self.project)
+        self.assertEqual(audit.status, AuditStatus.PENDING)
+
+        mock_delay.assert_called_once_with(
+            audit_id=audit.id,
+            start_url="https://example.com/blog",
+            max_pages=40,
+            max_depth=2
+        )
+
+    def test_trigger_site_audit_rejects_external_domain(self):
+        """2. Rejects start_url that does not match project domain."""
+        res = self.registry.execute("trigger_site_audit", self.project, {
+            "start_url": "https://malicious-external-site.com/attack"
+        })
+
+        self.assertFalse(res["success"])
+        self.assertEqual(res["error"]["code"], "EXECUTION_ERROR")
+        self.assertIn("does not belong to project website domain", res["error"]["message"])
+
+    def test_trigger_site_audit_enforces_crawler_bounds(self):
+        """3. Enforces bounding on max_pages (1..200) and max_depth (0..10)."""
+        with patch('apps.seo.tasks.run_site_audit.delay') as mock_delay:
+            mock_task = MagicMock()
+            mock_task.id = "task-bounded-1"
+            mock_delay.return_value = mock_task
+
+            # Excessive parameters
+            res = self.registry.execute("trigger_site_audit", self.project, {
+                "max_pages": 999999,
+                "max_depth": 50
+            })
+            self.assertTrue(res["success"])
+            self.assertEqual(res["data"]["max_pages"], 200)
+            self.assertEqual(res["data"]["max_depth"], 10)
+
+            # Negative parameters
+            res_neg = self.registry.execute("trigger_site_audit", self.project, {
+                "max_pages": -10,
+                "max_depth": -5
+            })
+            self.assertTrue(res_neg["success"])
+            self.assertEqual(res_neg["data"]["max_pages"], 1)
+            self.assertEqual(res_neg["data"]["max_depth"], 0)
+
+    def test_trigger_site_audit_rejects_project_without_website_url(self):
+        """4. Rejects audit if project has no website_url configured."""
+        project_no_url = Project.objects.create(
+            owner=self.user,
+            name='No URL Project',
+            website_url=''
+        )
+        res = self.registry.execute("trigger_site_audit", project_no_url, {})
+        self.assertFalse(res["success"])
+        self.assertIn("has no configured website_url", res["error"]["message"])
+
+    def test_get_site_audit_summary_latest_completed_audit(self):
+        """5. Retrieves latest completed audit summary with health score and aggregated issues."""
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=82,
+            started_at=timezone.now(),
+            completed_at=timezone.now()
+        )
+        # Create critical, warning, notice issues
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing Title 1",
+            page_url="https://example.com/p1"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing Title 2",
+            page_url="https://example.com/p2"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_meta_description",
+            severity=IssueSeverity.WARNING,
+            title="Missing Meta Desc",
+            page_url="https://example.com/p1"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_canonical",
+            severity=IssueSeverity.NOTICE,
+            title="Missing Canonical",
+            page_url="https://example.com/p3"
+        )
+
+        res = self.registry.execute("get_site_audit_summary", self.project, {})
+        self.assertTrue(res["success"])
+        data = res["data"]
+
+        self.assertEqual(data["audit_id"], audit.id)
+        self.assertEqual(data["status"], "completed")
+        self.assertEqual(data["health_score"], 82)
+        self.assertEqual(data["total_issues"], 4)
+        self.assertEqual(data["issues_by_severity"]["critical"], 2)
+        self.assertEqual(data["issues_by_severity"]["warning"], 1)
+        self.assertEqual(data["issues_by_severity"]["notice"], 1)
+        self.assertEqual(data["pages_with_issues_count"], 3)
+
+        # Top issues
+        self.assertEqual(len(data["top_issues"]), 3)
+        self.assertEqual(data["top_issues"][0]["rule_code"], "missing_title")
+        self.assertEqual(data["top_issues"][0]["count"], 2)
+
+    def test_get_site_audit_summary_pending_and_running_states(self):
+        """6. Handles pending and running audits cleanly without crashing."""
+        audit_pending = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.PENDING
+        )
+        res_pending = self.registry.execute("get_site_audit_summary", self.project, {"audit_id": audit_pending.id})
+        self.assertTrue(res_pending["success"])
+        self.assertEqual(res_pending["data"]["status"], "pending")
+        self.assertIsNone(res_pending["data"]["health_score"])
+        self.assertEqual(res_pending["data"]["total_issues"], 0)
+
+        audit_running = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.RUNNING,
+            started_at=timezone.now()
+        )
+        res_running = self.registry.execute("get_site_audit_summary", self.project, {"audit_id": audit_running.id})
+        self.assertTrue(res_running["success"])
+        self.assertEqual(res_running["data"]["status"], "running")
+
+    def test_get_site_audit_summary_failed_audit_returns_error_message(self):
+        """7. Returns sanitized error_message when audit is failed."""
+        audit_failed = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.FAILED,
+            error_message="Host connection timed out after 3 retries"
+        )
+        res = self.registry.execute("get_site_audit_summary", self.project, {"audit_id": audit_failed.id})
+        self.assertTrue(res["success"])
+        data = res["data"]
+        self.assertEqual(data["status"], "failed")
+        self.assertEqual(data["error_message"], "Host connection timed out after 3 retries")
+
+    def test_get_site_audit_summary_no_audits_returns_not_found(self):
+        """8. Handles project with zero audits gracefully without raising 500 error."""
+        empty_project = Project.objects.create(
+            owner=self.user,
+            name='Empty Audits Project',
+            website_url='https://empty.com'
+        )
+        res = self.registry.execute("get_site_audit_summary", empty_project, {})
+        self.assertTrue(res["success"])
+        self.assertEqual(res["data"]["status"], "not_found")
+        self.assertIsNone(res["data"]["audit_id"])
+
+    def test_get_site_audit_summary_cross_tenant_isolation(self):
+        """9. Prevents User A from retrieving User B's audit summary by ID."""
+        user_b = User.objects.create_user(
+            email='user_b_spy@doxarank.com',
+            password='TestPassword123!'
+        )
+        project_b = Project.objects.create(
+            owner=user_b,
+            name='Tenant B Secret Project',
+            website_url='https://secret-b.com'
+        )
+        audit_b = SiteAudit.objects.create(
+            project=project_b,
+            status=AuditStatus.COMPLETED,
+            score=95
+        )
+
+        # User A querying on Project A specifying User B's audit_id
+        res = self.registry.execute("get_site_audit_summary", self.project, {"audit_id": audit_b.id})
+        self.assertTrue(res["success"])
+        self.assertEqual(res["data"]["status"], "not_found")
+
+    def test_get_audit_issues_filtering_by_audit_id_and_page_url(self):
+        """10. Enhanced get_audit_issues filters by audit_id, severity, rule_code, page_url."""
+        audit1 = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED)
+        audit2 = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED)
+
+        AuditIssue.objects.create(
+            audit=audit1,
+            issue_type="missing_title",
+            severity=IssueSeverity.CRITICAL,
+            title="P1 Missing Title",
+            page_url="https://example.com/blog/article-1"
+        )
+        AuditIssue.objects.create(
+            audit=audit1,
+            issue_type="missing_h1",
+            severity=IssueSeverity.CRITICAL,
+            title="P2 Missing H1",
+            page_url="https://example.com/about"
+        )
+        AuditIssue.objects.create(
+            audit=audit2,
+            issue_type="missing_title",
+            severity=IssueSeverity.CRITICAL,
+            title="Audit 2 Issue",
+            page_url="https://example.com/blog/article-2"
+        )
+
+        # Filter by audit_id
+        res_audit1 = self.registry.execute("get_audit_issues", self.project, {"audit_id": audit1.id})
+        self.assertEqual(res_audit1["data"]["returned_count"], 2)
+
+        # Filter by page_url substring
+        res_blog = self.registry.execute("get_audit_issues", self.project, {"page_url": "/blog/"})
+        self.assertEqual(res_blog["data"]["returned_count"], 2)
+
+        # Filter by issue_type
+        res_h1 = self.registry.execute("get_audit_issues", self.project, {"issue_type": "missing_h1"})
+        self.assertEqual(res_h1["data"]["returned_count"], 1)
+        self.assertEqual(res_h1["data"]["issues"][0]["issue_type"], "missing_h1")
+
+    def test_react_agent_live_audit_exploration_loop(self):
+        """11. ReAct AgentOrchestrator executes live website audit workflow end-to-end."""
+        from apps.seo.services.agent_orchestrator import AgentOrchestrator
+        from apps.seo.services.ai_providers import MockAIProvider
+
+        # Pre-seed site audit findings
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=70
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing H1 on Homepage",
+            page_url="https://example.com/"
+        )
+
+        with patch('apps.seo.tasks.run_site_audit.delay') as mock_delay:
+            mock_task = MagicMock()
+            mock_task.id = "task-orchestrator-audit"
+            mock_delay.return_value = mock_task
+
+            orchestrator = AgentOrchestrator(
+                project=self.project,
+                user=self.user,
+                provider=MockAIProvider(),
+                registry=self.registry,
+                max_steps=5
+            )
+
+            run = orchestrator.start_run(goal="Run live crawler audit and analyze technical SEO health issues")
+
+            self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+            self.assertIn("Completed live website audit analysis", run.summary)
+            # Verify steps were recorded
+            self.assertGreater(run.steps.count(), 0)
+
+            # Check that tools were called
+            tool_calls = AgentToolCall.objects.filter(step__run=run)
+            called_tools = [tc.tool_name for tc in tool_calls]
+            self.assertIn("trigger_site_audit", called_tools)
+            self.assertIn("get_site_audit_summary", called_tools)
+            self.assertIn("get_audit_issues", called_tools)

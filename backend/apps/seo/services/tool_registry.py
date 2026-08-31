@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional, Callable, Tuple
 from apps.projects.models import Project
 from apps.seo.models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
+    AuditStatus, IssueSeverity,
     SearchAnalyticsData, SEOInsight, SEORecommendation,
     SEOContentBrief, SEOContentDraft, SEOAction,
     ActionType, ActionStatus, ActionPriority,
@@ -310,17 +311,166 @@ def handle_get_search_console_analytics(project: Project, args: Dict[str, Any]) 
     }
 
 
+def handle_trigger_site_audit(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Trigger an asynchronous website crawl and technical SEO audit for the current project.
+
+    Guarantees:
+    - Safe crawler limit bounding (max_pages 1..200, max_depth 0..10).
+    - Start URL validation ensuring it belongs to the project domain.
+    - Non-blocking asynchronous Celery dispatch.
+    - Strict multi-tenant context enforcement.
+    """
+    if not project.website_url:
+        raise ValueError(f"Project #{project.id} ('{project.name}') has no configured website_url.")
+
+    start_url = args.get("start_url")
+    raw_pages = args.get("max_pages", 50)
+    raw_depth = args.get("max_depth", 3)
+
+    try:
+        max_pages = max(1, min(int(raw_pages), 200))
+    except (ValueError, TypeError):
+        max_pages = 50
+
+    try:
+        max_depth = max(0, min(int(raw_depth), 10))
+    except (ValueError, TypeError):
+        max_depth = 3
+
+    target_url = start_url.strip() if (start_url and isinstance(start_url, str)) else project.website_url
+
+    from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+    if not LiveSiteCrawlerService.is_same_domain(project.website_url, target_url):
+        raise ValueError(
+            f"Provided start_url '{target_url}' does not belong to project website domain '{project.website_url}'."
+        )
+
+    # Create SiteAudit in PENDING status
+    audit = SiteAudit.objects.create(
+        project=project,
+        status=AuditStatus.PENDING
+    )
+
+    from apps.seo.tasks import run_site_audit
+    task_res = run_site_audit.delay(
+        audit_id=audit.id,
+        start_url=target_url,
+        max_pages=max_pages,
+        max_depth=max_depth
+    )
+
+    return {
+        "success": True,
+        "audit_id": audit.id,
+        "project_id": project.id,
+        "status": "queued",
+        "start_url": target_url,
+        "max_pages": max_pages,
+        "max_depth": max_depth,
+        "task_id": str(task_res.id) if hasattr(task_res, 'id') else None,
+        "message": f"SEO live site audit #{audit.id} queued successfully for {target_url}."
+    }
+
+
+def handle_get_site_audit_summary(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Retrieve a compact, structured summary of the latest or specified site audit for the project.
+
+    Guarantees:
+    - Compact, LLM-optimized summary (health score, issue counts by severity, top issue types).
+    - Strict multi-tenant isolation.
+    - Graceful handling of non-existent, pending, running, or failed audits.
+    """
+    from django.db.models import Count
+
+    audit_id = args.get("audit_id")
+    if audit_id:
+        try:
+            audit = SiteAudit.objects.filter(project=project, id=audit_id).first()
+        except (ValueError, TypeError):
+            audit = None
+        if not audit:
+            return {
+                "audit_id": audit_id,
+                "project_id": project.id,
+                "status": "not_found",
+                "message": f"SiteAudit #{audit_id} not found on project #{project.id}."
+            }
+    else:
+        audit = SiteAudit.objects.filter(project=project).order_by('-created_at').first()
+        if not audit:
+            return {
+                "audit_id": None,
+                "project_id": project.id,
+                "status": "not_found",
+                "message": f"No site audits found for project #{project.id}."
+            }
+
+    critical_count = audit.issues.filter(severity=IssueSeverity.CRITICAL).count()
+    warning_count = audit.issues.filter(severity=IssueSeverity.WARNING).count()
+    notice_count = audit.issues.filter(severity=IssueSeverity.NOTICE).count()
+
+    top_issue_groups = (
+        audit.issues.values('issue_type', 'severity')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:5]
+    )
+    top_issues = [
+        {
+            "rule_code": g['issue_type'],
+            "severity": g['severity'],
+            "count": g['count']
+        }
+        for g in top_issue_groups
+    ]
+
+    pages_with_issues = audit.issues.values('page_url').distinct().count()
+
+    return {
+        "audit_id": audit.id,
+        "project_id": project.id,
+        "status": audit.status,
+        "health_score": audit.score,
+        "started_at": audit.started_at.isoformat() if audit.started_at else None,
+        "completed_at": audit.completed_at.isoformat() if audit.completed_at else None,
+        "error_message": audit.error_message,
+        "total_issues": critical_count + warning_count + notice_count,
+        "issues_by_severity": {
+            "critical": critical_count,
+            "warning": warning_count,
+            "notice": notice_count
+        },
+        "pages_with_issues_count": pages_with_issues,
+        "top_issues": top_issues
+    }
+
+
 def handle_get_audit_issues(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
-    """Retrieve site audit technical SEO issues."""
+    """Retrieve site audit technical SEO issues with optional filtering."""
+    audit_id = args.get("audit_id")
     severity = args.get("severity")
     issue_type = args.get("issue_type")
-    limit = min(args.get("limit", 20), 100)
+    page_url = args.get("page_url")
+
+    raw_limit = args.get("limit", 20)
+    try:
+        limit = min(max(1, int(raw_limit)), 100)
+    except (ValueError, TypeError):
+        limit = 20
 
     qs = AuditIssue.objects.filter(audit__project=project)
+    if audit_id:
+        qs = qs.filter(audit_id=audit_id)
     if severity:
-        qs = qs.filter(severity=severity)
+        sev = str(severity).lower()
+        if sev == 'info':
+            sev = IssueSeverity.NOTICE
+        qs = qs.filter(severity=sev)
     if issue_type:
         qs = qs.filter(issue_type=issue_type)
+    if page_url:
+        qs = qs.filter(page_url__icontains=page_url)
 
     qs = qs.order_by('-created_at')[:limit]
 
@@ -653,16 +803,54 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_get_search_console_analytics
     ))
 
-    # 3. get_audit_issues
+    # 3. trigger_site_audit
     registry.register(AgentToolDefinition(
-        name="get_audit_issues",
-        description="Retrieve site audit technical SEO issues, warnings, and crawl diagnostics for the current project.",
+        name="trigger_site_audit",
+        description="Trigger an asynchronous website crawl and technical SEO audit for the current project.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "start_url": {"type": "string", "description": "Optional crawl starting URL (must match project website domain)."},
+                "max_pages": {"type": "integer", "description": "Maximum pages to crawl (1-200, default 50)."},
+                "max_depth": {"type": "integer", "description": "Maximum crawl depth from start URL (0-10, default 3)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_trigger_site_audit
+    ))
+
+    # 4. get_site_audit_summary
+    registry.register(AgentToolDefinition(
+        name="get_site_audit_summary",
+        description="Retrieve a compact summary of the latest (or specified) technical SEO site audit, including health score and aggregated issue breakdown.",
         category=ToolCategory.READ_ONLY,
         parameters_schema={
             "type": "object",
             "properties": {
-                "severity": {"type": "string", "enum": ["critical", "warning", "info"], "description": "Severity filter."},
-                "issue_type": {"type": "string", "description": "Specific issue type identifier."},
+                "audit_id": {"type": "integer", "description": "Optional specific SiteAudit ID to retrieve."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_site_audit_summary
+    ))
+
+    # 5. get_audit_issues
+    registry.register(AgentToolDefinition(
+        name="get_audit_issues",
+        description="Retrieve site audit technical SEO issues, warnings, and crawl diagnostics for the current project with optional filtering.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "audit_id": {"type": "integer", "description": "Optional specific SiteAudit ID filter."},
+                "severity": {"type": "string", "enum": ["critical", "warning", "notice", "info"], "description": "Severity filter."},
+                "issue_type": {"type": "string", "description": "Specific issue type identifier or rule code (e.g. 'missing_title', 'missing_h1')."},
+                "page_url": {"type": "string", "description": "Optional page URL filter."},
                 "limit": {"type": "integer", "description": "Maximum issues to return (default 20, max 100)."}
             },
             "required": []

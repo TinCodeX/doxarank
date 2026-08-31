@@ -236,15 +236,17 @@ class LiveSiteCrawlerService:
     def is_same_domain(url: str, base_domain: str) -> bool:
         """
         Determine whether a URL belongs to the target crawl domain.
-        Supports exact match and www-prefix equivalence.
+        Supports full URLs, plain hostnames, exact match and www-prefix equivalence.
         """
         if not url or not base_domain:
             return False
 
         try:
-            parsed = urlparse(url)
-            host = (parsed.netloc or "").lower().split(':')[0]
-            target = base_domain.lower().split(':')[0]
+            parsed_url = urlparse(url)
+            host = (parsed_url.netloc or parsed_url.path or "").lower().split(':')[0]
+
+            parsed_base = urlparse(base_domain)
+            target = (parsed_base.netloc or parsed_base.path or "").lower().split(':')[0]
 
             if not host or not target:
                 return False
