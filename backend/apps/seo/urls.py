@@ -6,7 +6,8 @@ from .views import (
     SearchConsoleConnectionViewSet, SearchAnalyticsViewSet,
     SEOInsightViewSet, SEORecommendationViewSet,
     SEOContentBriefViewSet, SEOContentDraftViewSet,
-    SEOActionViewSet, AgentRunViewSet
+    SEOActionViewSet, AgentRunViewSet,
+    GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView
 )
 
 app_name = 'seo'
@@ -27,6 +28,8 @@ router.register('ai/agent/runs', AgentRunViewSet, basename='agent-run')
 
 
 urlpatterns = [
+    path('integrations/google/authorization-url/', GoogleOAuthAuthorizationUrlView.as_view(), name='google-oauth-authorization-url'),
+    path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     path('', include(router.urls)),
 ]
 

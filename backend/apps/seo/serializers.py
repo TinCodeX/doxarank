@@ -1214,10 +1214,41 @@ class AgentRunResumeSerializer(serializers.Serializer):
     )
 
 
+class GoogleOAuthAuthorizationUrlResponseSerializer(serializers.Serializer):
+    """
+    Response serializer for Google OAuth2 authorization URL generation.
+    """
+    authorization_url = serializers.URLField(
+        help_text="Google OAuth2 consent URL containing signed state, client ID, and required scopes."
+    )
 
 
-
-
-
-
-
+class GoogleOAuthCallbackRequestSerializer(serializers.Serializer):
+    """
+    Request serializer for Google OAuth2 authorization code callback.
+    """
+    code = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Authorization code issued by Google OAuth consent."
+    )
+    state = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Signed cryptographic state parameter returned by Google."
+    )
+    error = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Error code returned by Google if authorization was denied or failed."
+    )
+    error_description = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Detailed error description returned by Google."
+    )
+    redirect_uri = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Optional custom redirect URI used during authorization."
+    )

@@ -1,4 +1,7 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.core.cache import cache
+from django.conf import settings
+from unittest.mock import patch, MagicMock
 from django.db import transaction, IntegrityError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -5650,3 +5653,415 @@ class GoogleOAuthFoundationTests(TestCase):
         url = f'/api/seo/search-console/{connection.id}/'
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(
+    GOOGLE_OAUTH_CLIENT_ID='mock_test_client_id.apps.googleusercontent.com',
+    GOOGLE_OAUTH_CLIENT_SECRET='mock_test_client_secret_xyz99999',
+    GOOGLE_OAUTH_REDIRECT_URI='http://localhost:5173/integrations/google/callback'
+)
+class GoogleOAuthFlowTests(TestCase):
+    """
+    Phase 4.1.2: Google OAuth2 Authorization & Callback Exchange Flow Test Suite
+    1. Authorization URL endpoint generates valid Google OAuth URL with offline consent & state
+    2. Unauthenticated request to authorization URL endpoint is rejected (401)
+    3. Nonexistent project ID returns 404
+    4. Cross-tenant request to authorization URL returns 404 (strict multi-tenant isolation)
+    5. Missing project_id query parameter returns 400 Bad Request
+    6. Unconfigured Google OAuth settings returns clean 503 error
+    7. OAuthStateService generates and verifies tamper-proof state
+    8. Tampered or forged state signature is rejected (400)
+    9. Expired state token is rejected (400)
+    10. Reused/replayed state token is rejected (400)
+    11. Cross-user state token is rejected (400)
+    12. Cross-project state token is rejected (400)
+    13. Valid callback exchanges code, verifies Google identity, stores encrypted refresh token, and creates connection
+    14. Callback on existing project updates connection without creating duplicate records
+    15. Google authorization denial (access_denied) is cleanly handled without server error (400)
+    16. Missing authorization code or missing state parameter returns 400
+    17. Google exchange error (e.g. invalid_grant) is cleanly sanitized and handled (400)
+    18. Missing refresh token on new connection is safely rejected with helpful message (400)
+    19. Missing refresh token on existing connection preserves existing encrypted refresh token (200)
+    20. GET callback endpoint works equivalently to POST
+    21. Client secret and plaintext tokens never appear in serialized API responses or logs
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.auth_url_endpoint = '/api/seo/integrations/google/authorization-url/'
+        self.callback_endpoint = '/api/seo/integrations/google/callback/'
+
+        self.owner = User.objects.create_user(
+            email='gsc_oauth_flow_owner@doxarank.com',
+            password='Password123!',
+            first_name='Flow',
+            last_name='Owner'
+        )
+        self.other_user = User.objects.create_user(
+            email='gsc_oauth_flow_other@doxarank.com',
+            password='Password123!',
+            first_name='Other',
+            last_name='User'
+        )
+        self.project = Project.objects.create(
+            owner=self.owner,
+            name='Flow Test Project',
+            website_url='https://flow-test.et'
+        )
+        self.other_project = Project.objects.create(
+            owner=self.other_user,
+            name='Other Project',
+            website_url='https://other-project.et'
+        )
+
+    def test_authorization_url_authenticated_owner_success(self):
+        """1. Authenticated project owner receives valid Google OAuth URL containing state, scopes, offline consent."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(f"{self.auth_url_endpoint}?project_id={self.project.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('authorization_url', response.data)
+        auth_url = response.data['authorization_url']
+
+        self.assertTrue(auth_url.startswith("https://accounts.google.com/o/oauth2/v2/auth"))
+        self.assertIn("response_type=code", auth_url)
+        self.assertIn("access_type=offline", auth_url)
+        self.assertIn("prompt=consent", auth_url)
+        self.assertIn("state=", auth_url)
+        self.assertIn("webmasters.readonly", auth_url)
+        # Client secret must never be in the URL
+        self.assertNotIn("GOOGLE_OAUTH_CLIENT_SECRET", auth_url)
+
+    def test_authorization_url_unauthenticated_rejected(self):
+        """2. Unauthenticated request to authorization URL returns 401 Unauthorized."""
+        response = self.client.get(f"{self.auth_url_endpoint}?project_id={self.project.id}")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_authorization_url_nonexistent_project_rejected(self):
+        """3. Nonexistent project ID returns 404 Not Found."""
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(f"{self.auth_url_endpoint}?project_id=999999")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_authorization_url_cross_tenant_isolation_rejected(self):
+        """4. Authenticated user requesting authorization URL for another user's project is rejected (404)."""
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(f"{self.auth_url_endpoint}?project_id={self.project.id}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_authorization_url_missing_project_id_param_rejected(self):
+        """5. Missing project_id query parameter returns 400 Bad Request."""
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(self.auth_url_endpoint)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("project_id", response.data.get('detail', ''))
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_ID='')
+    def test_authorization_url_missing_google_oauth_settings_handled(self):
+        """6. Unconfigured Google OAuth settings on server returns safe 503 error."""
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(f"{self.auth_url_endpoint}?project_id={self.project.id}")
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    def test_oauth_state_generation_and_verification_roundtrip(self):
+        """7. OAuthStateService generates signed state and verifies successfully with correct user/project."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        self.assertIsInstance(state, str)
+        self.assertTrue(len(state) > 20)
+
+        resolved_project, resolved_user = OAuthStateService.verify_state(
+            raw_state=state,
+            expected_user=self.owner
+        )
+        self.assertEqual(resolved_project.id, self.project.id)
+        self.assertEqual(resolved_user.id, self.owner.id)
+
+    def test_oauth_state_tampered_or_bad_signature_rejected(self):
+        """8. Tampered or forged state signature is rejected."""
+        from apps.seo.services.google_oauth import OAuthStateService, InvalidOAuthStateError
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        tampered_state = state[:-5] + "ABCDE"
+
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state=tampered_state)
+
+        # Empty / None state
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state="")
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state=None)
+
+    def test_oauth_state_expiration_rejected(self):
+        """9. Expired state token is rejected when exceeding max_age."""
+        from apps.seo.services.google_oauth import OAuthStateService, InvalidOAuthStateError
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+
+        # Verify with max_age = -1 (already expired)
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state=state, max_age=-1)
+
+    def test_oauth_state_replay_rejected(self):
+        """10. Reusing a valid state token a second time is rejected by replay protection."""
+        from apps.seo.services.google_oauth import OAuthStateService, InvalidOAuthStateError
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+
+        # First verification succeeds
+        OAuthStateService.verify_state(raw_state=state)
+
+        # Second verification with identical state fails due to nonce consumption
+        with self.assertRaises(InvalidOAuthStateError) as ctx:
+            OAuthStateService.verify_state(raw_state=state)
+        self.assertIn("already been used", str(ctx.exception))
+
+    def test_oauth_state_cross_user_rejected(self):
+        """11. Cross-user verification mismatch raises InvalidOAuthStateError."""
+        from apps.seo.services.google_oauth import OAuthStateService, InvalidOAuthStateError
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state=state, expected_user=self.other_user)
+
+    def test_oauth_state_cross_project_rejected(self):
+        """12. State where project ownership is invalid or does not match user raises error."""
+        from apps.seo.services.google_oauth import OAuthStateService, InvalidOAuthStateError
+
+        # Create state with other_project for owner (mismatched)
+        signer = OAuthStateService.get_signer()
+        forged_payload = {
+            'user_id': self.owner.id,
+            'project_id': self.other_project.id,  # Owned by other_user!
+            'nonce': 'random_test_nonce_xyz',
+            'ts': 123456789
+        }
+        forged_state = signer.sign_object(forged_payload)
+
+        with self.assertRaises(InvalidOAuthStateError):
+            OAuthStateService.verify_state(raw_state=forged_state)
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_successful_token_exchange_creates_connection(self, mock_exchange, mock_identity):
+        """13. Valid callback creates SearchConsoleConnection with encrypted refresh token and metadata."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        mock_exchange.return_value = {
+            'access_token': 'ya29.a0AfH6SM_mock_access_token',
+            'refresh_token': '1//04_mock_google_refresh_token_secret_123',
+            'expires_in': 3600,
+            'scope': 'https://www.googleapis.com/auth/webmasters.readonly openid email profile'
+        }
+        mock_identity.return_value = {
+            'email': 'gsc.verified.user@gmail.com',
+            'name': 'GSC Verified',
+            'verified_email': True
+        }
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+
+        self.client.force_authenticate(user=self.owner)
+        payload = {
+            'code': '4/0AX4XfWh_valid_auth_code_from_google',
+            'state': state
+        }
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['project'], self.project.id)
+        self.assertEqual(response.data['google_account_email'], 'gsc.verified.user@gmail.com')
+        self.assertTrue(response.data['is_connected'])
+        self.assertTrue(response.data['has_oauth_token'])
+
+        # Database verification
+        connection = SearchConsoleConnection.objects.get(project=self.project)
+        self.assertTrue(connection.is_connected)
+        self.assertEqual(connection.google_account_email, 'gsc.verified.user@gmail.com')
+        self.assertEqual(connection.get_refresh_token(), '1//04_mock_google_refresh_token_secret_123')
+        self.assertNotIn('1//04_mock_google_refresh_token_secret_123', connection.encrypted_refresh_token)
+
+        # Plaintext token must NEVER appear in response
+        self.assertNotIn('encrypted_refresh_token', response.data)
+        self.assertNotIn('1//04_mock_google_refresh_token_secret_123', str(response.data))
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_existing_connection_updated_without_duplication(self, mock_exchange, mock_identity):
+        """14. Re-authorizing an existing connection updates the record rather than duplicating it."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        # Pre-create existing connection
+        existing_conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:flow-test.et",
+            is_connected=False,
+            google_account_email="old.email@gmail.com"
+        )
+        existing_conn.set_refresh_token("1//04_old_refresh_token")
+        existing_conn.save()
+
+        mock_exchange.return_value = {
+            'access_token': 'ya29.new_access_token',
+            'refresh_token': '1//04_new_refresh_token_abc',
+            'expires_in': 3600,
+            'scope': 'https://www.googleapis.com/auth/webmasters.readonly'
+        }
+        mock_identity.return_value = {
+            'email': 'new.email@gmail.com',
+            'verified_email': True
+        }
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+
+        self.client.force_authenticate(user=self.owner)
+        payload = {
+            'code': '4/new_code',
+            'state': state
+        }
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(SearchConsoleConnection.objects.filter(project=self.project).count(), 1)
+
+        existing_conn.refresh_from_db()
+        self.assertTrue(existing_conn.is_connected)
+        self.assertEqual(existing_conn.google_account_email, 'new.email@gmail.com')
+        self.assertEqual(existing_conn.get_refresh_token(), '1//04_new_refresh_token_abc')
+
+    def test_callback_google_authorization_denial_handled(self):
+        """15. User denying Google consent returns clean 400 error without server exception."""
+        payload = {
+            'error': 'access_denied',
+            'error_description': 'The user denied the request to access their Google account.'
+        }
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("denied by the user", response.data.get('detail', ''))
+
+    def test_callback_missing_code_or_state_rejected(self):
+        """16. Missing code or state parameter in callback is rejected (400)."""
+        # Missing code
+        res1 = self.client.post(self.callback_endpoint, {'state': 'some_state'}, format='json')
+        self.assertEqual(res1.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Missing state
+        res2 = self.client.post(self.callback_endpoint, {'code': 'some_code'}, format='json')
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_invalid_code_google_error_handled(self, mock_exchange):
+        """17. Google returning an error during code exchange returns clean 400."""
+        from apps.seo.services.google_oauth import OAuthStateService, GoogleOAuthExchangeError
+
+        mock_exchange.side_effect = GoogleOAuthExchangeError("Google token exchange failed: invalid_grant")
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        self.client.force_authenticate(user=self.owner)
+
+        payload = {'code': 'bad_expired_code', 'state': state}
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("invalid_grant", response.data.get('detail', ''))
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_missing_refresh_token_on_new_connection_handled(self, mock_exchange, mock_identity):
+        """18. Missing refresh token on new connection returns 400 Bad Request with guidance."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        mock_exchange.return_value = {
+            'access_token': 'ya29.access_only_token',
+            'refresh_token': None,  # No refresh token returned
+            'expires_in': 3600
+        }
+        mock_identity.return_value = {'email': 'test@gmail.com'}
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        payload = {'code': 'valid_code', 'state': state}
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No refresh token", response.data.get('detail', ''))
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_missing_refresh_token_on_existing_connection_retains_token(self, mock_exchange, mock_identity):
+        """19. Missing refresh token on re-authorization preserves the existing encrypted refresh token."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        existing_conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="sc-domain:flow-test.et",
+            is_connected=True,
+            google_account_email="initial@gmail.com"
+        )
+        existing_conn.set_refresh_token("1//04_preserved_refresh_token")
+        existing_conn.save()
+
+        mock_exchange.return_value = {
+            'access_token': 'ya29.access_only_token',
+            'refresh_token': None,  # Google didn't return a new refresh token
+            'expires_in': 3600
+        }
+        mock_identity.return_value = {'email': 'reauthorized@gmail.com'}
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        payload = {'code': 'valid_code', 'state': state}
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        existing_conn.refresh_from_db()
+        self.assertEqual(existing_conn.get_refresh_token(), "1//04_preserved_refresh_token")
+        self.assertEqual(existing_conn.google_account_email, "reauthorized@gmail.com")
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_callback_get_method_supported(self, mock_exchange, mock_identity):
+        """20. GET callback with query parameters is supported for direct redirection."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        mock_exchange.return_value = {
+            'access_token': 'ya29.get_access_token',
+            'refresh_token': '1//04_get_refresh_token',
+            'expires_in': 3600
+        }
+        mock_identity.return_value = {'email': 'get.callback@gmail.com'}
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        url = f"{self.callback_endpoint}?code=get_code&state={state}"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['google_account_email'], 'get.callback@gmail.com')
+
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.fetch_user_identity')
+    @patch('apps.seo.services.google_oauth.GoogleOAuthService.exchange_code')
+    def test_security_client_secret_and_token_never_leak(self, mock_exchange, mock_identity):
+        """21. Plaintext refresh tokens and client secret never appear in responses or serialized data."""
+        from apps.seo.services.google_oauth import OAuthStateService
+
+        secret_token = "1//04_super_secret_unique_refresh_token_never_leak_xyz"
+        mock_exchange.return_value = {
+            'access_token': 'ya29.secret_access_token',
+            'refresh_token': secret_token,
+            'expires_in': 3600
+        }
+        mock_identity.return_value = {'email': 'secure@gmail.com'}
+
+        state = OAuthStateService.generate_state(user=self.owner, project=self.project)
+        payload = {'code': 'security_code', 'state': state}
+        response = self.client.post(self.callback_endpoint, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        serialized_str = str(response.data)
+        self.assertNotIn(secret_token, serialized_str)
+        self.assertNotIn(getattr(settings, 'GOOGLE_OAUTH_CLIENT_SECRET', ''), serialized_str)
+        self.assertNotIn('encrypted_refresh_token', response.data)

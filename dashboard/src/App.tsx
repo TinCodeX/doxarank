@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
+import { GoogleOAuthCallback } from './pages/GoogleOAuthCallback';
 
 export const App: React.FC = () => {
   return (
@@ -13,6 +14,14 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route
+            path="/integrations/google/callback"
+            element={
+              <ProtectedRoute>
+                <GoogleOAuthCallback />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/"
             element={

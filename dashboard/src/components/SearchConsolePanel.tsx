@@ -13,6 +13,7 @@ import {
   deleteSearchConsoleConnection,
 } from '../api/searchConsole';
 import { syncSearchConsole } from '../api/searchConsoleAnalytics';
+import { getGoogleAuthorizationUrl } from '../api/googleOAuth';
 import { SearchConsoleFormModal } from './SearchConsoleFormModal';
 
 interface SearchConsolePanelProps {
@@ -31,6 +32,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
   const [connection, setConnection] = useState<SearchConsoleConnection | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isAuthorizing, setIsAuthorizing] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +74,28 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
   }, [project?.id, fetchConnection, onConnectionChange]);
 
   // Handlers
+  const handleConnectGoogleOAuth = async () => {
+    if (!project?.id || isAuthorizing) return;
+    setIsAuthorizing(true);
+    setError(null);
+    try {
+      const res = await getGoogleAuthorizationUrl(project.id);
+      if (res?.authorization_url) {
+        window.location.href = res.authorization_url;
+      } else {
+        setError('Google authorization URL could not be generated.');
+      }
+    } catch (err: any) {
+      setError(
+        err?.data?.detail ||
+        err?.message ||
+        'Failed to initiate Google Search Console authorization.'
+      );
+    } finally {
+      setIsAuthorizing(false);
+    }
+  };
+
   const handleOpenConnectModal = () => {
     setIsModalOpen(true);
   };
@@ -212,18 +236,36 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
         <div style={emptyStateCardStyle}>
           <div style={{ fontSize: '36px', marginBottom: '12px' }}>🌐</div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: '#111827' }}>
-            Google Search Console is not connected
+            Connect Google Search Console
           </h4>
           <p style={{ margin: '0 0 18px 0', fontSize: '14px', color: '#6b7280', maxWidth: '460px', lineHeight: 1.5 }}>
-            Connect Google Search Console to monitor organic impressions, clicks, keyword performance, and indexing status for this project.
+            Authorize DoxaRank to securely read Google Search Console search performance (clicks, impressions, queries, and rankings) for <strong>{project.name}</strong>.
           </p>
-          <button
-            id="connect-gsc-button"
-            onClick={handleOpenConnectModal}
-            style={primaryAddBtnStyle}
-          >
-            Connect Search Console
-          </button>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              id="connect-gsc-oauth-button"
+              onClick={handleConnectGoogleOAuth}
+              disabled={isAuthorizing}
+              style={{
+                ...primaryAddBtnStyle,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: '#2563eb',
+                opacity: isAuthorizing ? 0.7 : 1,
+                cursor: isAuthorizing ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <span>{isAuthorizing ? 'Redirecting to Google...' : '🔐 Connect with Google (OAuth2)'}</span>
+            </button>
+            <button
+              id="connect-gsc-button"
+              onClick={handleOpenConnectModal}
+              style={secondaryActionBtnStyle}
+            >
+              Manual / Custom Property
+            </button>
+          </div>
         </div>
       ) : (
         /* Connected State: Display connection metadata */
@@ -236,6 +278,16 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
                 {connection.property_url}
               </span>
             </div>
+
+            {/* Google Account */}
+            {connection.google_account_email && (
+              <div style={statCardStyle}>
+                <span style={statLabelStyle}>Google Account</span>
+                <span style={{ ...statValueStyle, color: '#047857' }} title={connection.google_account_email}>
+                  {connection.google_account_email}
+                </span>
+              </div>
+            )}
 
             {/* Permission Level */}
             <div style={statCardStyle}>

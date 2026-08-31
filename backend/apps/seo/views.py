@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Sum, Avg, Count, F
 from django.http import HttpResponse
 from rest_framework import viewsets, permissions, status
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -25,9 +26,16 @@ from .serializers import (
     SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
     SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer,
     SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer,
-    AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer
+    AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
+    GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
+from .services.google_oauth import (
+    GoogleOAuthService,
+    OAuthStateService,
+    InvalidOAuthStateError,
+    GoogleOAuthExchangeError
+)
 from .services.seo_intelligence import SEOIntelligenceService
 from .services.ai_seo_agent import AISeoAgentService
 from .services.content_brief_service import SEOContentBriefService
@@ -1247,3 +1255,123 @@ class AgentRunViewSet(viewsets.ModelViewSet):
         from .services.agent_events import get_agent_run_events
         events_data = get_agent_run_events(run, after_sequence=after_seq)
         return Response(events_data, status=status.HTTP_200_OK)
+
+
+class GoogleOAuthAuthorizationUrlView(APIView):
+    """
+    Generate Google OAuth2 authorization URL for connecting a project to Google Search Console.
+
+    Security & Ownership:
+    1. Requires authentication.
+    2. Enforces project ownership: users cannot generate authorization URLs for projects they do not own.
+    3. Generates cryptographically signed, tamper-proof state bound to the authenticated user and project.
+    4. Excludes client secrets and sensitive data.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {"detail": "project_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except (Project.DoesNotExist, ValueError):
+            return Response(
+                {"detail": f"Project #{project_id} not found or you do not have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            auth_url = GoogleOAuthService.get_authorization_url(project=project, user=request.user)
+            serializer = GoogleOAuthAuthorizationUrlResponseSerializer(data={"authorization_url": auth_url})
+            serializer.is_valid(raise_exception=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return Response(
+                {"detail": f"Google OAuth configuration error: {str(exc)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": f"Failed to generate authorization URL: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GoogleOAuthCallbackView(APIView):
+    """
+    Handle OAuth2 callback from Google, exchange authorization code, verify identity,
+    and establish or update the encrypted SearchConsoleConnection.
+
+    Supports:
+    - POST /api/seo/integrations/google/callback/ (with JSON body: code, state, error)
+    - GET  /api/seo/integrations/google/callback/ (with query parameters: code, state, error)
+
+    Security:
+    1. Cryptographic state verification protects against CSRF, forgery, expiration, and replay.
+    2. Validates user/project binding from state and enforces tenant isolation.
+    3. Symmetric Fernet encryption at rest for refresh token.
+    4. Plaintext tokens and client secrets are strictly sanitized and never returned in responses.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return self._handle_callback(request, data=request.query_params)
+
+    def post(self, request):
+        return self._handle_callback(request, data=request.data)
+
+    def _handle_callback(self, request, data):
+        serializer = GoogleOAuthCallbackRequestSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        error = validated.get('error')
+        if error:
+            error_msg = "Google authorization was denied by the user." if error in ['access_denied', 'consent_denied'] else f"Google authorization error: {error}"
+            return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        code = validated.get('code')
+        state = validated.get('state')
+        redirect_uri = validated.get('redirect_uri')
+
+        if not code or not code.strip():
+            return Response({"detail": "Authorization code is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not state or not state.strip():
+            return Response({"detail": "OAuth state parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate cryptographic state token
+        try:
+            project, state_user = OAuthStateService.verify_state(
+                raw_state=state,
+                expected_user=request.user if request.user.is_authenticated else None
+            )
+        except InvalidOAuthStateError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Exchange authorization code for tokens and verified Google user identity
+        try:
+            tokens = GoogleOAuthService.exchange_code(code=code, redirect_uri=redirect_uri)
+            user_identity = GoogleOAuthService.fetch_user_identity(
+                access_token=tokens.get('access_token'),
+                id_token=tokens.get('id_token')
+            )
+            connection = GoogleOAuthService.complete_oauth_connection(
+                project=project,
+                token_data=tokens,
+                user_identity=user_identity
+            )
+            response_serializer = SearchConsoleConnectionSerializer(connection)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        except GoogleOAuthExchangeError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {"detail": f"An unexpected error occurred during Google Search Console authorization: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

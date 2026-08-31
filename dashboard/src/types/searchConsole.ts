@@ -18,6 +18,10 @@ export interface SearchConsoleConnection {
   property_url: string;
   permission_level: SearchConsolePermission;
   is_connected: boolean;
+  has_oauth_token?: boolean;
+  google_account_email?: string | null;
+  token_expires_at?: string | null;
+  scopes?: string[];
   connected_at: string;
   last_synced_at: string | null;
   sync_status: SearchConsoleSyncStatus;
