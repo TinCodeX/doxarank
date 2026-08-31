@@ -13,6 +13,10 @@ from .tool_registry import (
     get_tool_registry, create_default_tool_registry
 )
 from .agent_orchestrator import AgentOrchestrator
+from .live_site_crawler import (
+    LiveSiteCrawlerService, CrawlResult, PageCrawlResult,
+    CrawlError, CrawlMetadata
+)
 
 __all__ = [
     'GoogleSearchConsoleService',
@@ -39,5 +43,10 @@ __all__ = [
     'ToolRegistry',
     'get_tool_registry',
     'create_default_tool_registry',
-    'AgentOrchestrator'
+    'AgentOrchestrator',
+    'LiveSiteCrawlerService',
+    'CrawlResult',
+    'PageCrawlResult',
+    'CrawlError',
+    'CrawlMetadata'
 ]

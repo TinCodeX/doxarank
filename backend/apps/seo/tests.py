@@ -1,3 +1,4 @@
+import httpx
 from django.test import TestCase, override_settings
 from django.core.cache import cache
 from django.conf import settings
@@ -6922,3 +6923,752 @@ class GSCAgentOrchestratorIntegrationTests(TestCase):
         resumed_run = orchestrator.resume_run(run=run, approval_decision="approved")
         self.assertEqual(resumed_run.status, AgentRunStatus.COMPLETED)
         self.assertIn("Successfully completed", resumed_run.summary)
+
+
+# ==============================================================================
+# MILESTONE 4, PHASE 4.2.1: LIVE WEBSITE CRAWLER FOUNDATION TEST SUITE
+# ==============================================================================
+
+class LiveSiteCrawlerTests(TestCase):
+    """
+    Comprehensive test suite for LiveSiteCrawlerService (Milestone 4, Phase 4.2.1).
+    Validates URL handling, robots.txt compliance, bounded BFS traversal,
+    HTTP resilience, and BeautifulSoup4 HTML feature extraction.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='crawler_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Crawler',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Crawler Test Website',
+            website_url='https://example.com'
+        )
+
+    def test_url_normalization(self):
+        """1. Normalizes relative URLs, strips fragments, normalizes casing and scheme."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        base = "https://example.com/blog/article-1"
+        self.assertEqual(
+            LiveSiteCrawlerService.normalize_url("about#team", base),
+            "https://example.com/blog/about"
+        )
+        self.assertEqual(
+            LiveSiteCrawlerService.normalize_url("/contact?b=2&a=1#form", base),
+            "https://example.com/contact?a=1&b=2"
+        )
+        self.assertEqual(
+            LiveSiteCrawlerService.normalize_url("HTTPS://EXAMPLE.COM/Path/../Services/", base),
+            "https://example.com/Services/"
+        )
+        # Invalid / non-crawlable schemes
+        self.assertIsNone(LiveSiteCrawlerService.normalize_url("mailto:info@example.com", base))
+        self.assertIsNone(LiveSiteCrawlerService.normalize_url("javascript:void(0)", base))
+        self.assertIsNone(LiveSiteCrawlerService.normalize_url("tel:+1234567890", base))
+        self.assertIsNone(LiveSiteCrawlerService.normalize_url("", base))
+
+    def test_same_domain_and_extension_filtering(self):
+        """2. Restricts crawl to target domain with www equivalence and filters non-HTML extensions."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        # Same domain
+        self.assertTrue(LiveSiteCrawlerService.is_same_domain("https://example.com/page", "example.com"))
+        self.assertTrue(LiveSiteCrawlerService.is_same_domain("https://www.example.com/page", "example.com"))
+        self.assertTrue(LiveSiteCrawlerService.is_same_domain("https://example.com/page", "www.example.com"))
+        self.assertFalse(LiveSiteCrawlerService.is_same_domain("https://otherdomain.com/page", "example.com"))
+        self.assertFalse(LiveSiteCrawlerService.is_same_domain("https://sub.example.com/page", "example.com"))
+
+        # Extension filtering
+        self.assertTrue(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/page"))
+        self.assertTrue(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/about.html"))
+        self.assertFalse(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/document.pdf"))
+        self.assertFalse(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/image.png"))
+        self.assertFalse(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/styles.css"))
+        self.assertFalse(LiveSiteCrawlerService.is_crawlable_extension("https://example.com/bundle.js"))
+
+    def test_html_feature_extraction_comprehensive(self):
+        """3. Extracts title, meta description, H1-H6, canonical, images, internal/external links, and JSON-LD."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        html_content = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <title>   Best SEO Platform in Ethiopia - DoxaRank   </title>
+            <meta name="description" content="Award-winning SEO tracking and crawler software.">
+            <link rel="canonical" href="https://example.com/definitive-url">
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "SoftwareApplication",
+                "name": "DoxaRank",
+                "applicationCategory": "BusinessApplication"
+            }
+            </script>
+        </head>
+        <body>
+            <h1>Main Title of the Page</h1>
+            <h2>Secondary Subtitle</h2>
+            <h2>Another Subtitle</h2>
+            <h3>Deeper Topic Heading</h3>
+            <h6>Minor Notice</h6>
+            <p>Welcome to DoxaRank. This is a powerful automated SEO platform for tracking rankings and crawling sites.</p>
+            <img src="/assets/logo.png" alt="DoxaRank Logo">
+            <img src="https://example.com/hero.jpg">
+            <a href="/pricing">View Pricing</a>
+            <a href="https://example.com/features">Our Features</a>
+            <a href="https://twitter.com/doxarank" target="_blank">Follow us on Twitter</a>
+            <a href="mailto:support@doxarank.com">Email Us</a>
+        </body>
+        </html>
+        """
+
+        service = LiveSiteCrawlerService(project=self.project)
+        extracted = service.extract_html_features(
+            url="https://example.com/home",
+            final_url="https://example.com/home",
+            status_code=200,
+            response_time_ms=125.5,
+            content_type="text/html; charset=utf-8",
+            html_text=html_content,
+            base_domain="example.com",
+            redirect_chain=[]
+        )
+
+        self.assertEqual(extracted.title, "Best SEO Platform in Ethiopia - DoxaRank")
+        self.assertEqual(extracted.meta_description, "Award-winning SEO tracking and crawler software.")
+        self.assertEqual(extracted.canonical, "https://example.com/definitive-url")
+        self.assertEqual(extracted.headings["h1"], ["Main Title of the Page"])
+        self.assertEqual(extracted.headings["h2"], ["Secondary Subtitle", "Another Subtitle"])
+        self.assertEqual(extracted.headings["h3"], ["Deeper Topic Heading"])
+        self.assertEqual(extracted.headings["h6"], ["Minor Notice"])
+        self.assertEqual(extracted.headings["h4"], [])
+
+        # Verify Images
+        self.assertEqual(len(extracted.images), 2)
+        self.assertEqual(extracted.images[0]["src"], "/assets/logo.png")
+        self.assertEqual(extracted.images[0]["resolved_url"], "https://example.com/assets/logo.png")
+        self.assertEqual(extracted.images[0]["alt"], "DoxaRank Logo")
+        self.assertEqual(extracted.images[1]["alt"], "")
+
+        # Verify Links (Internal vs External)
+        internal_urls = [l["resolved_url"] for l in extracted.internal_links]
+        self.assertIn("https://example.com/pricing", internal_urls)
+        self.assertIn("https://example.com/features", internal_urls)
+        self.assertEqual(len(extracted.internal_links), 2)
+
+        external_urls = [l["resolved_url"] for l in extracted.external_links]
+        self.assertIn("https://twitter.com/doxarank", external_urls)
+        self.assertEqual(len(extracted.external_links), 1)
+
+        # Verify JSON-LD
+        self.assertEqual(len(extracted.json_ld), 1)
+        self.assertEqual(extracted.json_ld[0]["name"], "DoxaRank")
+        self.assertEqual(extracted.json_ld[0]["@type"], "SoftwareApplication")
+
+        # Verify word count
+        self.assertGreater(extracted.word_count, 10)
+
+    def test_basic_page_crawling_single_page(self):
+        """4. Performs live crawl on single page using mock transport and returns structured CrawlResult."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(200, text="User-agent: *\nAllow: /")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text="<html><head><title>Home Page</title></head><body><h1>Welcome</h1></body></html>"
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10
+        )
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 1)
+        self.assertEqual(result.pages_discovered, 1)
+        self.assertEqual(len(result.errors), 0)
+        self.assertEqual(result.metadata.robots_txt_status, "loaded")
+        self.assertEqual(result.pages[0].url, "https://example.com/")
+        self.assertEqual(result.pages[0].title, "Home Page")
+        self.assertEqual(result.pages[0].headings["h1"], ["Welcome"])
+
+    def test_internal_link_discovery_and_bfs_traversal(self):
+        """5. Discovers internal links and crawls them via BFS traversal."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots.txt")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Home</title></head><body><a href="/about">About</a><a href="/services">Services</a></body></html>'
+                )
+            elif url_str == "https://example.com/about":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>About Us</title></head><body><h1>About DoxaRank</h1><a href="/contact">Contact</a></body></html>'
+                )
+            elif url_str == "https://example.com/services":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Services</title></head><body><h1>Our Services</h1></body></html>'
+                )
+            elif url_str == "https://example.com/contact":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Contact</title></head><body><h1>Contact Us</h1></body></html>'
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10,
+            max_depth=2
+        )
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 4)
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/about", crawled_urls)
+        self.assertIn("https://example.com/services", crawled_urls)
+        self.assertIn("https://example.com/contact", crawled_urls)
+
+    def test_external_link_exclusion_from_crawl_queue(self):
+        """6. Captures external links in page data but strictly excludes them from crawl queue."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Home</title></head><body><a href="https://external-partner.com/api">Partner</a><a href="/internal-page">Internal</a></body></html>'
+                )
+            elif url_str == "https://example.com/internal-page":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Internal Page</title></head><body><h1>Internal Content</h1></body></html>'
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10
+        )
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 2)
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/internal-page", crawled_urls)
+        self.assertNotIn("https://external-partner.com/api", crawled_urls)
+
+        # Check external links captured
+        home_page = next(p for p in result.pages if p.url == "https://example.com/")
+        self.assertEqual(len(home_page.external_links), 1)
+        self.assertEqual(home_page.external_links[0]["resolved_url"], "https://external-partner.com/api")
+
+    def test_robots_txt_compliance(self):
+        """7. Respects robots.txt disallow rules and skips disallowed URLs."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(
+                    200,
+                    text="User-agent: *\nDisallow: /admin\nDisallow: /private/\n"
+                )
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Home</title></head><body><a href="/public">Public</a><a href="/admin/dashboard">Admin</a></body></html>'
+                )
+            elif url_str == "https://example.com/public":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Public</title></head><body><h1>Public Content</h1></body></html>'
+                )
+            elif url_str == "https://example.com/admin/dashboard":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Admin</body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10
+        )
+        result = crawler.crawl("https://example.com/")
+
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/public", crawled_urls)
+        self.assertNotIn("https://example.com/admin/dashboard", crawled_urls)
+
+        # Disallowed URL recorded in errors
+        robots_errors = [e for e in result.errors if e.error_type == "robots_disallowed"]
+        self.assertEqual(len(robots_errors), 1)
+        self.assertEqual(robots_errors[0].url, "https://example.com/admin/dashboard")
+
+    def test_robots_txt_fallback_on_error(self):
+        """8. Safely handles robots.txt 500 error or network exception by defaulting to allow all."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(500, text="Internal Server Error")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Home</title></head><body><h1>Welcome</h1></body></html>'
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport)
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 1)
+        self.assertEqual(result.metadata.robots_txt_status, "http_500")
+
+    def test_max_pages_limit_enforcement(self):
+        """9. Stops crawl precisely when max_pages is reached, ignoring remaining queue."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/p1">P1</a><a href="/p2">P2</a><a href="/p3">P3</a><a href="/p4">P4</a><a href="/p5">P5</a></body></html>'
+                )
+            elif "/p" in url_str:
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Page</body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=3  # Stop at 3 pages
+        )
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 3)
+        self.assertEqual(len(result.pages), 3)
+
+    def test_max_depth_limit_enforcement(self):
+        """10. Does not crawl internal links discovered at or beyond max_depth."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":  # depth 0
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body><a href="/level1">Level 1</a></body></html>')
+            elif url_str == "https://example.com/level1":  # depth 1
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body><a href="/level2">Level 2</a></body></html>')
+            elif url_str == "https://example.com/level2":  # depth 2
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body><a href="/level3">Level 3</a></body></html>')
+            elif url_str == "https://example.com/level3":  # depth 3
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Level 3</body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10,
+            max_depth=1  # Only crawl start URL (depth 0) and Level 1 (depth 1)
+        )
+        result = crawler.crawl("https://example.com/")
+
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/level1", crawled_urls)
+        self.assertNotIn("https://example.com/level2", crawled_urls)
+        self.assertEqual(result.pages_crawled, 2)
+
+    def test_http_404_and_500_resilience(self):
+        """11. Records HTTP 404 and 500 status codes on PageCrawlResult without breaking crawl."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/missing">Missing</a><a href="/server-error">Server Error</a><a href="/working">Working</a></body></html>'
+                )
+            elif url_str == "https://example.com/missing":
+                return httpx.Response(404, headers={"Content-Type": "text/html"}, text='<html><body>404 Page Not Found</body></html>')
+            elif url_str == "https://example.com/server-error":
+                return httpx.Response(500, headers={"Content-Type": "text/html"}, text='<html><body>500 Internal Error</body></html>')
+            elif url_str == "https://example.com/working":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body><h1>Working</h1></body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport, max_pages=10)
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 4)
+        status_by_url = {p.url: p.status_code for p in result.pages}
+        self.assertEqual(status_by_url["https://example.com/"], 200)
+        self.assertEqual(status_by_url["https://example.com/missing"], 404)
+        self.assertEqual(status_by_url["https://example.com/server-error"], 500)
+        self.assertEqual(status_by_url["https://example.com/working"], 200)
+
+    def test_redirect_handling_and_chain_capture(self):
+        """12. Follows HTTP redirects, records final URL and full redirect chain."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/old-slug">Old Link</a></body></html>'
+                )
+            elif url_str == "https://example.com/old-slug":
+                return httpx.Response(
+                    301,
+                    headers={"Location": "https://example.com/intermediate-slug"}
+                )
+            elif url_str == "https://example.com/intermediate-slug":
+                return httpx.Response(
+                    302,
+                    headers={"Location": "https://example.com/new-definitive-slug"}
+                )
+            elif url_str == "https://example.com/new-definitive-slug":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Definitive Page</title></head><body><h1>New Slug</h1></body></html>'
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport, max_pages=10)
+        result = crawler.crawl("https://example.com/")
+
+        redirected_page = next((p for p in result.pages if p.url == "https://example.com/old-slug"), None)
+        self.assertIsNotNone(redirected_page)
+        self.assertEqual(redirected_page.final_url, "https://example.com/new-definitive-slug")
+        self.assertEqual(redirected_page.status_code, 200)
+        self.assertEqual(redirected_page.title, "Definitive Page")
+        self.assertIn("https://example.com/old-slug", redirected_page.redirect_chain)
+        self.assertIn("https://example.com/intermediate-slug", redirected_page.redirect_chain)
+
+    def test_timeout_and_network_exception_resilience(self):
+        """13. Handles request timeouts and network exceptions gracefully without terminating entire crawl."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/hanging-page">Hanging</a><a href="/good-page">Good Page</a></body></html>'
+                )
+            elif url_str == "https://example.com/hanging-page":
+                raise httpx.ReadTimeout("Read timed out on socket")
+            elif url_str == "https://example.com/good-page":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><head><title>Good Page</title></head><body><h1>Success</h1></body></html>'
+                )
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport, max_pages=10)
+        result = crawler.crawl("https://example.com/")
+
+        # Crawl continued and captured good page
+        self.assertEqual(result.pages_crawled, 2)
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/good-page", crawled_urls)
+
+        # Timeout recorded in errors list
+        timeout_errors = [e for e in result.errors if e.error_type == "timeout"]
+        self.assertEqual(len(timeout_errors), 1)
+        self.assertEqual(timeout_errors[0].url, "https://example.com/hanging-page")
+
+    def test_max_response_size_protection(self):
+        """14. Rejects responses exceeding max_response_size to prevent memory exhaustion."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/huge-file">Huge File</a><a href="/normal">Normal</a></body></html>'
+                )
+            elif url_str == "https://example.com/huge-file":
+                huge_payload = "A" * 6000  # 6000 bytes
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text=huge_payload)
+            elif url_str == "https://example.com/normal":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text="<html><body>Normal</body></html>")
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            transport=transport,
+            max_pages=10,
+            max_response_size=5000  # 5KB limit
+        )
+        result = crawler.crawl("https://example.com/")
+
+        # Huge file was skipped due to size
+        self.assertEqual(result.pages_crawled, 2)
+        size_errors = [e for e in result.errors if e.error_type == "response_too_large"]
+        self.assertEqual(len(size_errors), 1)
+        self.assertEqual(size_errors[0].url, "https://example.com/huge-file")
+
+    def test_project_context_and_start_url_resolution(self):
+        """15. Automatically uses project.website_url when start_url is omitted."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text="<html><body>Home</body></html>")
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport)
+        result = crawler.crawl()
+
+        self.assertEqual(result.start_url, "https://example.com/")
+        self.assertEqual(result.pages_crawled, 1)
+
+    def test_crawl_result_to_dict_serialization(self):
+        """16. CrawlResult and children serialize to clean dictionary structures."""
+        from apps.seo.services.live_site_crawler import (
+            CrawlResult, CrawlMetadata, PageCrawlResult, CrawlError
+        )
+
+        metadata = CrawlMetadata(
+            start_url="https://example.com/",
+            base_domain="example.com",
+            user_agent="DoxaRankBot/1.0",
+            max_pages=50,
+            max_depth=3,
+            robots_txt_status="loaded",
+            started_at="2026-08-31T12:00:00Z",
+            completed_at="2026-08-31T12:00:05Z",
+            duration_seconds=5.0
+        )
+        page = PageCrawlResult(
+            url="https://example.com/",
+            final_url="https://example.com/",
+            status_code=200,
+            response_time_ms=50.0,
+            title="Example Title",
+            meta_description="Example Description"
+        )
+        error = CrawlError(
+            url="https://example.com/broken",
+            error_type="timeout",
+            message="Connection timed out"
+        )
+        result = CrawlResult(
+            start_url="https://example.com/",
+            metadata=metadata,
+            pages_crawled=1,
+            pages_discovered=2,
+            duration_seconds=5.0,
+            errors=[error],
+            pages=[page]
+        )
+
+        d = result.to_dict()
+        self.assertEqual(d["start_url"], "https://example.com/")
+        self.assertEqual(d["pages_crawled"], 1)
+        self.assertEqual(len(d["errors"]), 1)
+        self.assertEqual(d["errors"][0]["error_type"], "timeout")
+        self.assertEqual(len(d["pages"]), 1)
+        self.assertEqual(d["pages"][0]["title"], "Example Title")
+
+    def test_redirect_loop_protection(self):
+        """17. Catches redirect loops and logs error without hanging or crashing."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body><a href="/loop-a">Loop</a><a href="/safe">Safe</a></body></html>')
+            elif url_str == "https://example.com/loop-a":
+                raise httpx.TooManyRedirects("Exceeded 5 redirects in loop", request=request)
+            elif url_str == "https://example.com/safe":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Safe Page</body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport, max_pages=10)
+        result = crawler.crawl("https://example.com/")
+
+        self.assertEqual(result.pages_crawled, 2)
+        redir_errors = [e for e in result.errors if e.error_type == "redirect_loop"]
+        self.assertEqual(len(redir_errors), 1)
+        self.assertEqual(redir_errors[0].url, "https://example.com/loop-a")
+
+    def test_json_ld_extraction_valid_and_invalid(self):
+        """18. Safely parses valid JSON-LD schemas and ignores malformed script blocks."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        html = """
+        <html>
+        <head>
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "Organization",
+                "name": "DoxaRank Inc",
+                "url": "https://example.com"
+            }
+            </script>
+            <script type="application/ld+json">
+            { INVALID JSON SYNTAX HERE }
+            </script>
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "WebSite",
+                "name": "DoxaRank Search"
+            }
+            </script>
+        </head>
+        <body><h1>Testing JSON-LD</h1></body>
+        </html>
+        """
+        service = LiveSiteCrawlerService(project=self.project)
+        extracted = service.extract_html_features(
+            url="https://example.com/json-ld-test",
+            final_url="https://example.com/json-ld-test",
+            status_code=200,
+            response_time_ms=50.0,
+            content_type="text/html",
+            html_text=html,
+            base_domain="example.com",
+            redirect_chain=[]
+        )
+
+        self.assertEqual(len(extracted.json_ld), 2)
+        self.assertEqual(extracted.json_ld[0]["@type"], "Organization")
+        self.assertEqual(extracted.json_ld[1]["@type"], "WebSite")
+
+    def test_non_html_response_handling(self):
+        """19. Non-HTML content types are recorded as basic PageCrawlResults without HTML parse errors."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(404, text="No robots")
+            elif url_str == "https://example.com/api/data.json":
+                return httpx.Response(200, headers={"Content-Type": "application/json"}, text='{"status": "ok"}')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(project=self.project, transport=transport, max_pages=5)
+        result = crawler.crawl("https://example.com/api/data.json")
+
+        self.assertEqual(result.pages_crawled, 1)
+        self.assertEqual(result.pages[0].content_type, "application/json")
+        self.assertIsNone(result.pages[0].title)
+
+    def test_robots_txt_user_agent_specific_disallow(self):
+        """20. Correctly evaluates user-agent specific robots.txt directives."""
+        from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str == "https://example.com/robots.txt":
+                return httpx.Response(
+                    200,
+                    text="User-agent: Googlebot\nDisallow: /google-blocked\n\nUser-agent: DoxaRankBot\nDisallow: /doxarank-blocked\n"
+                )
+            elif url_str == "https://example.com/":
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/html"},
+                    text='<html><body><a href="/google-blocked">Google Blocked</a><a href="/doxarank-blocked">DoxaRank Blocked</a></body></html>'
+                )
+            elif url_str == "https://example.com/google-blocked":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Google Blocked But Allowed For Us</body></html>')
+            elif url_str == "https://example.com/doxarank-blocked":
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text='<html><body>Blocked For DoxaRank</body></html>')
+            return httpx.Response(404, text="Not Found")
+
+        transport = httpx.MockTransport(handler)
+        crawler = LiveSiteCrawlerService(
+            project=self.project,
+            user_agent="DoxaRankBot/1.0 (+https://doxarank.com/bot)",
+            transport=transport,
+            max_pages=10
+        )
+        result = crawler.crawl("https://example.com/")
+
+        crawled_urls = [p.url for p in result.pages]
+        self.assertIn("https://example.com/", crawled_urls)
+        self.assertIn("https://example.com/google-blocked", crawled_urls)
+        self.assertNotIn("https://example.com/doxarank-blocked", crawled_urls)
