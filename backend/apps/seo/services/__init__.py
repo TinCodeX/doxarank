@@ -17,6 +17,16 @@ from .live_site_crawler import (
     LiveSiteCrawlerService, CrawlResult, PageCrawlResult,
     CrawlError, CrawlMetadata
 )
+from .seo_audit_engine import (
+    SEOAuditEngine, AuditFinding, AuditResult,
+    MISSING_TITLE, LONG_TITLE, SHORT_TITLE,
+    MISSING_META_DESCRIPTION, LONG_META_DESCRIPTION, SHORT_META_DESCRIPTION,
+    MISSING_H1, MULTIPLE_H1, MISSING_IMAGE_ALT,
+    MISSING_CANONICAL, CANONICAL_MISMATCH,
+    BROKEN_INTERNAL_LINK, REDIRECTING_INTERNAL_LINK,
+    REDIRECT_CHAIN, REDIRECT_LOOP,
+    CRAWL_ERROR, SLOW_RESPONSE, MISSING_STRUCTURED_DATA
+)
 
 __all__ = [
     'GoogleSearchConsoleService',
@@ -48,5 +58,26 @@ __all__ = [
     'CrawlResult',
     'PageCrawlResult',
     'CrawlError',
-    'CrawlMetadata'
+    'CrawlMetadata',
+    'SEOAuditEngine',
+    'AuditFinding',
+    'AuditResult',
+    'MISSING_TITLE',
+    'LONG_TITLE',
+    'SHORT_TITLE',
+    'MISSING_META_DESCRIPTION',
+    'LONG_META_DESCRIPTION',
+    'SHORT_META_DESCRIPTION',
+    'MISSING_H1',
+    'MULTIPLE_H1',
+    'MISSING_IMAGE_ALT',
+    'MISSING_CANONICAL',
+    'CANONICAL_MISMATCH',
+    'BROKEN_INTERNAL_LINK',
+    'REDIRECTING_INTERNAL_LINK',
+    'REDIRECT_CHAIN',
+    'REDIRECT_LOOP',
+    'CRAWL_ERROR',
+    'SLOW_RESPONSE',
+    'MISSING_STRUCTURED_DATA'
 ]

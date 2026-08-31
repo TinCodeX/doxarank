@@ -7672,3 +7672,555 @@ class LiveSiteCrawlerTests(TestCase):
         self.assertIn("https://example.com/", crawled_urls)
         self.assertIn("https://example.com/google-blocked", crawled_urls)
         self.assertNotIn("https://example.com/doxarank-blocked", crawled_urls)
+
+
+# ==============================================================================
+# MILESTONE 4, PHASE 4.2.2: SEO AUDIT RULE ENGINE & PERSISTENCE TEST SUITE
+# ==============================================================================
+
+class SEOAuditEngineTests(TestCase):
+    """
+    Unit test suite for SEOAuditEngine deterministic rule evaluation,
+    health score calculation, and SiteAudit / AuditIssue persistence.
+    """
+
+    def setUp(self):
+        from apps.seo.services.seo_audit_engine import SEOAuditEngine
+        self.user = User.objects.create_user(
+            email='audit_engine_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Audit',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Audit Engine Website',
+            website_url='https://example.com'
+        )
+        self.engine = SEOAuditEngine()
+
+    def _create_mock_crawl_result(self, pages=None, errors=None):
+        from apps.seo.services.live_site_crawler import CrawlResult, CrawlMetadata
+        metadata = CrawlMetadata(
+            start_url="https://example.com/",
+            base_domain="example.com",
+            user_agent="DoxaRankBot/1.0",
+            max_pages=50,
+            max_depth=3,
+            robots_txt_status="loaded",
+            started_at="2026-08-31T12:00:00Z",
+            completed_at="2026-08-31T12:00:05Z",
+            duration_seconds=5.0
+        )
+        pages_list = pages or []
+        errors_list = errors or []
+        return CrawlResult(
+            start_url="https://example.com/",
+            metadata=metadata,
+            pages_crawled=len(pages_list),
+            pages_discovered=len(pages_list),
+            duration_seconds=5.0,
+            errors=errors_list,
+            pages=pages_list
+        )
+
+    def test_missing_title_rule_triggers_critical(self):
+        """1. Detects missing or empty title and creates critical finding."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_TITLE
+
+        page = PageCrawlResult(
+            url="https://example.com/no-title",
+            final_url="https://example.com/no-title",
+            status_code=200,
+            response_time_ms=100.0,
+            title=""
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[page])
+        result = self.engine.evaluate(crawl_result)
+
+        missing_title_findings = [f for f in result.findings if f.rule_code == MISSING_TITLE]
+        self.assertEqual(len(missing_title_findings), 1)
+        self.assertEqual(missing_title_findings[0].severity, IssueSeverity.CRITICAL)
+        self.assertEqual(missing_title_findings[0].page_url, "https://example.com/no-title")
+
+    def test_long_and_short_title_rules(self):
+        """2. Detects title exceeding 60 chars (Warning) and under 10 chars (Notice)."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import LONG_TITLE, SHORT_TITLE
+
+        long_page = PageCrawlResult(
+            url="https://example.com/long-title",
+            final_url="https://example.com/long-title",
+            status_code=200,
+            response_time_ms=100.0,
+            title="This is an extremely long page title that exceeds the maximum recommended sixty characters limit for Google SERPs"
+        )
+        short_page = PageCrawlResult(
+            url="https://example.com/short-title",
+            final_url="https://example.com/short-title",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Home"
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[long_page, short_page])
+        result = self.engine.evaluate(crawl_result)
+
+        long_findings = [f for f in result.findings if f.rule_code == LONG_TITLE]
+        short_findings = [f for f in result.findings if f.rule_code == SHORT_TITLE]
+
+        self.assertEqual(len(long_findings), 1)
+        self.assertEqual(long_findings[0].severity, IssueSeverity.WARNING)
+
+        self.assertEqual(len(short_findings), 1)
+        self.assertEqual(short_findings[0].severity, IssueSeverity.NOTICE)
+
+    def test_meta_description_rules(self):
+        """3. Detects missing meta description (Warning) and excessively long description (Notice)."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_META_DESCRIPTION, LONG_META_DESCRIPTION
+
+        no_desc = PageCrawlResult(
+            url="https://example.com/no-desc",
+            final_url="https://example.com/no-desc",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Valid Page Title",
+            meta_description=None
+        )
+        long_desc = PageCrawlResult(
+            url="https://example.com/long-desc",
+            final_url="https://example.com/long-desc",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Valid Page Title 2",
+            meta_description="A" * 180
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[no_desc, long_desc])
+        result = self.engine.evaluate(crawl_result)
+
+        missing_findings = [f for f in result.findings if f.rule_code == MISSING_META_DESCRIPTION]
+        long_findings = [f for f in result.findings if f.rule_code == LONG_META_DESCRIPTION]
+
+        self.assertEqual(len(missing_findings), 1)
+        self.assertEqual(missing_findings[0].severity, IssueSeverity.WARNING)
+
+        self.assertEqual(len(long_findings), 1)
+        self.assertEqual(long_findings[0].severity, IssueSeverity.NOTICE)
+
+    def test_h1_heading_rules(self):
+        """4. Detects missing H1 heading (Critical) and multiple H1 headings (Warning)."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_H1, MULTIPLE_H1
+
+        no_h1 = PageCrawlResult(
+            url="https://example.com/no-h1",
+            final_url="https://example.com/no-h1",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Valid Page Title",
+            headings={"h1": [], "h2": ["Sub"]}
+        )
+        multi_h1 = PageCrawlResult(
+            url="https://example.com/multi-h1",
+            final_url="https://example.com/multi-h1",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Valid Page Title",
+            headings={"h1": ["Heading 1", "Heading 2"], "h2": []}
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[no_h1, multi_h1])
+        result = self.engine.evaluate(crawl_result)
+
+        missing_h1_findings = [f for f in result.findings if f.rule_code == MISSING_H1]
+        multi_h1_findings = [f for f in result.findings if f.rule_code == MULTIPLE_H1]
+
+        self.assertEqual(len(missing_h1_findings), 1)
+        self.assertEqual(missing_h1_findings[0].severity, IssueSeverity.CRITICAL)
+
+        self.assertEqual(len(multi_h1_findings), 1)
+        self.assertEqual(multi_h1_findings[0].severity, IssueSeverity.WARNING)
+
+    def test_missing_image_alt_rule(self):
+        """5. Detects images without alt text and records warning."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_IMAGE_ALT
+
+        page = PageCrawlResult(
+            url="https://example.com/gallery",
+            final_url="https://example.com/gallery",
+            status_code=200,
+            response_time_ms=100.0,
+            title="Gallery",
+            images=[
+                {"src": "/img1.jpg", "alt": "Descriptive Alt"},
+                {"src": "/img2.jpg", "alt": ""},
+                {"src": "/img3.jpg", "alt": None}
+            ]
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[page])
+        result = self.engine.evaluate(crawl_result)
+
+        alt_findings = [f for f in result.findings if f.rule_code == MISSING_IMAGE_ALT]
+        self.assertEqual(len(alt_findings), 1)
+        self.assertEqual(alt_findings[0].severity, IssueSeverity.WARNING)
+        self.assertEqual(alt_findings[0].evidence["missing_count"], 2)
+
+    def test_broken_internal_link_rule(self):
+        """6. Flags 404 and 500 status pages as critical broken internal links."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import BROKEN_INTERNAL_LINK
+
+        page_404 = PageCrawlResult(
+            url="https://example.com/dead-link",
+            final_url="https://example.com/dead-link",
+            status_code=404,
+            response_time_ms=50.0
+        )
+        page_500 = PageCrawlResult(
+            url="https://example.com/crash",
+            final_url="https://example.com/crash",
+            status_code=500,
+            response_time_ms=80.0
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[page_404, page_500])
+        result = self.engine.evaluate(crawl_result)
+
+        broken_findings = [f for f in result.findings if f.rule_code == BROKEN_INTERNAL_LINK]
+        self.assertEqual(len(broken_findings), 2)
+        for b in broken_findings:
+            self.assertEqual(b.severity, IssueSeverity.CRITICAL)
+
+    def test_redirect_chain_and_loop_rules(self):
+        """7. Detects multi-hop redirect chains (Warning) and redirect loops (Critical)."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult, CrawlError
+        from apps.seo.services.seo_audit_engine import REDIRECT_CHAIN, REDIRECT_LOOP
+
+        chained_page = PageCrawlResult(
+            url="https://example.com/step1",
+            final_url="https://example.com/step3",
+            status_code=200,
+            response_time_ms=150.0,
+            title="Step 3",
+            redirect_chain=["https://example.com/step1", "https://example.com/step2"]
+        )
+        loop_error = CrawlError(
+            url="https://example.com/loop",
+            error_type="redirect_loop",
+            message="Infinite redirect loop"
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[chained_page], errors=[loop_error])
+        result = self.engine.evaluate(crawl_result)
+
+        chain_findings = [f for f in result.findings if f.rule_code == REDIRECT_CHAIN]
+        loop_findings = [f for f in result.findings if f.rule_code == REDIRECT_LOOP]
+
+        self.assertEqual(len(chain_findings), 1)
+        self.assertEqual(chain_findings[0].severity, IssueSeverity.WARNING)
+
+        self.assertEqual(len(loop_findings), 1)
+        self.assertEqual(loop_findings[0].severity, IssueSeverity.CRITICAL)
+
+    def test_canonical_rules(self):
+        """8. Detects missing canonical tag (Notice) and cross-domain canonical mismatch (Warning)."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_CANONICAL, CANONICAL_MISMATCH
+
+        no_canonical = PageCrawlResult(
+            url="https://example.com/no-can",
+            final_url="https://example.com/no-can",
+            status_code=200,
+            response_time_ms=50.0,
+            title="Valid Title",
+            canonical=None
+        )
+        mismatch_canonical = PageCrawlResult(
+            url="https://example.com/can-mismatch",
+            final_url="https://example.com/can-mismatch",
+            status_code=200,
+            response_time_ms=50.0,
+            title="Valid Title 2",
+            canonical="https://external-domain.com/canonical-source"
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[no_canonical, mismatch_canonical])
+        result = self.engine.evaluate(crawl_result)
+
+        missing_can = [f for f in result.findings if f.rule_code == MISSING_CANONICAL]
+        mismatch_can = [f for f in result.findings if f.rule_code == CANONICAL_MISMATCH]
+
+        self.assertEqual(len(missing_can), 1)
+        self.assertEqual(missing_can[0].severity, IssueSeverity.NOTICE)
+
+        self.assertEqual(len(mismatch_can), 1)
+        self.assertEqual(mismatch_can[0].severity, IssueSeverity.WARNING)
+
+    def test_slow_response_rule(self):
+        """9. Flags pages taking > 1500ms as slow response warnings."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import SLOW_RESPONSE
+
+        slow_page = PageCrawlResult(
+            url="https://example.com/slow",
+            final_url="https://example.com/slow",
+            status_code=200,
+            response_time_ms=2500.0,
+            title="Slow Page"
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[slow_page])
+        result = self.engine.evaluate(crawl_result)
+
+        slow_findings = [f for f in result.findings if f.rule_code == SLOW_RESPONSE]
+        self.assertEqual(len(slow_findings), 1)
+        self.assertEqual(slow_findings[0].severity, IssueSeverity.WARNING)
+
+    def test_deterministic_health_score_boundaries(self):
+        """10. Computes deterministic health scores bounded strictly between 0 and 100."""
+        # 1. Perfect site (0 issues) -> Score = 100
+        score_perfect = self.engine.calculate_health_score(
+            critical_count=0, warning_count=0, notice_count=0, total_pages=5, has_errors=False
+        )
+        self.assertEqual(score_perfect, 100)
+
+        # 2. Moderate issues -> Score decreases deterministically
+        score_moderate = self.engine.calculate_health_score(
+            critical_count=1, warning_count=2, notice_count=3, total_pages=5, has_errors=False
+        )
+        self.assertLess(score_moderate, 100)
+        self.assertGreater(score_moderate, 0)
+
+        # 3. Severe catastrophic issues -> Bounded at 0 (never negative)
+        score_terrible = self.engine.calculate_health_score(
+            critical_count=50, warning_count=100, notice_count=100, total_pages=1, has_errors=True
+        )
+        self.assertEqual(score_terrible, 0)
+
+    def test_idempotent_audit_persistence(self):
+        """11. Persists SiteAudit and AuditIssue records idempotently without duplicate rows."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+
+        page = PageCrawlResult(
+            url="https://example.com/page-1",
+            final_url="https://example.com/page-1",
+            status_code=200,
+            response_time_ms=100.0,
+            title="",  # Missing title (Critical)
+            meta_description="",  # Missing meta desc (Warning)
+            headings={"h1": []},  # Missing H1 (Critical)
+            canonical="https://example.com/page-1",
+            json_ld=[{"@type": "WebPage"}]
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[page])
+
+        # First persistence run
+        audit = self.engine.persist_audit(project=self.project, crawl_result=crawl_result)
+        self.assertEqual(audit.status, AuditStatus.COMPLETED)
+        self.assertIsNotNone(audit.score)
+        self.assertEqual(audit.issues.count(), 3)
+
+        first_audit_id = audit.id
+
+        # Re-run persistence on same audit record
+        re_audit = self.engine.persist_audit(project=self.project, crawl_result=crawl_result, audit=audit)
+        self.assertEqual(re_audit.id, first_audit_id)
+        # Issues should be cleanly replaced, not doubled
+        self.assertEqual(re_audit.issues.count(), 3)
+
+    def test_missing_structured_data_rule(self):
+        """12. Flags missing JSON-LD structured data as a Notice issue."""
+        from apps.seo.services.live_site_crawler import PageCrawlResult
+        from apps.seo.services.seo_audit_engine import MISSING_STRUCTURED_DATA
+
+        page = PageCrawlResult(
+            url="https://example.com/no-json-ld",
+            final_url="https://example.com/no-json-ld",
+            status_code=200,
+            response_time_ms=50.0,
+            title="Valid Title",
+            json_ld=[]
+        )
+        crawl_result = self._create_mock_crawl_result(pages=[page])
+        result = self.engine.evaluate(crawl_result)
+
+        json_ld_findings = [f for f in result.findings if f.rule_code == MISSING_STRUCTURED_DATA]
+        self.assertEqual(len(json_ld_findings), 1)
+        self.assertEqual(json_ld_findings[0].severity, IssueSeverity.NOTICE)
+
+    def test_large_site_health_score_scaling(self):
+        """13. Health score gracefully scales for large sites with dispersed minor notices."""
+        score_single = self.engine.calculate_health_score(
+            critical_count=0, warning_count=5, notice_count=10, total_pages=1, has_errors=False
+        )
+        score_scaled = self.engine.calculate_health_score(
+            critical_count=0, warning_count=5, notice_count=10, total_pages=50, has_errors=False
+        )
+        self.assertGreater(score_scaled, score_single)
+
+    def test_zero_page_crawl_result(self):
+        """14. Handles empty or zero-page crawl result gracefully without division by zero."""
+        crawl_result = self._create_mock_crawl_result(pages=[], errors=[])
+        result = self.engine.evaluate(crawl_result)
+        self.assertEqual(result.health_score, 100)
+        self.assertEqual(result.total_pages_crawled, 0)
+        self.assertEqual(len(result.findings), 0)
+
+
+class SiteAuditCeleryTaskTests(TestCase):
+    """
+    Integration test suite for the run_site_audit Celery asynchronous task.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='celery_audit_user@doxarank.com',
+            password='TestPassword123!',
+            first_name='Celery',
+            last_name='Auditor'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Celery Audit Website',
+            website_url='https://example.com'
+        )
+
+    @patch('apps.seo.services.live_site_crawler.LiveSiteCrawlerService.crawl')
+    def test_run_site_audit_task_success(self, mock_crawl):
+        """12. Celery task executes crawl and audit engine, updating SiteAudit to COMPLETED."""
+        from apps.seo.tasks import run_site_audit
+        from apps.seo.services.live_site_crawler import CrawlResult, CrawlMetadata, PageCrawlResult
+
+        metadata = CrawlMetadata(
+            start_url="https://example.com/",
+            base_domain="example.com",
+            user_agent="DoxaRankBot/1.0",
+            max_pages=50,
+            max_depth=3,
+            robots_txt_status="loaded",
+            started_at="2026-08-31T12:00:00Z",
+            completed_at="2026-08-31T12:00:05Z",
+            duration_seconds=5.0
+        )
+        page = PageCrawlResult(
+            url="https://example.com/",
+            final_url="https://example.com/",
+            status_code=200,
+            response_time_ms=120.0,
+            title="Home Page Title",
+            meta_description="A descriptive page summary for the site audit test.",
+            headings={"h1": ["Primary Heading"]}
+        )
+        mock_crawl.return_value = CrawlResult(
+            start_url="https://example.com/",
+            metadata=metadata,
+            pages_crawled=1,
+            pages_discovered=1,
+            duration_seconds=5.0,
+            errors=[],
+            pages=[page]
+        )
+
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.PENDING
+        )
+
+        result_id = run_site_audit(audit_id=audit.id)
+        self.assertEqual(result_id, audit.id)
+
+        audit.refresh_from_db()
+        self.assertEqual(audit.status, AuditStatus.COMPLETED)
+        self.assertGreaterEqual(audit.score, 90)
+        self.assertIsNotNone(audit.completed_at)
+
+    @patch('apps.seo.services.live_site_crawler.LiveSiteCrawlerService.crawl')
+    def test_run_site_audit_task_failure_recovery(self, mock_crawl):
+        """13. Recovers from unexpected crawl exception and safely marks SiteAudit as FAILED."""
+        from apps.seo.tasks import run_site_audit
+
+        mock_crawl.side_effect = RuntimeError("Fatal network interface crash")
+
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.PENDING
+        )
+
+        result_id = run_site_audit(audit_id=audit.id)
+        self.assertEqual(result_id, audit.id)
+
+        audit.refresh_from_db()
+        self.assertEqual(audit.status, AuditStatus.FAILED)
+        self.assertIn("Fatal audit execution error", audit.error_message)
+
+    def test_agent_tool_get_audit_issues_retrieval(self):
+        """14. Tool 'get_audit_issues' retrieves persisted issues accurately for the project."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        audit = SiteAudit.objects.create(
+            project=self.project,
+            status=AuditStatus.COMPLETED,
+            score=85
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing H1 on Home",
+            description="Page does not have an H1.",
+            page_url="https://example.com/"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="long_title",
+            severity=IssueSeverity.WARNING,
+            title="Long Title on About",
+            description="Title exceeds 60 chars.",
+            page_url="https://example.com/about"
+        )
+
+        registry = get_tool_registry()
+        res = registry.execute("get_audit_issues", self.project, {"severity": "critical"})
+        self.assertTrue(res["success"])
+        data = res["data"]
+        self.assertEqual(data["project_id"], self.project.id)
+        self.assertEqual(data["returned_count"], 1)
+        self.assertEqual(data["issues"][0]["issue_type"], "missing_h1")
+        self.assertEqual(data["issues"][0]["severity"], "critical")
+
+    def test_multi_tenant_isolation(self):
+        """15. User A cannot view or retrieve User B's audit issues."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        user_b = User.objects.create_user(
+            email='user_b_auditor@doxarank.com',
+            password='TestPassword123!'
+        )
+        project_b = Project.objects.create(
+            owner=user_b,
+            name='Tenant B Website',
+            website_url='https://tenant-b.com'
+        )
+
+        audit_b = SiteAudit.objects.create(
+            project=project_b,
+            status=AuditStatus.COMPLETED,
+            score=70
+        )
+        AuditIssue.objects.create(
+            audit=audit_b,
+            issue_type="missing_title",
+            severity=IssueSeverity.CRITICAL,
+            title="Secret Tenant B Issue",
+            description="Private data.",
+            page_url="https://tenant-b.com/secret"
+        )
+
+        registry = get_tool_registry()
+        # Query on project A should NOT see project B issues
+        res_a = registry.execute("get_audit_issues", self.project, {})
+        self.assertTrue(res_a["success"])
+        self.assertEqual(res_a["data"]["returned_count"], 0)
+
+        # Query on project B should see only project B issues
+        res_b = registry.execute("get_audit_issues", project_b, {})
+        self.assertTrue(res_b["success"])
+        self.assertEqual(res_b["data"]["returned_count"], 1)
+        self.assertEqual(res_b["data"]["issues"][0]["title"], "Secret Tenant B Issue")

@@ -13,10 +13,13 @@ from django.utils import timezone
 
 from apps.seo.models import (
     AgentRun, AgentRunStatus, AgentStep, AgentStepStatus,
-    SEOAction, ActionStatus
+    SEOAction, ActionStatus,
+    SiteAudit, AuditStatus, AuditIssue
 )
 from apps.seo.services.agent_orchestrator import AgentOrchestrator
 from apps.seo.services.action_executors import get_action_executor
+from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+from apps.seo.services.seo_audit_engine import SEOAuditEngine
 
 logger = logging.getLogger(__name__)
 
@@ -193,3 +196,104 @@ def _mark_run_failed(run: AgentRun, error_summary: str) -> None:
         run.save(update_fields=['status', 'summary', 'completed_at', 'updated_at'])
     except Exception as e:
         logger.error(f"Failed to record FAILED status for AgentRun #{run.id}: {e}")
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.run_site_audit'
+)
+def run_site_audit(
+    self,
+    audit_id: int,
+    start_url: Optional[str] = None,
+    max_pages: int = 50,
+    max_depth: int = 3
+) -> Optional[int]:
+    """
+    Execute website crawl and SEO audit evaluation asynchronously in Celery worker.
+
+    Guarantees:
+    - Atomically transitions SiteAudit status PENDING -> RUNNING.
+    - Bounded live website crawl using LiveSiteCrawlerService.
+    - Deterministic SEO audit rule evaluation via SEOAuditEngine.
+    - Idempotent persistence of SiteAudit health score and AuditIssue records.
+    - Graceful error recovery: transitions SiteAudit to FAILED without hanging on unexpected exceptions.
+    """
+    try:
+        with transaction.atomic():
+            try:
+                audit = SiteAudit.objects.select_for_update().select_related('project').get(id=audit_id)
+            except SiteAudit.DoesNotExist:
+                logger.error(f"[Celery Audit Task] SiteAudit #{audit_id} does not exist. Aborting task.")
+                return None
+
+            if audit.status not in (AuditStatus.PENDING, AuditStatus.RUNNING):
+                logger.warning(
+                    f"[Celery Audit Task] SiteAudit #{audit_id} status is '{audit.status}'. Skipping execution."
+                )
+                return audit.id
+
+            audit.status = AuditStatus.RUNNING
+            audit.started_at = audit.started_at or timezone.now()
+            audit.save(update_fields=['status', 'started_at', 'updated_at'])
+
+    except Exception as lock_exc:
+        logger.exception(f"[Celery Audit Task] Database error acquiring lock for SiteAudit #{audit_id}: {lock_exc}")
+        if isinstance(lock_exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=lock_exc, countdown=2 ** self.request.retries)
+        return None
+
+    try:
+        # 1. Execute live website crawl
+        crawler = LiveSiteCrawlerService(
+            project=audit.project,
+            max_pages=max_pages,
+            max_depth=max_depth
+        )
+        target_start_url = start_url or audit.project.website_url
+        crawl_result = crawler.crawl(target_start_url)
+
+        # 2. Evaluate SEO rules & persist SiteAudit + AuditIssue records
+        engine = SEOAuditEngine()
+        engine.persist_audit(
+            project=audit.project,
+            crawl_result=crawl_result,
+            audit=audit
+        )
+
+        logger.info(
+            f"[Celery Audit Task] Successfully completed SiteAudit #{audit.id} "
+            f"for project #{audit.project.id} (Score: {audit.score})."
+        )
+        return audit.id
+
+    except RETRYABLE_EXCEPTIONS as retry_exc:
+        logger.warning(
+            f"[Celery Audit Task] Transient error executing SiteAudit #{audit_id} "
+            f"(attempt {self.request.retries + 1}/{self.max_retries}): {retry_exc}"
+        )
+        if self.request.retries < self.max_retries:
+            countdown = (2 ** self.request.retries) * 5
+            raise self.retry(exc=retry_exc, countdown=countdown)
+        else:
+            _mark_audit_failed(audit, f"Transient crawl failure after {self.max_retries} retries: {str(retry_exc)}")
+            return audit.id
+
+    except Exception as fatal_exc:
+        logger.exception(f"[Celery Audit Task] Non-retryable error executing SiteAudit #{audit_id}: {fatal_exc}")
+        _mark_audit_failed(audit, f"Fatal audit execution error: {fatal_exc.__class__.__name__} - {str(fatal_exc)}")
+        return audit.id
+
+
+def _mark_audit_failed(audit: SiteAudit, error_message: str) -> None:
+    """Helper to transition a SiteAudit to terminal FAILED state safely."""
+    try:
+        audit.refresh_from_db()
+        audit.status = AuditStatus.FAILED
+        audit.error_message = error_message[:500]
+        audit.completed_at = timezone.now()
+        audit.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+    except Exception as e:
+        logger.error(f"Failed to record FAILED status for SiteAudit #{audit.id}: {e}")
