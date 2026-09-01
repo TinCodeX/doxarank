@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.db.models import Sum, Avg, Count, F
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
@@ -14,6 +15,7 @@ from .models import (
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
     SEOContentDraft, DraftStatus,
     SEOAction, ActionType, ActionStatus, ActionPriority,
+    SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
 from .serializers import (
@@ -26,6 +28,7 @@ from .serializers import (
     SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
     SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer,
     SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer, SEOActionRejectRequestSerializer,
+    SEOActionPlanSerializer, SEOActionPlanCreateRequestSerializer, SEOActionPlanRejectRequestSerializer,
     AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
@@ -1143,6 +1146,22 @@ class SEOActionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(detail=True, methods=['post'], url_path='verify')
+    def verify(self, request, pk=None):
+        """
+        Empirically verify the real-world outcome of an executed SEOAction.
+        (POST /api/seo/ai/actions/<id>/verify/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
+        verifier = SEOActionVerifier(project=action_obj.project)
+        result = verifier.verify_action(action_obj)
+        serializer = SEOActionSerializer(action_obj)
+        return Response({
+            "action": serializer.data,
+            "verification": result
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'], url_path='status-counts')
     def status_counts(self, request):
         """
@@ -1169,6 +1188,164 @@ class SEOActionViewSet(viewsets.ModelViewSet):
             'total': base_qs.count()
         }
         return Response(counts, status=status.HTTP_200_OK)
+
+
+class SEOActionPlanViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing autonomous SEOActionPlans.
+    Provides endpoints for planning, listing, retrieving, approving, rejecting, executing, and verifying plans.
+    Strict tenant isolation: project__owner == request.user.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = SEOActionPlanSerializer
+
+    def get_queryset(self):
+        queryset = SEOActionPlan.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project', 'created_by', 'approved_by', 'rejected_by').prefetch_related('actions')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        risk_level = self.request.query_params.get('risk_level')
+        if risk_level:
+            queryset = queryset.filter(risk_level=risk_level)
+
+        verif_status = self.request.query_params.get('verification_status')
+        if verif_status:
+            queryset = queryset.filter(verification_status=verif_status)
+
+        return queryset.order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='plan')
+    def plan(self, request):
+        """
+        Generate a structured, evidence-backed SEOActionPlan with deterministic risk classification
+        and deduplication. Does NOT execute mutations.
+        (POST /api/seo/ai/action-plans/plan/)
+        """
+        req_serializer = SEOActionPlanCreateRequestSerializer(data=request.data, context={'request': request})
+        req_serializer.is_valid(raise_exception=True)
+        validated = req_serializer.validated_data
+
+        try:
+            project = Project.objects.get(id=validated['project_id'], owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        planner = SEOActionPlanner(project=project)
+        plan_obj = planner.create_action_plan(
+            title=validated.get('title'),
+            summary=validated.get('summary'),
+            audit_id=validated.get('audit_id'),
+            user=request.user,
+            max_actions=validated.get('max_actions', 10)
+        )
+
+        out_serializer = SEOActionPlanSerializer(plan_obj)
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        """
+        Human approves an SEOActionPlan, making all its pending child actions approved and ready for execution.
+        (POST /api/seo/ai/action-plans/<id>/approve/)
+        """
+        plan_obj = self.get_object()  # Enforces project.owner == request.user
+
+        if plan_obj.status not in [ActionPlanStatus.PROPOSED, ActionPlanStatus.DRAFT, ActionPlanStatus.AWAITING_APPROVAL]:
+            return Response(
+                {"detail": f"Cannot approve plan in status '{plan_obj.status}'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            plan_obj.status = ActionPlanStatus.APPROVED
+            plan_obj.approved_by = request.user
+            plan_obj.approved_at = timezone.now()
+            plan_obj.rejected_by = None
+            plan_obj.rejected_at = None
+            plan_obj.rejection_reason = ""
+            plan_obj.save(update_fields=['status', 'approved_by', 'approved_at', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+
+            for action_item in plan_obj.actions.filter(status__in=[ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL]):
+                action_item.status = ActionStatus.APPROVED
+                action_item.approved_by = request.user
+                action_item.approved_at = plan_obj.approved_at
+                action_item.rejected_by = None
+                action_item.rejected_at = None
+                action_item.rejection_reason = ""
+                action_item.save(update_fields=['status', 'approved_by', 'approved_at', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+
+        out_serializer = SEOActionPlanSerializer(plan_obj)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='reject')
+    def reject(self, request, pk=None):
+        """
+        Human rejects an SEOActionPlan with a mandatory reason.
+        (POST /api/seo/ai/action-plans/<id>/reject/)
+        """
+        plan_obj = self.get_object()  # Enforces project.owner == request.user
+        req_serializer = SEOActionPlanRejectRequestSerializer(data=request.data)
+        req_serializer.is_valid(raise_exception=True)
+        reason = req_serializer.validated_data['reason']
+
+        with transaction.atomic():
+            plan_obj.status = ActionPlanStatus.REJECTED
+            plan_obj.rejected_by = request.user
+            plan_obj.rejected_at = timezone.now()
+            plan_obj.rejection_reason = reason
+            plan_obj.save(update_fields=['status', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+
+            for action_item in plan_obj.actions.filter(status__in=[ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL, ActionStatus.APPROVED]):
+                action_item.status = ActionStatus.REJECTED
+                action_item.rejected_by = request.user
+                action_item.rejected_at = plan_obj.rejected_at
+                action_item.rejection_reason = reason
+                action_item.save(update_fields=['status', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+
+        out_serializer = SEOActionPlanSerializer(plan_obj)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='execute')
+    def execute(self, request, pk=None):
+        """
+        Execute all approved actions in an SEOActionPlan through the safe mutation pipeline.
+        (POST /api/seo/ai/action-plans/<id>/execute/)
+        """
+        plan_obj = self.get_object()  # Enforces project.owner == request.user
+
+        from apps.seo.tasks import execute_seo_action_plan
+        try:
+            execute_seo_action_plan(plan_id=plan_obj.id, user_id=request.user.id)
+            plan_obj.refresh_from_db()
+            out_serializer = SEOActionPlanSerializer(plan_obj)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as exc:
+            return Response({"detail": f"Plan execution failed: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='verify')
+    def verify(self, request, pk=None):
+        """
+        Perform empirical real-world verification on all actions in an SEOActionPlan.
+        (POST /api/seo/ai/action-plans/<id>/verify/)
+        """
+        plan_obj = self.get_object()  # Enforces project.owner == request.user
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
+        verifier = SEOActionVerifier(project=plan_obj.project)
+        verification_summary = verifier.verify_plan(plan_obj)
+        out_serializer = SEOActionPlanSerializer(plan_obj)
+        return Response({
+            "plan": out_serializer.data,
+            "verification_summary": verification_summary
+        }, status=status.HTTP_200_OK)
 
 
 class AgentRunViewSet(viewsets.ModelViewSet):

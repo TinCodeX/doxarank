@@ -17,8 +17,9 @@ from apps.seo.models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     AuditStatus, IssueSeverity,
     SearchAnalyticsData, SEOInsight, SEORecommendation,
-    SEOContentBrief, SEOContentDraft, SEOAction,
-    ActionType, ActionStatus, ActionPriority,
+    SEOContentBrief, SEOContentDraft, SEOAction, SEOActionPlan,
+    ActionType, ActionStatus, ActionPriority, ActionPlanStatus,
+    ActionRiskLevel, VerificationStatus,
     BriefContentType, BriefSearchIntent
 )
 from apps.seo.services.seo_intelligence import SEOIntelligenceService
@@ -912,6 +913,125 @@ def handle_investigate_seo_opportunity(project: Project, args: Dict[str, Any]) -
     return result.to_dict()
 
 
+def handle_plan_seo_actions(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Synthesize project evidence into a cohesive SEOActionPlan with deterministic
+    risk classification, confidence scoring, and deduplicated child action proposals.
+    """
+    from apps.seo.services.seo_action_planner import SEOActionPlanner
+    title = args.get("title")
+    summary = args.get("summary")
+    audit_id = args.get("audit_id")
+    max_actions = args.get("max_actions", 10)
+
+    planner = SEOActionPlanner(project=project)
+    plan = planner.create_action_plan(
+        title=title,
+        summary=summary,
+        audit_id=audit_id,
+        max_actions=max_actions
+    )
+
+    actions = [
+        {
+            "id": a.id,
+            "action_type": a.action_type,
+            "title": a.title,
+            "target_url": a.target_url,
+            "risk_level": a.risk_level,
+            "impact_estimate": a.impact_estimate,
+            "requires_human_approval": a.requires_human_approval,
+            "status": a.status
+        }
+        for a in plan.actions.all()
+    ]
+
+    return {
+        "id": plan.id,
+        "plan_id": plan.id,
+        "title": plan.title,
+        "summary": plan.summary,
+        "status": plan.status,
+        "risk_level": plan.risk_level,
+        "confidence_score": plan.confidence_score,
+        "total_actions": len(actions),
+        "actions": actions,
+        "requires_human_approval": plan.requires_human_approval,
+        "created_at": plan.created_at.isoformat()
+    }
+
+
+def handle_get_action_plan(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve detailed state of an SEOActionPlan and all child actions."""
+    plan_id = args.get("plan_id")
+    try:
+        plan = SEOActionPlan.objects.prefetch_related('actions').get(id=plan_id, project=project)
+    except SEOActionPlan.DoesNotExist:
+        raise ValueError(f"SEOActionPlan #{plan_id} not found on project #{project.id}.")
+
+    actions = [
+        {
+            "id": a.id,
+            "action_type": a.action_type,
+            "title": a.title,
+            "description": a.description,
+            "rationale": a.rationale,
+            "target_url": a.target_url,
+            "risk_level": a.risk_level,
+            "impact_estimate": a.impact_estimate,
+            "status": a.status,
+            "verification_status": a.verification_status,
+            "requires_human_approval": a.requires_human_approval
+        }
+        for a in plan.actions.all()
+    ]
+
+    return {
+        "id": plan.id,
+        "project_id": project.id,
+        "title": plan.title,
+        "summary": plan.summary,
+        "status": plan.status,
+        "risk_level": plan.risk_level,
+        "confidence_score": plan.confidence_score,
+        "requires_human_approval": plan.requires_human_approval,
+        "approved_at": plan.approved_at.isoformat() if plan.approved_at else None,
+        "rejected_at": plan.rejected_at.isoformat() if plan.rejected_at else None,
+        "rejection_reason": plan.rejection_reason,
+        "verification_status": plan.verification_status,
+        "verification_results": plan.verification_results,
+        "total_actions": len(actions),
+        "actions": actions,
+        "created_at": plan.created_at.isoformat()
+    }
+
+
+def handle_verify_seo_action(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Empirically verify the real-world outcome of an executed SEOAction."""
+    action_id = args.get("action_id")
+    try:
+        action = SEOAction.objects.get(id=action_id, project=project)
+    except SEOAction.DoesNotExist:
+        raise ValueError(f"SEOAction #{action_id} not found on project #{project.id}.")
+
+    from apps.seo.services.seo_action_verifier import SEOActionVerifier
+    verifier = SEOActionVerifier(project=project)
+    return verifier.verify_action(action)
+
+
+def handle_verify_action_plan(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Empirically verify all actions in an SEOActionPlan."""
+    plan_id = args.get("plan_id")
+    try:
+        plan = SEOActionPlan.objects.get(id=plan_id, project=project)
+    except SEOActionPlan.DoesNotExist:
+        raise ValueError(f"SEOActionPlan #{plan_id} not found on project #{project.id}.")
+
+    from apps.seo.services.seo_action_verifier import SEOActionVerifier
+    verifier = SEOActionVerifier(project=project)
+    return verifier.verify_plan(plan)
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1329,6 +1449,77 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=False,
         handler=handle_preview_action
+    ))
+
+    # 17. plan_seo_actions
+    registry.register(AgentToolDefinition(
+        name="plan_seo_actions",
+        description="Synthesize project SEO audit issues, GSC performance anomalies, and investigation findings into a cohesive, structured SEOActionPlan with deterministic risk classification, deduplication, and verification plans. Does NOT execute mutations.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Optional custom title for the action plan."},
+                "summary": {"type": "string", "description": "Optional summary or theme for the plan."},
+                "audit_id": {"type": "integer", "description": "Optional specific SiteAudit ID to prioritize."},
+                "max_actions": {"type": "integer", "description": "Maximum atomic actions to include in the plan (default 10)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_plan_seo_actions
+    ))
+
+    # 18. get_action_plan
+    registry.register(AgentToolDefinition(
+        name="get_action_plan",
+        description="Retrieve full details, child actions, aggregate risk level, approval status, and verification results of an SEOActionPlan by ID.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "plan_id": {"type": "integer", "description": "ID of the SEOActionPlan to retrieve."}
+            },
+            "required": ["plan_id"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_action_plan
+    ))
+
+    # 19. verify_seo_action
+    registry.register(AgentToolDefinition(
+        name="verify_seo_action",
+        description="Perform empirical real-world verification of an executed SEOAction by inspecting live website HTML, metadata, and HTTP status codes.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "integer", "description": "ID of the executed SEOAction to verify."}
+            },
+            "required": ["action_id"]
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_verify_seo_action
+    ))
+
+    # 20. verify_action_plan
+    registry.register(AgentToolDefinition(
+        name="verify_action_plan",
+        description="Perform aggregate real-world verification for all executed actions within an SEOActionPlan.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "plan_id": {"type": "integer", "description": "ID of the SEOActionPlan to verify."}
+            },
+            "required": ["plan_id"]
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_verify_action_plan
     ))
 
     return registry

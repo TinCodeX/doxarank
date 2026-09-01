@@ -106,6 +106,11 @@ All events use the `AgentEventType` enum defined in `apps.seo.services.agent_eve
 | `approval.required` | Human Approval | Agent proposes a high-impact `SEOAction` and pauses in `waiting_for_approval`. |
 | `approval.approved` | Human Approval | Human user approves the proposed action; action is safely executed. |
 | `approval.rejected` | Human Approval | Human user rejects the proposed action; run is cancelled. |
+| `seo.action.plan.created` | Action Planning | Autonomous planner synthesizes multi-source evidence into a structured `SEOActionPlan`. |
+| `seo.action.approval.requested` | Action Planning | Structured `SEOActionPlan` requests human review and approval before mutation execution. |
+| `seo.action.verification.started` | Verification | Empirical real-world verifier begins probing target live website URL/HTML state. |
+| `seo.action.verification.completed` | Verification | Real-world verification confirms that target HTML/metadata reflects proposed changes. |
+| `seo.action.verification.failed` | Verification | Real-world verification detects discrepancies, status errors, or missing metadata. |
 
 ---
 

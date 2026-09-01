@@ -17,7 +17,11 @@ export type ActionType =
   | 'improve_content'
   | 'investigate_performance'
   | 'monitor'
-  | 'no_action';
+  | 'no_action'
+  | 'fix_broken_internal_link'
+  | 'remove_redirect_chain'
+  | 'improve_internal_linking'
+  | 'investigate_ranking_drop';
 
 export type ActionStatus =
   | 'proposed'
@@ -31,6 +35,31 @@ export type ActionStatus =
   | 'failed'
   | 'cancelled';
 
+export type ActionPlanStatus =
+  | 'draft'
+  | 'proposed'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'executing'
+  | 'completed'
+  | 'partially_completed'
+  | 'failed'
+  | 'rejected'
+  | 'cancelled';
+
+export type ActionRiskLevel =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
+
+export type VerificationStatus =
+  | 'pending'
+  | 'verifying'
+  | 'verified'
+  | 'failed'
+  | 'partially_verified';
+
 export type ActionPriority =
   | 'critical'
   | 'high'
@@ -42,6 +71,8 @@ export interface SEOAction {
   project: number;
   project_name: string;
   project_website_url: string;
+  plan?: number | null;
+  plan_title?: string | null;
   recommendation: number | null;
   recommendation_title: string | null;
   brief: number | null;
@@ -81,8 +112,55 @@ export interface SEOAction {
   completed_at: string | null;
   failure_reason?: string;
   execution_metadata: Record<string, any>;
+  verification_status?: VerificationStatus;
+  verification_status_display?: string;
+  verification_result?: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface SEOActionPlan {
+  id: number;
+  project: number;
+  project_name: string;
+  project_website_url: string;
+  created_by?: number | null;
+  created_by_email?: string | null;
+  agent_run?: number | null;
+  title: string;
+  summary: string;
+  source_evidence: Record<string, any>;
+  status: ActionPlanStatus;
+  status_display: string;
+  risk_level: ActionRiskLevel;
+  risk_level_display?: string;
+  confidence_score: number;
+  requires_human_approval: boolean;
+  approved_by?: number | null;
+  approved_by_email?: string | null;
+  approved_at?: string | null;
+  rejected_by?: number | null;
+  rejected_by_email?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string;
+  execution_started_at?: string | null;
+  completed_at?: string | null;
+  failure_reason?: string;
+  verification_status: VerificationStatus;
+  verification_status_display?: string;
+  verification_results: Record<string, any>;
+  total_actions_count: number;
+  actions: SEOAction[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SEOActionPlanCreatePayload {
+  project_id: number;
+  title?: string;
+  summary?: string;
+  audit_id?: number;
+  max_actions?: number;
 }
 
 export interface ActionPreviewDiff {

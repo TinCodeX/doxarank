@@ -172,11 +172,39 @@ class AgentOrchestrator:
         decision = (approval_decision or "approved").lower()
 
         from apps.seo.services.action_executors import get_action_executor
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
 
         if decision == "approved":
-            logger.info(f"AgentRun #{run.id} approved by user. Executing action and resuming loop.")
+            logger.info(f"AgentRun #{run.id} approved by user. Executing action/plan and verifying result.")
+            executor = get_action_executor()
+            verifier = SEOActionVerifier(project=self.project, publisher=self.publisher)
 
-            # Execute the proposed action safely
+            # Check if there is a pending SEOActionPlan
+            proposed_plan = SEOActionPlan.objects.filter(
+                project=self.project,
+                status=ActionPlanStatus.PROPOSED
+            ).order_by('-created_at').first()
+
+            if proposed_plan:
+                proposed_plan.status = ActionPlanStatus.APPROVED
+                if self.user and getattr(self.user, 'is_authenticated', False) and self.user.id == self.project.owner_id:
+                    proposed_plan.approved_by = self.user
+                    proposed_plan.approved_at = timezone.now()
+                proposed_plan.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+
+                for plan_action in proposed_plan.actions.filter(status__in=[ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL]):
+                    plan_action.status = ActionStatus.APPROVED
+                    plan_action.approved_by = proposed_plan.approved_by
+                    plan_action.approved_at = proposed_plan.approved_at
+                    plan_action.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+                    try:
+                        executor.execute(plan_action, user=self.user, run_id=run.id)
+                    except Exception as e:
+                        logger.error(f"Execution error for plan action #{plan_action.id}: {e}")
+
+                verifier.verify_plan(proposed_plan, run_id=run.id)
+
+            # Execute single proposed action if exists
             proposed_action = SEOAction.objects.filter(
                 project=self.project,
                 status=ActionStatus.PROPOSED
@@ -184,13 +212,19 @@ class AgentOrchestrator:
 
             if proposed_action:
                 proposed_action.status = ActionStatus.APPROVED
-                proposed_action.save(update_fields=['status', 'updated_at'])
-                executor = get_action_executor()
-                executor.execute(proposed_action)
+                if self.user and getattr(self.user, 'is_authenticated', False) and self.user.id == self.project.owner_id:
+                    proposed_action.approved_by = self.user
+                    proposed_action.approved_at = timezone.now()
+                proposed_action.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+                try:
+                    executor.execute(proposed_action, user=self.user, run_id=run.id)
+                    verifier.verify_action(proposed_action, run_id=run.id)
+                except Exception as e:
+                    logger.error(f"Execution error for action #{proposed_action.id}: {e}")
 
             if latest_step:
                 latest_step.status = AgentStepStatus.COMPLETED
-                latest_step.thought += "\n[Human Approval]: SEO Action was reviewed, approved, and executed by safe action executor."
+                latest_step.thought += "\n[Human Approval]: SEO Action/Plan was reviewed, approved, executed, and verified."
                 latest_step.save()
 
             # Emit approval.approved event
@@ -199,6 +233,7 @@ class AgentOrchestrator:
                 AgentEventType.APPROVAL_APPROVED,
                 {
                     "action_id": proposed_action.id if proposed_action else None,
+                    "plan_id": proposed_plan.id if proposed_plan else None,
                     "action_type": proposed_action.action_type if proposed_action else None
                 },
                 step_number=step_num
@@ -210,6 +245,25 @@ class AgentOrchestrator:
         else:
             logger.info(f"AgentRun #{run.id} rejected by user. Terminating run.")
 
+            # Mark proposed plan as rejected if exists
+            proposed_plan = SEOActionPlan.objects.filter(
+                project=self.project,
+                status=ActionPlanStatus.PROPOSED
+            ).order_by('-created_at').first()
+            if proposed_plan:
+                proposed_plan.status = ActionPlanStatus.REJECTED
+                if self.user and getattr(self.user, 'is_authenticated', False):
+                    proposed_plan.rejected_by = self.user
+                    proposed_plan.rejected_at = timezone.now()
+                    proposed_plan.rejection_reason = "Rejected by user during agent execution."
+                proposed_plan.save(update_fields=['status', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+                for plan_action in proposed_plan.actions.filter(status=ActionStatus.PROPOSED):
+                    plan_action.status = ActionStatus.REJECTED
+                    plan_action.rejected_by = proposed_plan.rejected_by
+                    plan_action.rejected_at = proposed_plan.rejected_at
+                    plan_action.rejection_reason = proposed_plan.rejection_reason
+                    plan_action.save(update_fields=['status', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
+
             # Mark proposed action as rejected
             proposed_action = SEOAction.objects.filter(
                 project=self.project,
@@ -218,7 +272,11 @@ class AgentOrchestrator:
 
             if proposed_action:
                 proposed_action.status = ActionStatus.REJECTED
-                proposed_action.save(update_fields=['status', 'updated_at'])
+                if self.user and getattr(self.user, 'is_authenticated', False):
+                    proposed_action.rejected_by = self.user
+                    proposed_action.rejected_at = timezone.now()
+                    proposed_action.rejection_reason = "Rejected by user during agent execution."
+                proposed_action.save(update_fields=['status', 'rejected_by', 'rejected_at', 'rejection_reason', 'updated_at'])
 
             if latest_step:
                 latest_step.status = AgentStepStatus.FAILED

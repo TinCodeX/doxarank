@@ -9897,3 +9897,343 @@ class ActionApprovalAndMutationGovernanceTests(TestCase):
         for a in pending_actions:
             self.assertIsNone(a.approved_at)
             self.assertIsNone(a.completed_at)
+
+
+class SEOAutonomousActionPlanAndVerificationTests(TestCase):
+    """
+    Comprehensive test suite for Phase 4.4:
+    Autonomous SEO Action Planning, Deterministic Risk Classification, Deduplication,
+    Human-in-the-Loop Multi-Action Governance, Controlled Execution, and Empirical Real-World Verification.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            SiteAudit, AuditIssue, IssueSeverity, AuditStatus,
+            SearchConsoleConnection, SearchAnalyticsData,
+            SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
+            SEOAction, ActionType, ActionStatus
+        )
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        User = get_user_model()
+        self.user_a = User.objects.create_user(email="plannera@doxarank.com", password="StrongPassword123!")
+        self.user_b = User.objects.create_user(email="plannerb@doxarank.com", password="StrongPassword123!")
+
+        self.project_a = Project.objects.create(
+            name="Plan Project Alpha",
+            website_url="https://alpha-seo.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Plan Project Beta",
+            website_url="https://beta-seo.com",
+            owner=self.user_b
+        )
+
+        self.client = APIClient()
+        self.registry = get_tool_registry()
+
+    def test_planner_generates_structured_plan_from_audit_and_gsc(self):
+        """1. ActionPlanner synthesizes audit issues and GSC momentum drops into a structured plan."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.models import (
+            SiteAudit, AuditIssue, IssueSeverity, AuditStatus,
+            SearchAnalyticsData, SEOActionPlan, ActionPlanStatus, ActionRiskLevel
+        )
+        import datetime
+
+        # Create audit defect
+        audit = SiteAudit.objects.create(
+            project=self.project_a,
+            status=AuditStatus.COMPLETED,
+            score=70
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.WARNING,
+            page_url="https://alpha-seo.com/products/widgets"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="broken_internal_link",
+            severity=IssueSeverity.CRITICAL,
+            page_url="https://alpha-seo.com/blog/old-post"
+        )
+
+        # Create GSC search drop data
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project_a,
+            property_url="https://alpha-seo.com/",
+            is_connected=True
+        )
+        today = datetime.date.today()
+        for i in range(14):
+            d = today - datetime.timedelta(days=i)
+            # Prior period had high clicks, recent period had 0 clicks (CTR drop)
+            clicks = 0 if i < 7 else 50
+            impressions = 200
+            SearchAnalyticsData.objects.create(
+                connection=conn,
+                date=d,
+                page="https://alpha-seo.com/guides/seo-tips",
+                query="best seo tips",
+                clicks=clicks,
+                impressions=impressions,
+                ctr=clicks / impressions,
+                position=4.2
+            )
+
+        planner = SEOActionPlanner(project=self.project_a)
+        plan = planner.create_action_plan(
+            title="Q3 Technical and CTR Remediation Plan",
+            summary="Autonomous remediation plan",
+            audit_id=audit.id,
+            user=self.user_a,
+            max_actions=5
+        )
+
+        self.assertIsInstance(plan, SEOActionPlan)
+        self.assertEqual(plan.status, ActionPlanStatus.PROPOSED)
+        self.assertEqual(plan.created_by, self.user_a)
+        self.assertGreaterEqual(plan.actions.count(), 2)
+        self.assertIn(plan.risk_level, [ActionRiskLevel.LOW, ActionRiskLevel.MEDIUM, ActionRiskLevel.HIGH, ActionRiskLevel.CRITICAL])
+        self.assertGreater(plan.confidence_score, 0.0)
+
+        # Verify child actions are linked
+        for act in plan.actions.all():
+            self.assertEqual(act.plan_id, plan.id)
+            self.assertEqual(act.project_id, self.project_a.id)
+            self.assertEqual(act.status, ActionStatus.PROPOSED)
+            self.assertTrue(act.requires_human_approval)
+
+    def test_planner_deterministic_risk_classification(self):
+        """2. Deterministic risk classifier assigns appropriate risk levels by action type."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.models import ActionType, ActionRiskLevel
+
+        planner = SEOActionPlanner(project=self.project_a)
+
+        self.assertEqual(planner.classify_risk(ActionType.REMOVE_REDIRECT_CHAIN), ActionRiskLevel.CRITICAL)
+        self.assertEqual(planner.classify_risk(ActionType.FIX_CANONICAL), ActionRiskLevel.HIGH)
+        self.assertEqual(planner.classify_risk(ActionType.OPTIMIZE_TITLE), ActionRiskLevel.MEDIUM)
+        self.assertEqual(planner.classify_risk(ActionType.FIX_IMAGE_ALT), ActionRiskLevel.LOW)
+        self.assertEqual(planner.classify_risk(ActionType.OPTIMIZE_META_DESCRIPTION), ActionRiskLevel.LOW)
+
+    def test_planner_deduplication_prevents_duplicate_actions(self):
+        """3. Planner prevents duplicate actions on the same URL and action type."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.models import SiteAudit, AuditIssue, IssueSeverity, AuditStatus
+
+        audit = SiteAudit.objects.create(project=self.project_a, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.WARNING,
+            page_url="https://alpha-seo.com/pricing"
+        )
+
+        planner = SEOActionPlanner(project=self.project_a)
+        plan_1 = planner.create_action_plan(title="Plan 1", user=self.user_a)
+        actions_count_1 = plan_1.actions.count()
+        self.assertGreaterEqual(actions_count_1, 1)
+
+        # Plan 2 should not generate duplicate action for https://alpha-seo.com/pricing + fix_missing_h1
+        plan_2 = planner.create_action_plan(title="Plan 2", user=self.user_a)
+        dup_actions = plan_2.actions.filter(target_url="https://alpha-seo.com/pricing", action_type="fix_missing_h1")
+        self.assertEqual(dup_actions.count(), 0)
+
+    def test_action_plan_tenant_isolation_and_approval_api(self):
+        """4. Strict tenant isolation: User B cannot view, approve, or reject User A's plan."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.models import ActionPlanStatus, ActionStatus
+
+        planner = SEOActionPlanner(project=self.project_a)
+        plan = planner.create_action_plan(title="User A Secret Plan", user=self.user_a)
+
+        # User B attempts to access User A's plan
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.get(f'/api/seo/ai/action-plans/{plan.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_appr = self.client.post(f'/api/seo/ai/action-plans/{plan.id}/approve/')
+        self.assertEqual(res_appr.status_code, status.HTTP_404_NOT_FOUND)
+
+        # User A approves the plan
+        self.client.force_authenticate(user=self.user_a)
+        res_a = self.client.post(f'/api/seo/ai/action-plans/{plan.id}/approve/')
+        self.assertEqual(res_a.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_a.data['status'], 'approved')
+        self.assertEqual(res_a.data['approved_by_email'], self.user_a.email)
+
+        plan.refresh_from_db()
+        self.assertEqual(plan.status, ActionPlanStatus.APPROVED)
+        # All child actions are also approved
+        for act in plan.actions.all():
+            self.assertEqual(act.status, ActionStatus.APPROVED)
+
+    def test_action_plan_rejection_api(self):
+        """5. Rejection transitions plan and all child actions to REJECTED with audit reason."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.models import ActionPlanStatus, ActionStatus
+
+        planner = SEOActionPlanner(project=self.project_a)
+        plan = planner.create_action_plan(title="Plan for Rejection", user=self.user_a)
+
+        self.client.force_authenticate(user=self.user_a)
+        res = self.client.post(f'/api/seo/ai/action-plans/{plan.id}/reject/', {
+            'reason': 'Technical risk is too high for production.'
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['status'], 'rejected')
+        self.assertEqual(res.data['rejection_reason'], 'Technical risk is too high for production.')
+
+        plan.refresh_from_db()
+        self.assertEqual(plan.status, ActionPlanStatus.REJECTED)
+        for act in plan.actions.all():
+            self.assertEqual(act.status, ActionStatus.REJECTED)
+            self.assertEqual(act.rejection_reason, 'Technical risk is too high for production.')
+
+    def test_action_plan_execution_task(self):
+        """6. Celery task executes approved action plan and triggers verification."""
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+        from apps.seo.tasks import execute_seo_action_plan
+        from apps.seo.models import ActionPlanStatus, ActionStatus
+
+        planner = SEOActionPlanner(project=self.project_a)
+        plan = planner.create_action_plan(title="Plan for Execution", user=self.user_a)
+
+        # Plan must be approved first
+        plan.status = ActionPlanStatus.APPROVED
+        plan.approved_by = self.user_a
+        plan.save()
+        for act in plan.actions.all():
+            act.status = ActionStatus.APPROVED
+            act.approved_by = self.user_a
+            act.save()
+
+        # Run task
+        result = execute_seo_action_plan(plan_id=plan.id, user_id=self.user_a.id)
+        self.assertEqual(result, plan.id)
+
+        plan.refresh_from_db()
+        self.assertIn(plan.status, [ActionPlanStatus.COMPLETED, ActionPlanStatus.PARTIALLY_COMPLETED])
+        self.assertIsNotNone(plan.completed_at)
+
+        for act in plan.actions.all():
+            self.assertEqual(act.status, ActionStatus.COMPLETED)
+            self.assertIsNotNone(act.completed_at)
+
+    def test_seo_action_verifier_success(self):
+        """7. Verifier inspects target HTML and verifies proposed change matched real-world state."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Update Homepage Title",
+            description="Add brand to title",
+            target_url="https://alpha-seo.com",
+            proposed_change={"title": "Optimized Title for Alpha | DoxaRank"},
+            status=ActionStatus.COMPLETED
+        )
+
+        verifier = SEOActionVerifier(project=self.project_a)
+        with patch.object(verifier, 'fetch_page_content', return_value=(200, "<html><head><title>Optimized Title for Alpha | DoxaRank</title></head><body><h1>Hello</h1></body></html>", {})):
+            res = verifier.verify_action(action)
+
+        self.assertTrue(res["verified"])
+        self.assertEqual(res["verification_status"], "verified")
+
+        action.refresh_from_db()
+        self.assertEqual(action.verification_status, VerificationStatus.VERIFIED)
+        self.assertIsNotNone(action.verification_result)
+
+    def test_seo_action_verifier_mismatch(self):
+        """8. Verifier catches discrepancies when live web page does not reflect proposed changes."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Update Homepage Title",
+            description="Add brand to title",
+            target_url="https://alpha-seo.com",
+            proposed_change={"title": "Optimized Title for Alpha | DoxaRank"},
+            status=ActionStatus.COMPLETED
+        )
+
+        verifier = SEOActionVerifier(project=self.project_a)
+        with patch.object(verifier, 'fetch_page_content', return_value=(200, "<html><head><title>Old Unchanged Title</title></head><body></body></html>", {})):
+            res = verifier.verify_action(action)
+
+        self.assertFalse(res["verified"])
+        self.assertEqual(res["verification_status"], "failed")
+
+        action.refresh_from_db()
+        self.assertEqual(action.verification_status, VerificationStatus.FAILED)
+
+    def test_tool_registry_action_planning_tools(self):
+        """9. ToolRegistry contains plan_seo_actions, get_action_plan, verify_seo_action, and verify_action_plan."""
+        # 1. plan_seo_actions tool
+        plan_res = self.registry.execute(
+            tool_name="plan_seo_actions",
+            project=self.project_a,
+            arguments={"title": "Automated Tool Plan", "max_actions": 3}
+        )
+        self.assertTrue(plan_res["success"])
+        plan_id = plan_res["data"]["id"]
+        self.assertEqual(plan_res["data"]["title"], "Automated Tool Plan")
+
+        # 2. get_action_plan tool
+        get_res = self.registry.execute(
+            tool_name="get_action_plan",
+            project=self.project_a,
+            arguments={"plan_id": plan_id}
+        )
+        self.assertTrue(get_res["success"])
+        self.assertEqual(get_res["data"]["id"], plan_id)
+
+        # 3. verify_action_plan tool
+        verif_res = self.registry.execute(
+            tool_name="verify_action_plan",
+            project=self.project_a,
+            arguments={"plan_id": plan_id}
+        )
+        self.assertTrue(verif_res["success"])
+        self.assertIn("plan_id", verif_res["data"])
+
+    def test_api_verify_endpoints(self):
+        """10. Test API endpoints for action and plan verification."""
+        from apps.seo.models import SEOAction, SEOActionPlan, ActionType, ActionStatus
+
+        plan = SEOActionPlan.objects.create(
+            project=self.project_a,
+            title="API Plan",
+            summary="API Summary"
+        )
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            plan=plan,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="API Action",
+            target_url="https://alpha-seo.com",
+            status=ActionStatus.COMPLETED
+        )
+
+        self.client.force_authenticate(user=self.user_a)
+
+        # Verify action endpoint
+        res_act = self.client.post(f'/api/seo/ai/actions/{action.id}/verify/')
+        self.assertEqual(res_act.status_code, status.HTTP_200_OK)
+        self.assertIn('verification', res_act.data)
+
+        # Verify plan endpoint
+        res_plan = self.client.post(f'/api/seo/ai/action-plans/{plan.id}/verify/')
+        self.assertEqual(res_plan.status_code, status.HTTP_200_OK)
+        self.assertIn('verification_summary', res_plan.data)
+

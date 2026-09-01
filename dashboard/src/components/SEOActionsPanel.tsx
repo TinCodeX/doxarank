@@ -2,9 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Project } from '../types/project';
 import type {
   SEOAction,
+  SEOActionPlan,
   ActionType,
   ActionStatus,
+  ActionPlanStatus,
   ActionPriority,
+  ActionRiskLevel,
+  VerificationStatus,
   ActionStatusCounts,
   ActionPreviewDiff
 } from '../types/seoAction';
@@ -18,8 +22,18 @@ import {
   executeSEOAction,
   deleteSEOAction,
   previewSEOAction,
+  verifySEOAction,
   getSEOActionStatusCounts
 } from '../api/seoActions';
+import {
+  getSEOActionPlans,
+  generateSEOActionPlan,
+  approveSEOActionPlan,
+  rejectSEOActionPlan,
+  executeSEOActionPlan,
+  verifySEOActionPlan,
+  deleteSEOActionPlan
+} from '../api/seoActionPlans';
 
 
 interface SEOActionsPanelProps {
@@ -37,24 +51,40 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   targetBriefId,
   onClearTargets,
 }) => {
+  // Mode toggle: Actions vs Plans
+  const [viewMode, setViewMode] = useState<'plans' | 'actions'>('plans');
+
+  // Actions State
   const [actions, setActions] = useState<SEOAction[]>([]);
   const [selectedActionId, setSelectedActionId] = useState<number | null>(null);
   const [statusCounts, setStatusCounts] = useState<ActionStatusCounts | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Plans State
+  const [plans, setPlans] = useState<SEOActionPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [isPlansLoading, setIsPlansLoading] = useState<boolean>(false);
+  const [planModalOpen, setPlanModalOpen] = useState<boolean>(false);
+  const [planTitleInput, setPlanTitleInput] = useState<string>('');
+  const [planMaxActions, setPlanMaxActions] = useState<number>(10);
+  const [planRejectModalOpen, setPlanRejectModalOpen] = useState<boolean>(false);
+  const [planRejectTargetId, setPlanRejectTargetId] = useState<number | null>(null);
+  const [planRejectReason, setPlanRejectReason] = useState<string>('');
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<ActionStatus | 'all'>('all');
   const [filterType, setFilterType] = useState<ActionType | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<ActionPriority | 'all'>('all');
 
-  // Active Detail Tab
-  const [activeTab, setActiveTab] = useState<'evidence' | 'proposed' | 'instructions' | 'execution' | 'raw'>('evidence');
+  // Active Detail Tab for single action
+  const [activeTab, setActiveTab] = useState<'evidence' | 'proposed' | 'instructions' | 'execution' | 'verification' | 'raw'>('evidence');
 
-  // Reject Modal State
+  // Reject Modal State for Action
   const [rejectModalOpen, setRejectModalOpen] = useState<boolean>(false);
   const [rejectTargetId, setRejectTargetId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('');
@@ -63,6 +93,10 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const [previewModalOpen, setPreviewModalOpen] = useState<boolean>(false);
   const [previewData, setPreviewData] = useState<ActionPreviewDiff | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
+
+  // Verification Inspection Modal State
+  const [verificationModalOpen, setVerificationModalOpen] = useState<boolean>(false);
+  const [verificationData, setVerificationData] = useState<Record<string, any> | null>(null);
 
   // Show feedback alert helper
   const showFeedback = useCallback((text: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -105,9 +139,31 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   }, [project, filterStatus, filterType, filterPriority, selectedActionId, showFeedback]);
 
+  // Fetch plans
+  const fetchPlans = useCallback(async () => {
+    if (!project) return;
+    setIsPlansLoading(true);
+    try {
+      const data = await getSEOActionPlans({ project_id: project.id });
+      setPlans(data);
+      if (data.length > 0) {
+        if (!selectedPlanId || !data.some((p) => p.id === selectedPlanId)) {
+          setSelectedPlanId(data[0].id);
+        }
+      } else {
+        setSelectedPlanId(null);
+      }
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to fetch SEO Action Plans.', 'error');
+    } finally {
+      setIsPlansLoading(false);
+    }
+  }, [project, selectedPlanId, showFeedback]);
+
   useEffect(() => {
     fetchActions();
-  }, [fetchActions]);
+    fetchPlans();
+  }, [fetchActions, fetchPlans]);
 
   // Handle incoming target generator trigger from other panels
   useEffect(() => {
@@ -140,7 +196,117 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   };
 
-  // Status transitions
+  // Generate Action Plan handler
+  const handleTriggerPlanGeneration = async () => {
+    if (!project) return;
+    setIsGenerating(true);
+    try {
+      const newPlan = await generateSEOActionPlan({
+        project_id: project.id,
+        title: planTitleInput.trim() || undefined,
+        max_actions: planMaxActions
+      });
+      showFeedback(`SEO Action Plan "${newPlan.title}" created with ${newPlan.total_actions_count || newPlan.actions?.length || 0} actions!`, 'success');
+      setPlanModalOpen(false);
+      setPlanTitleInput('');
+      await fetchPlans();
+      await fetchActions();
+      setSelectedPlanId(newPlan.id);
+      setViewMode('plans');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to generate Action Plan.', 'error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Plan Actions: Approve, Reject, Execute, Verify
+  const handleApprovePlan = async (id: number) => {
+    setIsUpdating(true);
+    try {
+      const updated = await approveSEOActionPlan(id);
+      setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      await fetchActions();
+      showFeedback('SEO Action Plan approved! Ready for execution.', 'success');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to approve plan.', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleOpenPlanRejectModal = (id: number) => {
+    setPlanRejectTargetId(id);
+    setPlanRejectReason('');
+    setPlanRejectModalOpen(true);
+  };
+
+  const handleConfirmPlanReject = async () => {
+    if (!planRejectTargetId) return;
+    if (!planRejectReason.trim()) {
+      showFeedback('Please provide a reason for rejecting the action plan.', 'error');
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const updated = await rejectSEOActionPlan(planRejectTargetId, planRejectReason.trim());
+      setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      await fetchActions();
+      showFeedback('Action Plan rejected.', 'info');
+      setPlanRejectModalOpen(false);
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to reject plan.', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecutePlan = async (id: number) => {
+    setIsExecuting(true);
+    try {
+      const executed = await executeSEOActionPlan(id);
+      setPlans((prev) => prev.map((p) => (p.id === executed.id ? executed : p)));
+      await fetchActions();
+      showFeedback(`Action Plan #${id} executed safely! Verification in progress...`, 'success');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to execute action plan.', 'error');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleVerifyPlan = async (id: number) => {
+    setIsVerifying(true);
+    try {
+      const res = await verifySEOActionPlan(id);
+      setPlans((prev) => prev.map((p) => (p.id === res.plan.id ? res.plan : p)));
+      await fetchActions();
+      setVerificationData(res.verification_summary);
+      setVerificationModalOpen(true);
+      showFeedback(`Action Plan verified: ${res.plan.verification_status.toUpperCase()}`, 'success');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to verify action plan.', 'error');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleDeletePlan = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this Action Plan?')) return;
+    try {
+      await deleteSEOActionPlan(id);
+      setPlans((prev) => prev.filter((p) => p.id !== id));
+      if (selectedPlanId === id) {
+        const remaining = plans.filter((p) => p.id !== id);
+        setSelectedPlanId(remaining.length > 0 ? remaining[0].id : null);
+      }
+      showFeedback('Action Plan deleted.', 'info');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to delete plan.', 'error');
+    }
+  };
+
+  // Status transitions for individual actions
   const handleReviewAction = async (id: number) => {
     setIsUpdating(true);
     try {
@@ -233,6 +399,21 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   };
 
+  const handleVerifyAction = async (id: number) => {
+    setIsVerifying(true);
+    try {
+      const res = await verifySEOAction(id);
+      setActions((prev) => prev.map((a) => (a.id === res.action.id ? res.action : a)));
+      setVerificationData(res.verification);
+      setVerificationModalOpen(true);
+      showFeedback(`Action verified: ${res.action.verification_status?.toUpperCase() || 'COMPLETED'}`, 'success');
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to verify action.', 'error');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const handleDeleteAction = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this SEO Action?')) return;
     try {
@@ -248,19 +429,22 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   };
 
-  // Helper formatting badges
-  const renderStatusBadge = (status: ActionStatus) => {
+  // Badges & Pill Helpers
+  const renderStatusBadge = (status: ActionStatus | ActionPlanStatus) => {
     const configs: Record<string, { bg: string; color: string; label: string; icon: string }> = {
       proposed: { bg: '#eff6ff', color: '#1d4ed8', label: 'Proposed', icon: '💡' },
       pending_approval: { bg: '#fffbeb', color: '#b45309', label: 'Pending Approval', icon: '⏳' },
+      awaiting_approval: { bg: '#fffbeb', color: '#b45309', label: 'Awaiting Approval', icon: '⏳' },
       reviewed: { bg: '#fef3c7', color: '#b45309', label: 'Reviewed', icon: '🔍' },
       approved: { bg: '#dcfce7', color: '#15803d', label: 'Approved', icon: '✅' },
       ready_to_execute: { bg: '#e0e7ff', color: '#4338ca', label: 'Ready', icon: '🚀' },
       executing: { bg: '#fef9c3', color: '#854d0e', label: 'Executing...', icon: '⚙️' },
       completed: { bg: '#ecfdf5', color: '#047857', label: 'Completed', icon: '✨' },
+      partially_completed: { bg: '#fef3c7', color: '#b45309', label: 'Partial', icon: '⚡' },
       rejected: { bg: '#fee2e2', color: '#b91c1c', label: 'Rejected', icon: '❌' },
       failed: { bg: '#fef2f2', color: '#991b1b', label: 'Failed', icon: '⚠️' },
       cancelled: { bg: '#f1f5f9', color: '#64748b', label: 'Cancelled', icon: '🚫' },
+      draft: { bg: '#f1f5f9', color: '#475569', label: 'Draft', icon: '📝' },
     };
     const c = configs[status] || configs.proposed;
     return (
@@ -282,6 +466,65 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
       >
         <span>{c.icon}</span>
         <span>{c.label}</span>
+      </span>
+    );
+  };
+
+  const renderVerificationBadge = (verifStatus?: VerificationStatus | string) => {
+    const s = (verifStatus || 'pending').toLowerCase();
+    const configs: Record<string, { bg: string; color: string; label: string; icon: string }> = {
+      verified: { bg: '#ecfdf5', color: '#047857', label: 'Verified Live', icon: '🎯' },
+      verifying: { bg: '#eff6ff', color: '#1d4ed8', label: 'Verifying...', icon: '🔄' },
+      failed: { bg: '#fee2e2', color: '#b91c1c', label: 'Verification Mismatch', icon: '⚠️' },
+      partially_verified: { bg: '#fef3c7', color: '#b45309', label: 'Partially Verified', icon: '🟡' },
+      pending: { bg: '#f1f5f9', color: '#64748b', label: 'Pending Verification', icon: '⏱️' }
+    };
+    const c = configs[s] || configs.pending;
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '3px 8px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: 700,
+          backgroundColor: c.bg,
+          color: c.color,
+          border: `1px solid ${c.color}30`
+        }}
+      >
+        <span>{c.icon}</span>
+        <span>{c.label}</span>
+      </span>
+    );
+  };
+
+  const renderRiskBadge = (risk: ActionRiskLevel | string) => {
+    const r = (risk || 'low').toLowerCase();
+    const configs: Record<string, { bg: string; color: string; label: string }> = {
+      critical: { bg: '#7f1d1d', color: '#fee2e2', label: 'CRITICAL RISK' },
+      high: { bg: '#fee2e2', color: '#dc2626', label: 'HIGH RISK' },
+      medium: { bg: '#fef3c7', color: '#d97706', label: 'MEDIUM RISK' },
+      low: { bg: '#f0fdf4', color: '#16a34a', label: 'LOW RISK' },
+    };
+    const c = configs[r] || configs.low;
+    return (
+      <span
+        style={{
+          display: 'inline-block',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          fontSize: '10px',
+          fontWeight: 800,
+          backgroundColor: c.bg,
+          color: c.color,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em'
+        }}
+      >
+        {c.label}
       </span>
     );
   };
@@ -316,18 +559,17 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     return actions.find((a) => a.id === selectedActionId) || null;
   }, [actions, selectedActionId]);
 
+  const activePlan = useMemo(() => {
+    return plans.find((p) => p.id === selectedPlanId) || null;
+  }, [plans, selectedPlanId]);
+
   if (!project) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-        Please select or create a project to view SEO Actions.
+        Please select or create a project to view SEO Actions & Plans.
       </div>
     );
   }
-
-  const isPendingApproval = activeAction && (
-    activeAction.status === 'pending_approval' ||
-    (activeAction.requires_human_approval && !activeAction.approved_at && activeAction.status !== 'approved' && activeAction.status !== 'completed' && activeAction.status !== 'rejected')
-  );
 
   return (
     <section
@@ -343,41 +585,98 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}
     >
-      {/* Header & Controls */}
+      {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>🛡️</span>
             <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
-              SEO Actions & Human Approval Gate
+              Autonomous SEO Action Planning & Verification
             </h2>
           </div>
           <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
-            Actionable SEO mutation tasks with strict server-side human approval governance before any execution.
+            Convert multi-source SEO intelligence into structured action plans, enforce human governance, execute mutations, and verify real-world website outcomes.
           </p>
         </div>
 
-        {/* Status Counters */}
-        {statusCounts && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <div style={counterChipStyle}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Pending</span>
-              <strong style={{ color: '#b45309' }}>{statusCounts.pending_approval || statusCounts.proposed}</strong>
+        {/* Top View Mode Switcher & Planning CTA */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {statusCounts && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <div style={counterChipStyle}>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>Pending</span>
+                <strong style={{ color: '#b45309', fontSize: '12px' }}>{statusCounts.pending_approval || statusCounts.proposed}</strong>
+              </div>
+              <div style={counterChipStyle}>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>Approved</span>
+                <strong style={{ color: '#15803d', fontSize: '12px' }}>{statusCounts.approved}</strong>
+              </div>
+              <div style={counterChipStyle}>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>Completed</span>
+                <strong style={{ color: '#047857', fontSize: '12px' }}>{statusCounts.completed}</strong>
+              </div>
             </div>
-            <div style={counterChipStyle}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Approved</span>
-              <strong style={{ color: '#15803d' }}>{statusCounts.approved}</strong>
-            </div>
-            <div style={counterChipStyle}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Completed</span>
-              <strong style={{ color: '#047857' }}>{statusCounts.completed}</strong>
-            </div>
-            <div style={counterChipStyle}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>Total</span>
-              <strong>{statusCounts.total}</strong>
-            </div>
+          )}
+
+          <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+            <button
+              id="view-mode-plans-btn"
+              onClick={() => setViewMode('plans')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: viewMode === 'plans' ? '#ffffff' : 'transparent',
+                color: viewMode === 'plans' ? '#0f172a' : '#64748b',
+                boxShadow: viewMode === 'plans' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              ⚡ Action Plans ({plans.length})
+            </button>
+            <button
+              id="view-mode-actions-btn"
+              onClick={() => setViewMode('actions')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: viewMode === 'actions' ? '#ffffff' : 'transparent',
+                color: viewMode === 'actions' ? '#0f172a' : '#64748b',
+                boxShadow: viewMode === 'actions' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              📋 Atomic Actions ({actions.length})
+            </button>
           </div>
-        )}
+
+          <button
+            id="plan-actions-modal-btn"
+            onClick={() => setPlanModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#4338ca',
+              color: '#ffffff',
+              border: 'none',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+            }}
+          >
+            <span>✨</span>
+            <span>Plan SEO Actions</span>
+          </button>
+        </div>
       </div>
 
       {/* Feedback Toast */}
@@ -398,14 +697,14 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         </div>
       )}
 
-      {/* Generating Indicator */}
-      {isGenerating && (
+      {/* Loading Indicators */}
+      {(isGenerating || isExecuting || isVerifying || isUpdating) && (
         <div
-          id="action-generating-toast"
+          id="action-processing-toast"
           style={{
-            padding: '12px 16px',
+            padding: '10px 16px',
             borderRadius: '8px',
-            fontSize: '13px',
+            fontSize: '12px',
             fontWeight: 600,
             backgroundColor: '#eff6ff',
             color: '#1e40af',
@@ -415,703 +714,620 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
             gap: '8px'
           }}
         >
-          <span>⚡</span>
-          <span>Synthesizing new SEO Action proposal...</span>
+          <span>🔄</span>
+          <span>
+            {isGenerating && 'Synthesizing evidence & generating action plan...'}
+            {isExecuting && 'Executing approved mutations safely in staging environment...'}
+            {isVerifying && 'Probing live website HTML & verifying real-world SEO state...'}
+            {isUpdating && 'Updating server state...'}
+          </span>
         </div>
       )}
 
-      {/* Filter Bar */}
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Status:</label>
-          <select
-            id="filter-action-status"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            style={selectInputStyle}
-          >
-            <option value="all">All Statuses</option>
-            <option value="pending_approval">Pending Approval</option>
-            <option value="proposed">Proposed</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="approved">Approved</option>
-            <option value="ready_to_execute">Ready to Execute</option>
-            <option value="executing">Executing</option>
-            <option value="completed">Completed</option>
-            <option value="rejected">Rejected</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Action Type:</label>
-          <select
-            id="filter-action-type"
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            style={selectInputStyle}
-          >
-            <option value="all">All Types</option>
-            <option value="optimize_title">Optimize Title</option>
-            <option value="optimize_meta_description">Optimize Meta Description</option>
-            <option value="fix_missing_h1">Fix Missing H1</option>
-            <option value="fix_canonical">Fix Canonical Tag</option>
-            <option value="fix_image_alt">Fix Image Alt</option>
-            <option value="fix_broken_link">Fix Broken Links</option>
-            <option value="publish_new_content">Publish New Content</option>
-            <option value="optimize_existing_content">Optimize Content</option>
-            <option value="technical_seo_fix">Technical SEO</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Priority:</label>
-          <select
-            id="filter-action-priority"
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value as any)}
-            style={selectInputStyle}
-          >
-            <option value="all">All Priorities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-        </div>
-
-        {(filterStatus !== 'all' || filterType !== 'all' || filterPriority !== 'all') && (
-          <button
-            onClick={() => {
-              setFilterStatus('all');
-              setFilterType('all');
-              setFilterPriority('all');
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#2563eb',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Reset Filters
-          </button>
-        )}
-      </div>
-
-      {/* Main Workspace Grid */}
-      {isLoading ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-          Loading SEO Actions...
-        </div>
-      ) : actions.length === 0 ? (
-        <div
-          style={{
-            padding: '48px 24px',
-            textAlign: 'center',
-            backgroundColor: '#f8fafc',
-            borderRadius: '12px',
-            border: '2px dashed #e2e8f0',
-          }}
-        >
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🛡️</div>
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
-            No SEO Actions Proposed Yet
-          </h3>
-          <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b', maxWidth: '480px', marginInline: 'auto' }}>
-            Autonomous investigations and AI suggestions will propose formal action tasks requiring your approval before execution.
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px', alignItems: 'start' }}>
-          {/* Action List Sidebar */}
-          <div
-            style={{
-              border: '1px solid #e2e8f0',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: '650px',
-            }}
-          >
-            <div style={{ padding: '12px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-              Action Tasks ({actions.length})
+      {/* ========================================================================= */}
+      {/* VIEW MODE 1: ACTION PLANS */}
+      {/* ========================================================================= */}
+      {viewMode === 'plans' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '20px', minHeight: '520px' }}>
+          {/* Left: Plans List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderRight: '1px solid #f1f5f9', paddingRight: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>Structured Action Plans</span>
+              <span style={{ fontSize: '11px', color: '#64748b' }}>{plans.length} available</span>
             </div>
-            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              {actions.map((act) => {
-                const isSelected = activeAction?.id === act.id;
-                return (
-                  <div
-                    key={act.id}
-                    id={`action-item-${act.id}`}
-                    onClick={() => setSelectedActionId(act.id)}
-                    style={{
-                      padding: '12px 14px',
-                      borderBottom: '1px solid #f1f5f9',
-                      backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                      borderLeft: isSelected ? '4px solid #2563eb' : '4px solid transparent',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      {renderPriorityBadge(act.priority)}
-                      {renderStatusBadge(act.status)}
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '13px', color: isSelected ? '#1e40af' : '#0f172a', marginBottom: '4px', lineHeight: 1.3 }}>
-                      {act.title}
-                    </div>
-                    {act.target_url && (
-                      <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        🔗 <code>{act.target_url}</code>
+
+            {isPlansLoading && plans.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>Loading plans...</div>
+            ) : plans.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                <span style={{ fontSize: '28px' }}>💡</span>
+                <p style={{ margin: '8px 0 4px 0', fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>No Action Plans Yet</p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Click "Plan SEO Actions" to synthesize audit and GSC opportunities.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '580px' }}>
+                {plans.map((p) => {
+                  const isSelected = p.id === selectedPlanId;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPlanId(p.id)}
+                      style={{
+                        padding: '14px',
+                        borderRadius: '12px',
+                        border: isSelected ? '2px solid #4338ca' : '1px solid #e2e8f0',
+                        backgroundColor: isSelected ? '#f5f3ff' : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#4338ca' }}>Plan #{p.id}</span>
+                        {renderStatusBadge(p.status)}
                       </div>
-                    )}
+                      <h4 style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', lineHeight: '1.4' }}>
+                        {p.title}
+                      </h4>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
+                        {renderRiskBadge(p.risk_level)}
+                        {renderVerificationBadge(p.verification_status)}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b' }}>
+                        <span>⚡ {p.total_actions_count || p.actions?.length || 0} actions</span>
+                        <span>Confidence: {Math.round(p.confidence_score * 100)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Plan Detail View */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {activePlan ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Plan Header Card */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#4338ca' }}>PLAN #{activePlan.id}</span>
+                        {renderStatusBadge(activePlan.status)}
+                        {renderRiskBadge(activePlan.risk_level)}
+                        {renderVerificationBadge(activePlan.verification_status)}
+                      </div>
+                      <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
+                        {activePlan.title}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
+                        {activePlan.summary}
+                      </p>
+                    </div>
+
+                    {/* Governance & Control Action Buttons */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {activePlan.status === 'proposed' && (
+                        <>
+                          <button
+                            id="plan-approve-btn"
+                            onClick={() => handleApprovePlan(activePlan.id)}
+                            disabled={isUpdating}
+                            style={btnSuccessStyle}
+                          >
+                            ✅ Approve Plan
+                          </button>
+                          <button
+                            id="plan-reject-btn"
+                            onClick={() => handleOpenPlanRejectModal(activePlan.id)}
+                            disabled={isUpdating}
+                            style={btnDangerStyle}
+                          >
+                            ❌ Reject
+                          </button>
+                        </>
+                      )}
+
+                      {activePlan.status === 'approved' && (
+                        <button
+                          id="plan-execute-btn"
+                          onClick={() => handleExecutePlan(activePlan.id)}
+                          disabled={isExecuting}
+                          style={btnPrimaryStyle}
+                        >
+                          🚀 Execute Plan
+                        </button>
+                      )}
+
+                      {(activePlan.status === 'completed' || activePlan.status === 'partially_completed' || activePlan.status === 'approved') && (
+                        <button
+                          id="plan-verify-btn"
+                          onClick={() => handleVerifyPlan(activePlan.id)}
+                          disabled={isVerifying}
+                          style={btnVerifyStyle}
+                        >
+                          🎯 Verify Live State
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDeletePlan(activePlan.id)}
+                        style={btnGhostDangerStyle}
+                        title="Delete Plan"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
+                </div>
+
+                {/* Child Actions in this Plan */}
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                    Planned Actions ({activePlan.actions?.length || 0})
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {activePlan.actions?.map((act) => (
+                      <div
+                        key={act.id}
+                        style={{
+                          padding: '14px',
+                          borderRadius: '10px',
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#ffffff',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155' }}>#{act.id}</span>
+                            <strong style={{ fontSize: '13px', color: '#0f172a' }}>{act.title}</strong>
+                            {renderStatusBadge(act.status)}
+                            {renderRiskBadge(act.risk_level)}
+                            {renderVerificationBadge(act.verification_status)}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b' }}>
+                            <span>Target: <code>{act.target_url || project.website_url}</code></span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#475569' }}>
+                            {act.description}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={() => {
+                              setSelectedActionId(act.id);
+                              setViewMode('actions');
+                            }}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: '#f1f5f9',
+                              color: '#334155',
+                              border: '1px solid #cbd5e1',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Inspect Detail →
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
+                Select an action plan from the left list to review opportunities, governance state, and verification.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW MODE 2: ATOMIC ACTIONS */}
+      {/* ========================================================================= */}
+      {viewMode === 'actions' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Filter Bar */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Status:</label>
+              <select
+                id="filter-action-status"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                style={selectInputStyle}
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending_approval">Pending Approval</option>
+                <option value="proposed">Proposed</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="approved">Approved</option>
+                <option value="ready_to_execute">Ready to Execute</option>
+                <option value="executing">Executing</option>
+                <option value="completed">Completed</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Action Type:</label>
+              <select
+                id="filter-action-type"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                style={selectInputStyle}
+              >
+                <option value="all">All Action Types</option>
+                <option value="optimize_title">Optimize Title</option>
+                <option value="optimize_meta_description">Optimize Meta Description</option>
+                <option value="fix_missing_h1">Fix Missing H1</option>
+                <option value="fix_canonical">Fix Canonical</option>
+                <option value="fix_image_alt">Fix Image Alt</option>
+                <option value="fix_broken_internal_link">Fix Broken Internal Link</option>
+                <option value="remove_redirect_chain">Remove Redirect Chain</option>
+                <option value="add_structured_data">Add Structured Data</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Priority:</label>
+              <select
+                id="filter-action-priority"
+                value={filterPriority}
+                onChange={(e) => setFilterPriority(e.target.value as any)}
+                style={selectInputStyle}
+              >
+                <option value="all">All Priorities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
             </div>
           </div>
 
-          {/* Action Detail Workspace */}
-          {activeAction ? (
-            <div
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: '12px',
-                backgroundColor: '#ffffff',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-              }}
-            >
-              {/* Prominent Human Approval Governance Banner */}
-              {isPendingApproval && (
-                <div
-                  id="pending-approval-banner"
-                  style={{
-                    padding: '16px 20px',
-                    backgroundColor: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    borderRadius: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '14px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '28px' }}>🛡️</span>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '14px', color: '#92400e' }}>
-                        WAITING FOR YOUR APPROVAL
+          <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '20px', minHeight: '500px' }}>
+            {/* Action List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderRight: '1px solid #f1f5f9', paddingRight: '16px' }}>
+              {isLoading && actions.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Loading actions...</div>
+              ) : actions.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>No SEO actions matching filter.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '560px' }}>
+                  {actions.map((act) => {
+                    const isSelected = act.id === selectedActionId;
+                    return (
+                      <div
+                        key={act.id}
+                        onClick={() => setSelectedActionId(act.id)}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '10px',
+                          border: isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                          backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>#{act.id}</span>
+                          {renderStatusBadge(act.status)}
+                        </div>
+                        <h4 style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{act.title}</h4>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {renderRiskBadge(act.risk_level)}
+                          {renderPriorityBadge(act.priority)}
+                          {renderVerificationBadge(act.verification_status)}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '12px', color: '#b45309', marginTop: '2px' }}>
-                        The autonomous agent proposed this website mutation. Direct execution is strictly blocked until you review and approve.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      id="preview-action-banner-btn"
-                      onClick={() => handlePreviewAction(activeAction.id)}
-                      disabled={isPreviewLoading}
-                      style={{ ...actionBtnStyleSecondary, borderColor: '#f59e0b', color: '#b45309', fontWeight: 700 }}
-                    >
-                      {isPreviewLoading ? 'Loading Diff...' : '🔍 Preview Diff'}
-                    </button>
-                    <button
-                      id="approve-action-banner-btn"
-                      onClick={() => handleApproveAction(activeAction.id)}
-                      disabled={isUpdating}
-                      style={{ ...actionBtnStylePrimary, backgroundColor: '#10b981' }}
-                    >
-                      ✅ Approve Action
-                    </button>
-                    <button
-                      id="reject-action-banner-btn"
-                      onClick={() => handleOpenRejectModal(activeAction.id)}
-                      disabled={isUpdating}
-                      style={actionBtnStyleDanger}
-                    >
-                      Reject...
-                    </button>
-                  </div>
+                    );
+                  })}
                 </div>
               )}
+            </div>
 
-              {/* Header Details */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    {renderPriorityBadge(activeAction.priority)}
-                    {renderStatusBadge(activeAction.status)}
-                    <span style={{ fontSize: '12px', color: '#64748b' }}>
-                      Type: <strong>{activeAction.action_type_display}</strong>
-                    </span>
-                    {activeAction.risk_level && (
-                      <span style={{ fontSize: '11px', padding: '2px 6px', backgroundColor: '#f1f5f9', borderRadius: '4px', color: '#475569' }}>
-                        Risk: <strong>{activeAction.risk_level.toUpperCase()}</strong>
-                      </span>
-                    )}
-                  </div>
-                  <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                    {activeAction.title}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>
-                    {activeAction.description}
-                  </p>
-                </div>
-
-                {/* Primary Action Controls */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button
-                    id="preview-action-btn"
-                    onClick={() => handlePreviewAction(activeAction.id)}
-                    disabled={isPreviewLoading}
-                    style={actionBtnStyleSecondary}
-                  >
-                    🔍 Preview Diff
-                  </button>
-
-                  {activeAction.status === 'proposed' && (
-                    <button
-                      id="review-action-btn"
-                      onClick={() => handleReviewAction(activeAction.id)}
-                      disabled={isUpdating}
-                      style={actionBtnStyleSecondary}
-                    >
-                      🔍 Mark Reviewed
-                    </button>
-                  )}
-
-                  {(activeAction.status === 'proposed' || activeAction.status === 'pending_approval' || activeAction.status === 'reviewed') && (
-                    <button
-                      id="approve-action-btn"
-                      onClick={() => handleApproveAction(activeAction.id)}
-                      disabled={isUpdating}
-                      style={{ ...actionBtnStylePrimary, backgroundColor: '#10b981' }}
-                    >
-                      ✅ Approve
-                    </button>
-                  )}
-
-                  {/* Execute Button - strictly available only when approved/ready */}
-                  {(activeAction.status === 'approved' || activeAction.status === 'ready_to_execute') && (
-                    <button
-                      id="execute-action-btn"
-                      onClick={() => handleExecuteAction(activeAction.id)}
-                      disabled={isExecuting}
-                      style={{
-                        ...actionBtnStylePrimary,
-                        backgroundColor: '#2563eb',
-                        boxShadow: '0 4px 10px rgba(37,99,235,0.25)',
-                      }}
-                    >
-                      {isExecuting ? '⚙️ Executing...' : '⚡ Execute (Safe Staging)'}
-                    </button>
-                  )}
-
-                  {(activeAction.status === 'proposed' || activeAction.status === 'pending_approval' || activeAction.status === 'reviewed') && (
-                    <button
-                      id="reject-action-btn"
-                      onClick={() => handleOpenRejectModal(activeAction.id)}
-                      disabled={isUpdating}
-                      style={actionBtnStyleDanger}
-                    >
-                      Reject...
-                    </button>
-                  )}
-
-                  {activeAction.status !== 'completed' && activeAction.status !== 'cancelled' && activeAction.status !== 'rejected' && (
-                    <button
-                      id="cancel-action-btn"
-                      onClick={() => handleCancelAction(activeAction.id)}
-                      disabled={isUpdating}
-                      style={actionBtnStyleSecondary}
-                    >
-                      Cancel
-                    </button>
-                  )}
-
-                  <button
-                    id="delete-action-btn"
-                    onClick={() => handleDeleteAction(activeAction.id)}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-
-              {/* Target Details Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', padding: '14px', backgroundColor: '#f8fafc', borderRadius: '10px' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Target URL</span>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', wordBreak: 'break-all' }}>
-                    {activeAction.target_url || 'Project Base Domain'}
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Target Query</span>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>
-                    <code>{activeAction.target_keyword || 'N/A'}</code>
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Approval State</span>
-                  <div style={{ fontSize: '13px', color: '#0f172a' }}>
-                    {activeAction.approved_at ? (
-                      <span style={{ color: '#15803d', fontWeight: 600 }}>Approved ({activeAction.approved_by_email || 'Owner'})</span>
-                    ) : activeAction.rejected_at ? (
-                      <span style={{ color: '#b91c1c', fontWeight: 600 }}>Rejected: {activeAction.rejection_reason}</span>
-                    ) : (
-                      <span style={{ color: '#b45309', fontWeight: 600 }}>Requires Human Sign-off</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Detail Navigation Tabs */}
-              <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', flexWrap: 'wrap' }}>
-                <button
-                  id="tab-evidence"
-                  onClick={() => setActiveTab('evidence')}
-                  style={getTabStyle(activeTab === 'evidence')}
-                >
-                  🔬 Evidence & Root Cause
-                </button>
-                <button
-                  id="tab-proposed-changes"
-                  onClick={() => setActiveTab('proposed')}
-                  style={getTabStyle(activeTab === 'proposed')}
-                >
-                  📝 Proposed Changes
-                </button>
-                <button
-                  id="tab-instructions"
-                  onClick={() => setActiveTab('instructions')}
-                  style={getTabStyle(activeTab === 'instructions')}
-                >
-                  📋 Implementation Instructions
-                </button>
-                {activeAction.execution_metadata && Object.keys(activeAction.execution_metadata).length > 0 && (
-                  <button
-                    id="tab-execution-history"
-                    onClick={() => setActiveTab('execution')}
-                    style={getTabStyle(activeTab === 'execution')}
-                  >
-                    🚀 Execution & Monitoring
-                  </button>
-                )}
-                <button
-                  id="tab-raw-payload"
-                  onClick={() => setActiveTab('raw')}
-                  style={getTabStyle(activeTab === 'raw')}
-                >
-                  🔧 Raw Data
-                </button>
-              </div>
-
-              {/* Tab 0: Evidence & Root Cause */}
-              {activeTab === 'evidence' && (
+            {/* Action Detail */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {activeAction ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {activeAction.rationale && (
-                    <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <span style={propLabelStyle}>Causal Root Cause Rationale</span>
-                      <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#1e293b', lineHeight: 1.5 }}>
-                        {activeAction.rationale}
-                      </p>
-                    </div>
-                  )}
-
-                  {activeAction.evidence_snapshot && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-                      {/* Observed Facts */}
-                      <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <span style={propLabelStyle}>Observed Facts</span>
-                        <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', fontSize: '12px', color: '#334155', lineHeight: 1.5 }}>
-                          {(activeAction.evidence_snapshot.observed_facts || ['Empirical signals recorded from GSC and SiteAudit']).map((f: string, i: number) => (
-                            <li key={i}>{f}</li>
-                          ))}
-                        </ul>
+                  {/* Action Header Card */}
+                  <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#3b82f6' }}>ACTION #{activeAction.id}</span>
+                          {renderStatusBadge(activeAction.status)}
+                          {renderRiskBadge(activeAction.risk_level)}
+                          {renderVerificationBadge(activeAction.verification_status)}
+                        </div>
+                        <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                          {activeAction.title}
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>
+                          Target: <code>{activeAction.target_url || project.website_url}</code>
+                        </p>
                       </div>
 
-                      {/* Inferences */}
-                      <div style={{ padding: '14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <span style={propLabelStyle}>Inferences & Deductions</span>
-                        <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', fontSize: '12px', color: '#334155', lineHeight: 1.5 }}>
-                          {(activeAction.evidence_snapshot.inferences || ['Grounded deductions from observed ranking & crawl behavior']).map((inf: string, i: number) => (
-                            <li key={i}>{inf}</li>
-                          ))}
-                        </ul>
+                      {/* Action Controls */}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => handlePreviewAction(activeAction.id)} disabled={isPreviewLoading} style={btnSecondaryStyle}>
+                          {isPreviewLoading ? 'Loading Preview...' : '🔍 Preview Diff'}
+                        </button>
+
+                        {activeAction.status === 'proposed' && (
+                          <button onClick={() => handleReviewAction(activeAction.id)} style={btnSecondaryStyle}>
+                            🔍 Mark Reviewed
+                          </button>
+                        )}
+
+                        {(activeAction.status === 'proposed' || activeAction.status === 'pending_approval' || activeAction.status === 'reviewed') && (
+                          <>
+                            <button onClick={() => handleApproveAction(activeAction.id)} style={btnSuccessStyle}>
+                              ✅ Approve
+                            </button>
+                            <button onClick={() => handleOpenRejectModal(activeAction.id)} style={btnDangerStyle}>
+                              ❌ Reject
+                            </button>
+                          </>
+                        )}
+
+                        {activeAction.status === 'approved' && (
+                          <button onClick={() => handleExecuteAction(activeAction.id)} style={btnPrimaryStyle}>
+                            🚀 Execute
+                          </button>
+                        )}
+
+                        {(activeAction.status === 'completed' || activeAction.status === 'approved') && (
+                          <button onClick={() => handleVerifyAction(activeAction.id)} style={btnVerifyStyle}>
+                            🎯 Verify Live State
+                          </button>
+                        )}
+
+                        {activeAction.status !== 'cancelled' && activeAction.status !== 'completed' && activeAction.status !== 'rejected' && (
+                          <button onClick={() => handleCancelAction(activeAction.id)} style={btnSecondaryStyle}>
+                            🚫 Cancel
+                          </button>
+                        )}
+
+                        <button onClick={() => handleDeleteAction(activeAction.id)} style={btnGhostDangerStyle}>
+                          🗑️
+                        </button>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 1: Proposed Changes */}
-              {activeTab === 'proposed' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {activeAction.proposed_change?.title && (
-                    <div style={propFieldStyle}>
-                      <span style={propLabelStyle}>Proposed Title / H1:</span>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
-                        {activeAction.proposed_change.title}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeAction.proposed_change?.meta_description && (
-                    <div style={propFieldStyle}>
-                      <span style={propLabelStyle}>Proposed Meta Description ({String(activeAction.proposed_change.meta_description).length} chars):</span>
-                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.4 }}>
-                        {activeAction.proposed_change.meta_description}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeAction.proposed_change?.canonical_url && (
-                    <div style={propFieldStyle}>
-                      <span style={propLabelStyle}>Canonical URL:</span>
-                      <div style={{ fontSize: '13px', color: '#2563eb' }}>
-                        <code>{activeAction.proposed_change.canonical_url}</code>
-                      </div>
-                    </div>
-                  )}
-
-                  {activeAction.proposed_change?.content && (
-                    <div style={propFieldStyle}>
-                      <span style={propLabelStyle}>Publishing Content Body Preview:</span>
-                      <div style={{ fontSize: '13px', color: '#1e293b', maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-                        {typeof activeAction.proposed_change.content === 'string'
-                          ? activeAction.proposed_change.content.slice(0, 1000) + '...'
-                          : JSON.stringify(activeAction.proposed_change.content, null, 2)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 2: Implementation Instructions */}
-              {activeTab === 'instructions' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div
-                    style={{
-                      padding: '16px',
-                      backgroundColor: '#f8fafc',
-                      borderRadius: '10px',
-                      border: '1px solid #e2e8f0',
-                      fontSize: '13px',
-                      color: '#1e293b',
-                      lineHeight: 1.6,
-                      whiteSpace: 'pre-wrap',
-                    }}
-                  >
-                    {activeAction.implementation_instructions}
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 3: Execution History & Monitoring */}
-              {activeTab === 'execution' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ padding: '16px', backgroundColor: '#ecfdf5', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>✅</span>
-                      <strong style={{ color: '#065f46', fontSize: '14px' }}>Safe Staging Execution Record</strong>
-                    </div>
-                    <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#047857' }}>
-                      {activeAction.execution_metadata?.summary || 'Action deployed safely in staging mode. Zero destructive mutations applied.'}
-                    </p>
-                    <div style={{ fontSize: '12px', color: '#047857', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                      <span><strong>Executor:</strong> {activeAction.execution_metadata?.executor}</span>
-                      <span><strong>Executed:</strong> {activeAction.execution_metadata?.executed_at ? new Date(activeAction.execution_metadata.executed_at).toLocaleString() : 'N/A'}</span>
-                      <span><strong>Duration:</strong> {activeAction.execution_metadata?.duration_ms}ms</span>
                     </div>
                   </div>
 
-                  {/* Monitoring Hook Baseline */}
-                  {activeAction.execution_metadata?.monitoring_baseline && (
-                    <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>📡</span>
-                        <strong style={{ color: '#1e40af', fontSize: '14px' }}>SEO Monitoring Hook Baseline</strong>
-                      </div>
-                      <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#1e3a8a' }}>
-                        Baseline captured at execution time to verify future SEO ranking, impressions, and CTR changes.
-                      </p>
-                      <pre style={{ margin: 0, fontSize: '11px', backgroundColor: '#ffffff', color: '#0f172a', padding: '12px', borderRadius: '8px', border: '1px solid #dbeafe', overflowX: 'auto' }}>
-                        {JSON.stringify(activeAction.execution_metadata.monitoring_baseline, null, 2)}
+                  {/* Tabs */}
+                  <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                    <button onClick={() => setActiveTab('evidence')} style={activeTab === 'evidence' ? activeTabStyle : tabStyle}>
+                      Evidence Snapshot
+                    </button>
+                    <button onClick={() => setActiveTab('proposed')} style={activeTab === 'proposed' ? activeTabStyle : tabStyle}>
+                      Proposed Change
+                    </button>
+                    <button onClick={() => setActiveTab('instructions')} style={activeTab === 'instructions' ? activeTabStyle : tabStyle}>
+                      Instructions
+                    </button>
+                    <button onClick={() => setActiveTab('verification')} style={activeTab === 'verification' ? activeTabStyle : tabStyle}>
+                      Verification Proof
+                    </button>
+                    <button onClick={() => setActiveTab('execution')} style={activeTab === 'execution' ? activeTabStyle : tabStyle}>
+                      Execution Logs
+                    </button>
+                  </div>
+
+                  {/* Tab Contents */}
+                  {activeTab === 'evidence' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700 }}>Causal Rationale</h4>
+                      <p style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>{activeAction.rationale || activeAction.description}</p>
+                      <h4 style={{ margin: '14px 0 8px 0', fontSize: '13px', fontWeight: 700 }}>Supporting Evidence Data</h4>
+                      <pre style={codeBlockStyle}>{JSON.stringify(activeAction.evidence_snapshot || {}, null, 2)}</pre>
+                    </div>
+                  )}
+
+                  {activeTab === 'proposed' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700 }}>Structured Proposed Changes</h4>
+                      <pre style={codeBlockStyle}>{JSON.stringify(activeAction.proposed_change || {}, null, 2)}</pre>
+                    </div>
+                  )}
+
+                  {activeTab === 'instructions' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '13px', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                        {activeAction.implementation_instructions}
                       </pre>
                     </div>
                   )}
+
+                  {activeTab === 'verification' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>Real-World Verification State</h4>
+                        {renderVerificationBadge(activeAction.verification_status)}
+                      </div>
+                      <pre style={codeBlockStyle}>
+                        {JSON.stringify(activeAction.verification_result || {"status": "Pending verification"}, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {activeTab === 'execution' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700 }}>Connector Execution Metadata</h4>
+                      <pre style={codeBlockStyle}>{JSON.stringify(activeAction.execution_metadata || {}, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
+                  Select an action to inspect its evidence and approval state.
                 </div>
               )}
-
-              {/* Tab 4: Raw Data */}
-              {activeTab === 'raw' && (
-                <pre style={{ margin: 0, fontSize: '11px', backgroundColor: '#0f172a', color: '#38bdf8', padding: '14px', borderRadius: '8px', maxHeight: '350px', overflowY: 'auto' }}>
-                  {JSON.stringify(activeAction, null, 2)}
-                </pre>
-              )}
             </div>
-          ) : (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-              Select an action on the left to inspect details.
-            </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Reject Modal */}
-      {rejectModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            backdropFilter: 'blur(2px)',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '480px',
-              width: '90%',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px' }}>❌</span>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                Reject SEO Action Proposal
-              </h3>
-            </div>
-            <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>
-              Please provide a clear reason for rejecting this action. This helps the AI agent calibrate future recommendations.
+      {/* ========================================================================= */}
+      {/* MODAL 1: PLAN GENERATOR */}
+      {/* ========================================================================= */}
+      {planModalOpen && (
+        <div style={modalBackdropStyle}>
+          <div style={modalDialogStyle}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 800 }}>Plan Autonomous SEO Actions</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
+              The agent will synthesize SiteAudit crawl defects, GSC search momentum anomalies, and active opportunity signals into a prioritized, cohesive plan.
             </p>
-            <textarea
-              id="reject-reason-input"
-              rows={4}
-              placeholder="e.g. Meta description copy does not align with brand voice guidelines..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '13px',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-                boxSizing: 'border-box',
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                onClick={() => setRejectModalOpen(false)}
-                style={actionBtnStyleSecondary}
-              >
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                  Plan Title (Optional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Q3 Organic CTR & Technical Remediation Plan"
+                  value={planTitleInput}
+                  onChange={(e) => setPlanTitleInput(e.target.value)}
+                  style={textInputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                  Maximum Actions:
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={planMaxActions}
+                  onChange={(e) => setPlanMaxActions(parseInt(e.target.value) || 10)}
+                  style={textInputStyle}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <button onClick={() => setPlanModalOpen(false)} style={btnSecondaryStyle}>
                 Cancel
               </button>
-              <button
-                id="confirm-reject-btn"
-                onClick={handleConfirmReject}
-                disabled={isUpdating || !rejectReason.trim()}
-                style={{ ...actionBtnStyleDanger, opacity: !rejectReason.trim() ? 0.6 : 1 }}
-              >
-                {isUpdating ? 'Rejecting...' : 'Confirm Rejection'}
+              <button onClick={handleTriggerPlanGeneration} disabled={isGenerating} style={btnPrimaryStyle}>
+                {isGenerating ? 'Planning...' : 'Generate Plan'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Preview Diff Modal */}
-      {previewModalOpen && previewData && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            backdropFilter: 'blur(2px)',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '680px',
-              width: '90%',
-              maxHeight: '85vh',
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px' }}>🔍</span>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                  Visual Diff & Impact Preview
-                </h3>
-              </div>
-              <button
-                onClick={() => setPreviewModalOpen(false)}
-                style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#94a3b8' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>
-              {previewData.summary || 'Simulated diff showing proposed changes against current state.'}
+      {/* ========================================================================= */}
+      {/* MODAL 2: PLAN REJECTION */}
+      {/* ========================================================================= */}
+      {planRejectModalOpen && (
+        <div style={modalBackdropStyle}>
+          <div style={modalDialogStyle}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 800, color: '#991b1b' }}>Reject Action Plan</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
+              Provide a clear, auditable explanation for rejecting this action plan.
             </p>
-
-            {/* Target info */}
-            <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', fontSize: '12px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <span><strong>Target URL:</strong> <code>{previewData.target_url}</code></span>
-              <span><strong>Risk Level:</strong> {previewData.risk_level?.toUpperCase()}</span>
+            <textarea
+              rows={3}
+              placeholder="e.g. Action plan contains high risk canonical modifications that require engineering review."
+              value={planRejectReason}
+              onChange={(e) => setPlanRejectReason(e.target.value)}
+              style={textareaStyle}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <button onClick={() => setPlanRejectModalOpen(false)} style={btnSecondaryStyle}>Cancel</button>
+              <button onClick={handleConfirmPlanReject} style={btnDangerStyle}>Confirm Rejection</button>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Diff details */}
+      {/* ========================================================================= */}
+      {/* MODAL 3: ACTION REJECTION */}
+      {/* ========================================================================= */}
+      {rejectModalOpen && (
+        <div style={modalBackdropStyle}>
+          <div style={modalDialogStyle}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 800, color: '#991b1b' }}>Reject SEO Action</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
+              Provide a clear reason for rejecting this proposed action.
+            </p>
+            <textarea
+              rows={3}
+              placeholder="e.g. Target landing page is currently undergoing brand redesign."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              style={textareaStyle}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <button onClick={() => setRejectModalOpen(false)} style={btnSecondaryStyle}>Cancel</button>
+              <button onClick={handleConfirmReject} style={btnDangerStyle}>Confirm Rejection</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: VISUAL DIFF PREVIEW */}
+      {/* ========================================================================= */}
+      {previewModalOpen && previewData && (
+        <div style={modalBackdropStyle}>
+          <div style={{ ...modalDialogStyle, maxWidth: '700px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}>Non-Destructive Visual Diff Preview</h3>
+              <button onClick={() => setPreviewModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px' }}>{previewData.summary}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <span style={propLabelStyle}>Structured Diff</span>
-              <pre style={{ margin: 0, fontSize: '12px', backgroundColor: '#0f172a', color: '#38bdf8', padding: '14px', borderRadius: '8px', overflowX: 'auto' }}>
-                {JSON.stringify(previewData.diff || previewData.after_state, null, 2)}
-              </pre>
+              <div>
+                <strong style={{ fontSize: '12px', color: '#64748b' }}>Before State:</strong>
+                <pre style={codeBlockStyle}>{JSON.stringify(previewData.before_state || {}, null, 2)}</pre>
+              </div>
+              <div>
+                <strong style={{ fontSize: '12px', color: '#16a34a' }}>After State (Proposed):</strong>
+                <pre style={codeBlockStyle}>{JSON.stringify(previewData.after_state || {}, null, 2)}</pre>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-              <button
-                onClick={() => setPreviewModalOpen(false)}
-                style={actionBtnStylePrimary}
-              >
-                Close Preview
-              </button>
+      {/* ========================================================================= */}
+      {/* MODAL 5: VERIFICATION INSPECTION */}
+      {/* ========================================================================= */}
+      {verificationModalOpen && verificationData && (
+        <div style={modalBackdropStyle}>
+          <div style={{ ...modalDialogStyle, maxWidth: '700px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}>🎯 Real-World Verification Result</h3>
+              <button onClick={() => setVerificationModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+              <p style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700, color: verificationData.verified ? '#065f46' : '#991b1b' }}>
+                {verificationData.verified ? '✅ Verified in Live DOM' : '⚠️ Verification Mismatch / Incomplete'}
+              </p>
+              <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>
+                {verificationData.explanation || 'Verified using empirical crawler inspection.'}
+              </p>
+            </div>
+            <pre style={codeBlockStyle}>{JSON.stringify(verificationData, null, 2)}</pre>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button onClick={() => setVerificationModalOpen(false)} style={btnPrimaryStyle}>Close</button>
             </div>
           </div>
         </div>
@@ -1120,15 +1336,16 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   );
 };
 
-// Internal styles
+// Styles
 const counterChipStyle: React.CSSProperties = {
+  backgroundColor: '#f8fafc',
+  padding: '6px 12px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  padding: '4px 12px',
-  backgroundColor: '#f8fafc',
-  borderRadius: '8px',
-  border: '1px solid #e2e8f0',
+  minWidth: '60px',
 };
 
 const selectInputStyle: React.CSSProperties = {
@@ -1136,72 +1353,143 @@ const selectInputStyle: React.CSSProperties = {
   borderRadius: '6px',
   border: '1px solid #cbd5e1',
   fontSize: '12px',
-  fontWeight: 500,
   backgroundColor: '#ffffff',
-  color: '#0f172a',
+  color: '#1e293b',
+  outline: 'none',
 };
 
-const actionBtnStylePrimary: React.CSSProperties = {
-  backgroundColor: '#2563eb',
+const textInputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  borderRadius: '6px',
+  border: '1px solid #cbd5e1',
+  fontSize: '13px',
+  boxSizing: 'border-box',
+};
+
+const textareaStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  borderRadius: '6px',
+  border: '1px solid #cbd5e1',
+  fontSize: '13px',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
+};
+
+const btnPrimaryStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
+  backgroundColor: '#4338ca',
   color: '#ffffff',
   border: 'none',
-  borderRadius: '8px',
-  padding: '7px 14px',
   fontSize: '12px',
   fontWeight: 700,
   cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '6px',
 };
 
-const actionBtnStyleSecondary: React.CSSProperties = {
+const btnSecondaryStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
   backgroundColor: '#ffffff',
   color: '#334155',
   border: '1px solid #cbd5e1',
-  borderRadius: '8px',
-  padding: '7px 12px',
   fontSize: '12px',
   fontWeight: 600,
   cursor: 'pointer',
 };
 
-const actionBtnStyleDanger: React.CSSProperties = {
-  backgroundColor: '#fee2e2',
-  color: '#991b1b',
-  border: '1px solid #fca5a5',
-  borderRadius: '8px',
-  padding: '7px 12px',
-  fontSize: '12px',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const propFieldStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '4px',
-  padding: '12px',
-  backgroundColor: '#f8fafc',
-  borderRadius: '8px',
-  border: '1px solid #f1f5f9',
-};
-
-const propLabelStyle: React.CSSProperties = {
-  fontSize: '11px',
-  fontWeight: 700,
-  color: '#64748b',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-};
-
-const getTabStyle = (isActive: boolean): React.CSSProperties => ({
-  background: 'none',
+const btnSuccessStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
+  backgroundColor: '#15803d',
+  color: '#ffffff',
   border: 'none',
-  borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
-  color: isActive ? '#2563eb' : '#64748b',
-  fontWeight: isActive ? 700 : 500,
-  fontSize: '13px',
-  padding: '6px 12px',
+  fontSize: '12px',
+  fontWeight: 700,
   cursor: 'pointer',
-});
+};
+
+const btnDangerStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
+  backgroundColor: '#dc2626',
+  color: '#ffffff',
+  border: 'none',
+  fontSize: '12px',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const btnVerifyStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
+  backgroundColor: '#059669',
+  color: '#ffffff',
+  border: 'none',
+  fontSize: '12px',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const btnGhostDangerStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  borderRadius: '7px',
+  backgroundColor: 'transparent',
+  border: '1px solid #fecaca',
+  color: '#dc2626',
+  cursor: 'pointer',
+};
+
+const tabStyle: React.CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: '6px',
+  border: 'none',
+  background: 'none',
+  fontSize: '12px',
+  fontWeight: 600,
+  color: '#64748b',
+  cursor: 'pointer',
+};
+
+const activeTabStyle: React.CSSProperties = {
+  ...tabStyle,
+  backgroundColor: '#eff6ff',
+  color: '#1d4ed8',
+  fontWeight: 700,
+};
+
+const codeBlockStyle: React.CSSProperties = {
+  margin: 0,
+  padding: '12px',
+  backgroundColor: '#0f172a',
+  color: '#f8fafc',
+  borderRadius: '8px',
+  fontSize: '12px',
+  fontFamily: 'monospace',
+  overflowX: 'auto',
+  maxHeight: '260px',
+};
+
+const modalBackdropStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 1000,
+  padding: '20px',
+};
+
+const modalDialogStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  borderRadius: '16px',
+  padding: '24px',
+  maxWidth: '520px',
+  width: '100%',
+  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+};

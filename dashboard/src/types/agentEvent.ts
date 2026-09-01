@@ -33,13 +33,19 @@ export type AgentEventType =
   | 'seo.investigation.recommendation_generated'
   | 'seo.investigation.completed'
   // SEO Action & Mutation Gating lifecycle
+  | 'seo.action.plan.created'
   | 'seo.action.proposed'
   | 'seo.action.pending_approval'
+  | 'seo.action.approval.requested'
   | 'seo.action.approved'
   | 'seo.action.rejected'
   | 'seo.action.execution_started'
   | 'seo.action.completed'
-  | 'seo.action.failed';
+  | 'seo.action.failed'
+  // SEO Action Real-World Verification lifecycle
+  | 'seo.action.verification.started'
+  | 'seo.action.verification.completed'
+  | 'seo.action.verification.failed';
 
 export interface AgentEvent {
   event_id: string;

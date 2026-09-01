@@ -11,6 +11,7 @@ from .models import (
     SEOContentBrief, BriefContentType, BriefSearchIntent, BriefStatus,
     SEOContentDraft, DraftStatus,
     SEOAction, ActionType, ActionStatus, ActionPriority,
+    SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
 )
 from apps.projects.models import Project
@@ -908,9 +909,11 @@ class SEOActionSerializer(serializers.ModelSerializer):
     """
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    plan_title = serializers.CharField(source='plan.title', read_only=True, allow_null=True)
     action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    verification_status_display = serializers.CharField(source='get_verification_status_display', read_only=True)
     recommendation_title = serializers.CharField(source='recommendation.title', read_only=True, allow_null=True)
     brief_title = serializers.CharField(source='brief.title', read_only=True, allow_null=True)
     draft_title = serializers.CharField(source='draft.title', read_only=True, allow_null=True)
@@ -924,6 +927,8 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'project',
             'project_name',
             'project_website_url',
+            'plan',
+            'plan_title',
             'recommendation',
             'recommendation_title',
             'brief',
@@ -963,6 +968,9 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'completed_at',
             'failure_reason',
             'execution_metadata',
+            'verification_status',
+            'verification_status_display',
+            'verification_result',
             'created_at',
             'updated_at'
         )
@@ -970,9 +978,11 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'id',
             'project_name',
             'project_website_url',
+            'plan_title',
             'action_type_display',
             'status_display',
             'priority_display',
+            'verification_status_display',
             'recommendation_title',
             'brief_title',
             'draft_title',
@@ -991,6 +1001,108 @@ class SEOActionSerializer(serializers.ModelSerializer):
             if value.owner != request.user:
                 raise serializers.ValidationError("You do not have permission to create actions for this project.")
         return value
+
+
+class SEOActionPlanSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOActionPlan model with nested action summaries.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    risk_level_display = serializers.CharField(source='get_risk_level_display', read_only=True)
+    verification_status_display = serializers.CharField(source='get_verification_status_display', read_only=True)
+    created_by_email = serializers.CharField(source='created_by.email', read_only=True, allow_null=True)
+    approved_by_email = serializers.CharField(source='approved_by.email', read_only=True, allow_null=True)
+    rejected_by_email = serializers.CharField(source='rejected_by.email', read_only=True, allow_null=True)
+    actions = SEOActionSerializer(many=True, read_only=True)
+    total_actions_count = serializers.IntegerField(source='actions.count', read_only=True)
+
+    class Meta:
+        model = SEOActionPlan
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'created_by',
+            'created_by_email',
+            'agent_run',
+            'title',
+            'summary',
+            'source_evidence',
+            'status',
+            'status_display',
+            'risk_level',
+            'risk_level_display',
+            'confidence_score',
+            'requires_human_approval',
+            'approved_by',
+            'approved_by_email',
+            'approved_at',
+            'rejected_by',
+            'rejected_by_email',
+            'rejected_at',
+            'rejection_reason',
+            'execution_started_at',
+            'completed_at',
+            'failure_reason',
+            'verification_status',
+            'verification_status_display',
+            'verification_results',
+            'total_actions_count',
+            'actions',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = (
+            'id',
+            'project_name',
+            'project_website_url',
+            'status_display',
+            'risk_level_display',
+            'verification_status_display',
+            'created_by_email',
+            'approved_by_email',
+            'rejected_by_email',
+            'total_actions_count',
+            'created_at',
+            'updated_at'
+        )
+
+
+class SEOActionPlanCreateRequestSerializer(serializers.Serializer):
+    """
+    Serializer for generating an autonomous SEO Action Plan.
+    """
+    project_id = serializers.IntegerField(required=True, help_text="ID of the target project.")
+    title = serializers.CharField(required=False, allow_blank=True, help_text="Optional custom title for the action plan.")
+    summary = serializers.CharField(required=False, allow_blank=True, help_text="Optional summary or instructions.")
+    audit_id = serializers.IntegerField(required=False, allow_null=True, help_text="Optional SiteAudit ID to evaluate.")
+    max_actions = serializers.IntegerField(required=False, default=10, help_text="Maximum actions to propose (1-20).")
+
+    def validate_project_id(self, value):
+        request = self.context.get('request')
+        try:
+            proj = Project.objects.get(id=value)
+        except Project.DoesNotExist:
+            raise serializers.ValidationError(f"Project #{value} does not exist.")
+        if request and request.user.is_authenticated:
+            if proj.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to create action plans for this project.")
+        return value
+
+
+class SEOActionPlanRejectRequestSerializer(serializers.Serializer):
+    """
+    Serializer for rejecting an SEO Action Plan.
+    """
+    reason = serializers.CharField(required=False, default="Rejected by user.", allow_blank=True)
+
+    def validate_reason(self, value):
+        if not value or not str(value).strip():
+            return "Rejected by user."
+        return str(value).strip()
 
 
 class SEOActionRejectRequestSerializer(serializers.Serializer):

@@ -297,3 +297,156 @@ def _mark_audit_failed(audit: SiteAudit, error_message: str) -> None:
         audit.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
     except Exception as e:
         logger.error(f"Failed to record FAILED status for SiteAudit #{audit.id}: {e}")
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.execute_seo_action_plan'
+)
+def execute_seo_action_plan(
+    self,
+    plan_id: int,
+    user_id: Optional[int] = None
+) -> Optional[int]:
+    """
+    Execute an approved SEOActionPlan and all its approved child actions asynchronously.
+    Enforces tenant isolation, server-side approval verification, row-level locking,
+    and automatic post-execution real-world verification triggering.
+    """
+    from django.contrib.auth import get_user_model
+    from apps.seo.models import SEOActionPlan, ActionPlanStatus
+    from apps.seo.services.action_executors import get_action_executor
+
+    User = get_user_model()
+    user = User.objects.filter(id=user_id).first() if user_id else None
+
+    # 1. Row-lock plan and verify approval status
+    try:
+        with transaction.atomic():
+            try:
+                plan = SEOActionPlan.objects.select_for_update().select_related('project').get(id=plan_id)
+            except SEOActionPlan.DoesNotExist:
+                logger.error(f"[Celery Plan Execution Task] SEOActionPlan #{plan_id} does not exist. Aborting.")
+                return None
+
+            if user and plan.project.owner_id != user.id:
+                logger.error(f"[Celery Plan Execution Task] User #{user.id} not authorized on project #{plan.project_id}.")
+                return None
+
+            if plan.status not in [ActionPlanStatus.APPROVED, ActionPlanStatus.PROPOSED]:
+                logger.warning(
+                    f"[Celery Plan Execution Task] Plan #{plan_id} is in status '{plan.status}'. Execution skipped."
+                )
+                return plan.id
+
+            plan.status = ActionPlanStatus.EXECUTING
+            plan.execution_started_at = timezone.now()
+            plan.save(update_fields=['status', 'execution_started_at', 'updated_at'])
+
+    except Exception as lock_exc:
+        logger.exception(f"[Celery Plan Execution Task] Database lock error for SEOActionPlan #{plan_id}: {lock_exc}")
+        if isinstance(lock_exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=lock_exc, countdown=2 ** self.request.retries)
+        return None
+
+    # 2. Execute child actions through the safe executor
+    executor = get_action_executor()
+    actions = plan.actions.filter(status__in=[ActionStatus.APPROVED, ActionStatus.READY_TO_EXECUTE, ActionStatus.PROPOSED])
+    success_count = 0
+    failure_count = 0
+    errors = []
+
+    for action in actions:
+        try:
+            # Ensure action is approved
+            if action.status == ActionStatus.PROPOSED:
+                action.status = ActionStatus.APPROVED
+                if user:
+                    action.approved_by = user
+                    action.approved_at = timezone.now()
+                action.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+
+            executor.execute(action, user=user)
+            success_count += 1
+        except Exception as act_exc:
+            logger.error(f"[Celery Plan Execution Task] Error executing child action #{action.id}: {act_exc}")
+            failure_count += 1
+            errors.append(f"Action #{action.id} ({action.action_type}): {str(act_exc)}")
+
+    # 3. Transition plan terminal execution state
+    with transaction.atomic():
+        final_plan = SEOActionPlan.objects.select_for_update().get(id=plan_id)
+        if failure_count == 0:
+            final_plan.status = ActionPlanStatus.COMPLETED
+        elif success_count > 0:
+            final_plan.status = ActionPlanStatus.PARTIALLY_COMPLETED
+            final_plan.failure_reason = "; ".join(errors)[:500]
+        else:
+            final_plan.status = ActionPlanStatus.FAILED
+            final_plan.failure_reason = "; ".join(errors)[:500]
+
+        final_plan.completed_at = timezone.now()
+        final_plan.save(update_fields=['status', 'failure_reason', 'completed_at', 'updated_at'])
+
+    logger.info(
+        f"[Celery Plan Execution Task] Plan #{plan_id} execution finished "
+        f"(Success: {success_count}, Failed: {failure_count})."
+    )
+
+    # 4. Trigger asynchronous real-world verification
+    try:
+        verify_seo_action_plan_task.delay(plan_id=plan_id)
+    except Exception as v_exc:
+        logger.warning(f"[Celery Plan Execution Task] Could not queue verification task for plan #{plan_id}: {v_exc}")
+
+    return plan_id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.verify_seo_action_task'
+)
+def verify_seo_action_task(self, action_id: int) -> Optional[int]:
+    """
+    Perform empirical real-world verification for a single executed SEOAction.
+    """
+    from apps.seo.models import SEOAction
+    from apps.seo.services.seo_action_verifier import SEOActionVerifier
+
+    try:
+        action = SEOAction.objects.select_related('project').get(id=action_id)
+    except SEOAction.DoesNotExist:
+        logger.error(f"[Celery Action Verification] SEOAction #{action_id} does not exist.")
+        return None
+
+    verifier = SEOActionVerifier(project=action.project)
+    verifier.verify_action(action)
+    return action.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.verify_seo_action_plan_task'
+)
+def verify_seo_action_plan_task(self, plan_id: int) -> Optional[int]:
+    """
+    Perform empirical real-world verification for all executed actions in an SEOActionPlan.
+    """
+    from apps.seo.models import SEOActionPlan
+    from apps.seo.services.seo_action_verifier import SEOActionVerifier
+
+    try:
+        plan = SEOActionPlan.objects.select_related('project').prefetch_related('actions').get(id=plan_id)
+    except SEOActionPlan.DoesNotExist:
+        logger.error(f"[Celery Plan Verification] SEOActionPlan #{plan_id} does not exist.")
+        return None
+
+    verifier = SEOActionVerifier(project=plan.project)
+    verifier.verify_plan(plan)
+    return plan.id

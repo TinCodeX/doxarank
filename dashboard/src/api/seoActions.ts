@@ -143,6 +143,15 @@ export async function deleteSEOAction(id: number): Promise<void> {
 }
 
 /**
+ * Empirically verify the real-world outcome of an executed SEO Action.
+ */
+export async function verifySEOAction(id: number): Promise<{ action: SEOAction; verification: Record<string, any> }> {
+  return apiFetch<{ action: SEOAction; verification: Record<string, any> }>(`/api/seo/ai/actions/${id}/verify/`, {
+    method: 'POST',
+  });
+}
+
+/**
  * Fetch action status counts for a project.
  */
 export async function getSEOActionStatusCounts(
