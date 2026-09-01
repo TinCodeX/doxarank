@@ -17,8 +17,10 @@ from apps.seo.models import (
     AgentRunStatus, AgentActionType, AgentStepStatus,
     Keyword, SEOInsight, SEORecommendation,
     SEOContentBrief, SEOContentDraft, SEOAction,
+    SEOActionPlan, ActionPlanStatus,
     InsightStatus, ActionStatus
 )
+
 from apps.seo.services.tool_registry import (
     ToolRegistry, get_tool_registry
 )
@@ -68,14 +70,15 @@ class AgentOrchestrator:
         Construct and publish an AgentEvent with monotonically increasing run-scoped sequence numbering.
         Guarantees that event publication failures do not corrupt or fail the core agent execution state.
         """
-        if self._sequence_counter == 0 and run.context_snapshot and '_event_seq' in run.context_snapshot:
-            self._sequence_counter = int(run.context_snapshot['_event_seq'])
+        if run.context_snapshot and '_event_seq' in run.context_snapshot:
+            self._sequence_counter = max(self._sequence_counter, int(run.context_snapshot['_event_seq']))
 
         self._sequence_counter += 1
 
         if run.context_snapshot is None:
             run.context_snapshot = {}
         run.context_snapshot['_event_seq'] = self._sequence_counter
+
 
         event = AgentEvent(
             event_type=event_type,
@@ -90,6 +93,12 @@ class AgentOrchestrator:
             run.context_snapshot['_event_history'] = []
         run.context_snapshot['_event_history'].append(event.to_dict())
 
+        if run.id:
+            try:
+                run.save(update_fields=['context_snapshot'])
+            except Exception:
+                pass
+
         try:
             self.publisher.publish(event)
         except Exception as exc:
@@ -99,6 +108,7 @@ class AgentOrchestrator:
             )
 
         return event
+
 
     def start_run(
         self,
@@ -185,6 +195,24 @@ class AgentOrchestrator:
                 status=ActionPlanStatus.PROPOSED
             ).order_by('-created_at').first()
 
+            # Execute single proposed action if exists
+            proposed_action = SEOAction.objects.filter(
+                project=self.project,
+                status=ActionStatus.PROPOSED
+            ).order_by('-created_at').first()
+
+            # Emit approval.approved event before execution/verification lifecycle events
+            self._emit_event(
+                run,
+                AgentEventType.APPROVAL_APPROVED,
+                {
+                    "action_id": proposed_action.id if proposed_action else None,
+                    "plan_id": proposed_plan.id if proposed_plan else None,
+                    "action_type": proposed_action.action_type if proposed_action else None
+                },
+                step_number=step_num
+            )
+
             if proposed_plan:
                 proposed_plan.status = ActionPlanStatus.APPROVED
                 if self.user and getattr(self.user, 'is_authenticated', False) and self.user.id == self.project.owner_id:
@@ -204,12 +232,6 @@ class AgentOrchestrator:
 
                 verifier.verify_plan(proposed_plan, run_id=run.id)
 
-            # Execute single proposed action if exists
-            proposed_action = SEOAction.objects.filter(
-                project=self.project,
-                status=ActionStatus.PROPOSED
-            ).order_by('-created_at').first()
-
             if proposed_action:
                 proposed_action.status = ActionStatus.APPROVED
                 if self.user and getattr(self.user, 'is_authenticated', False) and self.user.id == self.project.owner_id:
@@ -227,21 +249,16 @@ class AgentOrchestrator:
                 latest_step.thought += "\n[Human Approval]: SEO Action/Plan was reviewed, approved, executed, and verified."
                 latest_step.save()
 
-            # Emit approval.approved event
-            self._emit_event(
-                run,
-                AgentEventType.APPROVAL_APPROVED,
-                {
-                    "action_id": proposed_action.id if proposed_action else None,
-                    "plan_id": proposed_plan.id if proposed_plan else None,
-                    "action_type": proposed_action.action_type if proposed_action else None
-                },
-                step_number=step_num
-            )
+            if run.id:
+                try:
+                    run.refresh_from_db(fields=['context_snapshot'])
+                except Exception:
+                    pass
 
             run.status = AgentRunStatus.RUNNING
             run.save()
             return self.execute_loop(run)
+
         else:
             logger.info(f"AgentRun #{run.id} rejected by user. Terminating run.")
 

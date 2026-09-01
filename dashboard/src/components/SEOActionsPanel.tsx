@@ -9,6 +9,9 @@ import type {
   ActionPriority,
   ActionRiskLevel,
   VerificationStatus,
+  SEOOutcome,
+  PlanSEOOutcome,
+  HistoricalOutcomeSignals,
   ActionStatusCounts,
   ActionPreviewDiff
 } from '../types/seoAction';
@@ -23,6 +26,8 @@ import {
   deleteSEOAction,
   previewSEOAction,
   verifySEOAction,
+  measureSEOActionOutcome,
+  getHistoricalOutcomeSignals,
   getSEOActionStatusCounts
 } from '../api/seoActions';
 import {
@@ -32,8 +37,10 @@ import {
   rejectSEOActionPlan,
   executeSEOActionPlan,
   verifySEOActionPlan,
+  measureSEOActionPlanOutcome,
   deleteSEOActionPlan
 } from '../api/seoActionPlans';
+
 
 
 interface SEOActionsPanelProps {
@@ -62,6 +69,8 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [isMeasuring, setIsMeasuring] = useState<boolean>(false);
+  const [historicalSignals, setHistoricalSignals] = useState<HistoricalOutcomeSignals | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -82,7 +91,8 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const [filterPriority, setFilterPriority] = useState<ActionPriority | 'all'>('all');
 
   // Active Detail Tab for single action
-  const [activeTab, setActiveTab] = useState<'evidence' | 'proposed' | 'instructions' | 'execution' | 'verification' | 'raw'>('evidence');
+  const [activeTab, setActiveTab] = useState<'evidence' | 'proposed' | 'instructions' | 'execution' | 'verification' | 'outcome' | 'raw'>('evidence');
+
 
   // Reject Modal State for Action
   const [rejectModalOpen, setRejectModalOpen] = useState<boolean>(false);
@@ -160,10 +170,24 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   }, [project, selectedPlanId, showFeedback]);
 
+  const fetchHistoricalSignals = useCallback(async () => {
+    if (!project) return;
+    try {
+      const signals = await getHistoricalOutcomeSignals(project.id);
+      setHistoricalSignals(signals);
+    } catch (err) {
+      console.warn('Historical signals fetch skipped', err);
+    }
+  }, [project]);
+
+
   useEffect(() => {
     fetchActions();
     fetchPlans();
-  }, [fetchActions, fetchPlans]);
+    fetchHistoricalSignals();
+  }, [fetchActions, fetchPlans, fetchHistoricalSignals]);
+
+
 
   // Handle incoming target generator trigger from other panels
   useEffect(() => {
@@ -414,7 +438,43 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   };
 
+  const handleMeasureActionOutcome = async (id: number) => {
+    setIsMeasuring(true);
+    try {
+      const res = await measureSEOActionOutcome(id, 14);
+      setActions((prev) => prev.map((a) => (a.id === res.action.id ? res.action : a)));
+      setActiveTab('outcome');
+      showFeedback(`SEO Outcome Measured: ${res.action.seo_outcome_display || res.action.seo_outcome?.toUpperCase() || 'MEASURED'}`, 'success');
+      if (project) {
+        fetchHistoricalSignals();
+      }
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to measure action outcome.', 'error');
+    } finally {
+      setIsMeasuring(false);
+    }
+  };
+
+  const handleMeasurePlanOutcome = async (id: number) => {
+    setIsMeasuring(true);
+    try {
+      const res = await measureSEOActionPlanOutcome(id, 14);
+      setPlans((prev) => prev.map((p) => (p.id === res.plan.id ? res.plan : p)));
+      await fetchActions();
+      showFeedback(`Plan Outcome Measured: ${res.plan.seo_outcome_display || res.plan.seo_outcome?.toUpperCase() || 'MEASURED'}`, 'success');
+      if (project) {
+        fetchHistoricalSignals();
+      }
+    } catch (err: any) {
+      showFeedback(err?.data?.detail || 'Failed to measure plan outcome.', 'error');
+    } finally {
+      setIsMeasuring(false);
+    }
+  };
+
   const handleDeleteAction = async (id: number) => {
+
+
     if (!window.confirm('Are you sure you want to delete this SEO Action?')) return;
     try {
       await deleteSEOAction(id);
@@ -501,7 +561,44 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     );
   };
 
+  const renderOutcomeBadge = (outcome?: SEOOutcome | PlanSEOOutcome | string, label?: string) => {
+    const o = (outcome || 'unknown').toLowerCase();
+    const configs: Record<string, { bg: string; color: string; icon: string; text: string }> = {
+      improved: { bg: '#ecfdf5', color: '#047857', icon: '📈', text: 'IMPROVED' },
+      effective: { bg: '#ecfdf5', color: '#047857', icon: '🏆', text: 'EFFECTIVE' },
+      partially_effective: { bg: '#eff6ff', color: '#1d4ed8', icon: '✨', text: 'PARTIAL LIFT' },
+      no_change: { bg: '#f8fafc', color: '#64748b', icon: '➖', text: 'NO CHANGE' },
+      ineffective: { bg: '#fef3c7', color: '#b45309', icon: '⚠️', text: 'INEFFECTIVE' },
+      declined: { bg: '#fef2f2', color: '#b91c1c', icon: '📉', text: 'DECLINED' },
+      insufficient_data: { bg: '#faf5ff', color: '#7e22ce', icon: '⏳', text: 'LOW DATA' },
+      unknown: { bg: '#f1f5f9', color: '#94a3b8', icon: '❓', text: 'UNMEASURED' },
+    };
+    const c = configs[o] || configs.unknown;
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: 700,
+          backgroundColor: c.bg,
+          color: c.color,
+          border: `1px solid ${c.color}30`,
+          textTransform: 'uppercase',
+          letterSpacing: '0.03em'
+        }}
+      >
+        <span>{c.icon}</span>
+        <span>{label || c.text}</span>
+      </span>
+    );
+  };
+
   const renderRiskBadge = (risk: ActionRiskLevel | string) => {
+
     const r = (risk || 'low').toLowerCase();
     const configs: Record<string, { bg: string; color: string; label: string }> = {
       critical: { bg: '#7f1d1d', color: '#fee2e2', label: 'CRITICAL RISK' },
@@ -679,6 +776,69 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         </div>
       </div>
 
+      {/* Historical Outcome Learning Signals Banner */}
+      {historicalSignals && historicalSignals.total_measured > 0 && (
+        <div
+          id="historical-learning-signals-banner"
+          style={{
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backgroundColor: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>🧠</span>
+              <strong style={{ fontSize: '14px', color: '#166534' }}>Empirical SEO Outcome Learning Signals</strong>
+              <span style={{ fontSize: '12px', color: '#15803d' }}>
+                ({historicalSignals.total_measured} Actions Measured)
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#166534' }}>
+                Overall Improvement Rate: <strong style={{ fontSize: '14px', color: '#15803d' }}>{Math.round(historicalSignals.success_rate * 100)}%</strong>
+              </div>
+              <span style={{ color: '#86efac' }}>|</span>
+              <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}>📈 {historicalSignals.improved} Improved</span>
+                <span style={{ color: '#64748b', fontWeight: 700 }}>➖ {historicalSignals.no_change} Neutral</span>
+                <span style={{ color: '#dc2626', fontWeight: 700 }}>📉 {historicalSignals.declined} Declined</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Types Breakdown */}
+          {Object.keys(historicalSignals.by_action_type || {}).length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px solid #dcfce7' }}>
+              {Object.entries(historicalSignals.by_action_type).slice(0, 6).map(([typeKey, stats]) => (
+                <div
+                  key={typeKey}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    border: '1px solid #dcfce7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <code style={{ color: '#1e293b', fontWeight: 600 }}>{typeKey}</code>
+                  <span style={{ color: '#15803d', fontWeight: 800 }}>{Math.round(stats.success_rate * 100)}% win</span>
+                  <span style={{ color: '#94a3b8', fontSize: '10px' }}>({stats.total_measured}x)</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+
       {/* Feedback Toast */}
       {feedbackMsg && (
         <div
@@ -771,6 +931,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
                         {renderRiskBadge(p.risk_level)}
                         {renderVerificationBadge(p.verification_status)}
+                        {renderOutcomeBadge(p.seo_outcome, p.seo_outcome_display)}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b' }}>
                         <span>⚡ {p.total_actions_count || p.actions?.length || 0} actions</span>
@@ -796,6 +957,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                         {renderStatusBadge(activePlan.status)}
                         {renderRiskBadge(activePlan.risk_level)}
                         {renderVerificationBadge(activePlan.verification_status)}
+                        {renderOutcomeBadge(activePlan.seo_outcome, activePlan.seo_outcome_display)}
                       </div>
                       <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
                         {activePlan.title}
@@ -850,6 +1012,17 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                         </button>
                       )}
 
+                      {(activePlan.status === 'completed' || activePlan.status === 'partially_completed') && (
+                        <button
+                          id="plan-measure-outcome-btn"
+                          onClick={() => handleMeasurePlanOutcome(activePlan.id)}
+                          disabled={isMeasuring}
+                          style={btnOutcomeStyle}
+                        >
+                          📈 {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleDeletePlan(activePlan.id)}
                         style={btnGhostDangerStyle}
@@ -860,6 +1033,53 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Plan Outcome Scorecard (if measured) */}
+                {activePlan.outcome_summary && (
+                  <div
+                    id="plan-outcome-scorecard"
+                    style={{
+                      padding: '16px',
+                      borderRadius: '12px',
+                      backgroundColor: '#ecfdf5',
+                      border: '1px solid #a7f3d0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '18px' }}>📊</span>
+                        <strong style={{ fontSize: '14px', color: '#065f46' }}>Aggregate SEO Outcome Scorecard</strong>
+                        {renderOutcomeBadge(activePlan.seo_outcome, activePlan.seo_outcome_display)}
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#047857' }}>
+                        Effectiveness Rate: <strong>{Math.round((activePlan.outcome_summary.effectiveness_rate || 0) * 100)}%</strong>
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                      <div style={{ backgroundColor: '#ffffff', padding: '10px', borderRadius: '8px', border: '1px solid #d1fae5', textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>Total Actions</span>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{activePlan.outcome_summary.total_actions || 0}</div>
+                      </div>
+                      <div style={{ backgroundColor: '#ffffff', padding: '10px', borderRadius: '8px', border: '1px solid #d1fae5', textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>Improved</span>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#047857' }}>{activePlan.outcome_summary.improved || 0}</div>
+                      </div>
+                      <div style={{ backgroundColor: '#ffffff', padding: '10px', borderRadius: '8px', border: '1px solid #d1fae5', textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>No Change</span>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#475569' }}>{activePlan.outcome_summary.no_change || 0}</div>
+                      </div>
+                      <div style={{ backgroundColor: '#ffffff', padding: '10px', borderRadius: '8px', border: '1px solid #d1fae5', textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>Declined</span>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#dc2626' }}>{activePlan.outcome_summary.declined || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Child Actions in this Plan */}
                 <div>
@@ -1029,6 +1249,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           {renderRiskBadge(act.risk_level)}
                           {renderPriorityBadge(act.priority)}
                           {renderVerificationBadge(act.verification_status)}
+                          {renderOutcomeBadge(act.seo_outcome, act.seo_outcome_display)}
                         </div>
                       </div>
                     );
@@ -1050,6 +1271,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           {renderStatusBadge(activeAction.status)}
                           {renderRiskBadge(activeAction.risk_level)}
                           {renderVerificationBadge(activeAction.verification_status)}
+                          {renderOutcomeBadge(activeAction.seo_outcome, activeAction.seo_outcome_display)}
                         </div>
                         <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
                           {activeAction.title}
@@ -1094,6 +1316,17 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           </button>
                         )}
 
+                        {activeAction.status === 'completed' && (
+                          <button
+                            id="action-measure-outcome-btn"
+                            onClick={() => handleMeasureActionOutcome(activeAction.id)}
+                            disabled={isMeasuring}
+                            style={btnOutcomeStyle}
+                          >
+                            📈 {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
+                          </button>
+                        )}
+
                         {activeAction.status !== 'cancelled' && activeAction.status !== 'completed' && activeAction.status !== 'rejected' && (
                           <button onClick={() => handleCancelAction(activeAction.id)} style={btnSecondaryStyle}>
                             🚫 Cancel
@@ -1120,6 +1353,9 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     </button>
                     <button onClick={() => setActiveTab('verification')} style={activeTab === 'verification' ? activeTabStyle : tabStyle}>
                       Verification Proof
+                    </button>
+                    <button onClick={() => setActiveTab('outcome')} style={activeTab === 'outcome' ? activeTabStyle : tabStyle}>
+                      📈 SEO Outcome & Lift
                     </button>
                     <button onClick={() => setActiveTab('execution')} style={activeTab === 'execution' ? activeTabStyle : tabStyle}>
                       Execution Logs
@@ -1163,6 +1399,124 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     </div>
                   )}
 
+                  {activeTab === 'outcome' && (
+                    <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '18px' }}>📈</span>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>Empirical SEO Outcome Measurement</h4>
+                          {renderOutcomeBadge(activeAction.seo_outcome, activeAction.seo_outcome_display)}
+                        </div>
+                        {activeAction.outcome_confidence !== undefined && (
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                            Confidence: <strong>{Math.round((activeAction.outcome_confidence || 0) * 100)}%</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {activeAction.outcome_evidence ? (
+                        <>
+                          {/* Deltas Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                            <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>Position Delta</span>
+                              <div style={{ fontSize: '16px', fontWeight: 800, color: (activeAction.outcome_evidence.deltas?.position_delta || 0) > 0 ? '#16a34a' : (activeAction.outcome_evidence.deltas?.position_delta || 0) < 0 ? '#dc2626' : '#0f172a' }}>
+                                {(activeAction.outcome_evidence.deltas?.position_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.position_delta.toFixed(1)} spots` : `${(activeAction.outcome_evidence.deltas?.position_delta || 0).toFixed(1)} spots`}
+                              </div>
+                            </div>
+                            <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>CTR Delta</span>
+                              <div style={{ fontSize: '16px', fontWeight: 800, color: (activeAction.outcome_evidence.deltas?.ctr_delta || 0) > 0 ? '#16a34a' : (activeAction.outcome_evidence.deltas?.ctr_delta || 0) < 0 ? '#dc2626' : '#0f172a' }}>
+                                {((activeAction.outcome_evidence.deltas?.ctr_delta || 0) * 100).toFixed(2)}%
+                              </div>
+                            </div>
+                            <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>Clicks Delta</span>
+                              <div style={{ fontSize: '16px', fontWeight: 800, color: (activeAction.outcome_evidence.deltas?.clicks_delta || 0) > 0 ? '#16a34a' : (activeAction.outcome_evidence.deltas?.clicks_delta || 0) < 0 ? '#dc2626' : '#0f172a' }}>
+                                {(activeAction.outcome_evidence.deltas?.clicks_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.clicks_delta}` : (activeAction.outcome_evidence.deltas?.clicks_delta || 0)}
+                              </div>
+                            </div>
+                            <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>Impressions Delta</span>
+                              <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                                {(activeAction.outcome_evidence.deltas?.impressions_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.impressions_delta}` : (activeAction.outcome_evidence.deltas?.impressions_delta || 0)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Pre vs Post Comparison Table */}
+                          <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', border: '1px solid #e2e8f0' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f1f5f9', textAlign: 'left' }}>
+                                <th style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0' }}>Metric</th>
+                                <th style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0' }}>Before Execution</th>
+                                <th style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0' }}>After Execution</th>
+                                <th style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0' }}>Net Change</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>Average Position</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>#{activeAction.outcome_evidence.before_metrics?.position?.toFixed(1) || 'N/A'}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>#{activeAction.outcome_evidence.after_metrics?.position?.toFixed(1) || 'N/A'}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, color: (activeAction.outcome_evidence.deltas?.position_delta || 0) > 0 ? '#16a34a' : '#475569' }}>
+                                  {(activeAction.outcome_evidence.deltas?.position_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.position_delta.toFixed(1)} spots` : `${(activeAction.outcome_evidence.deltas?.position_delta || 0).toFixed(1)} spots`}
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>Click-Through Rate (CTR)</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>{((activeAction.outcome_evidence.before_metrics?.ctr || 0) * 100).toFixed(2)}%</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>{((activeAction.outcome_evidence.after_metrics?.ctr || 0) * 100).toFixed(2)}%</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, color: (activeAction.outcome_evidence.deltas?.ctr_delta || 0) > 0 ? '#16a34a' : '#475569' }}>
+                                  {((activeAction.outcome_evidence.deltas?.ctr_delta || 0) * 100).toFixed(2)}%
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>Clicks</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>{activeAction.outcome_evidence.before_metrics?.clicks || 0}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>{activeAction.outcome_evidence.after_metrics?.clicks || 0}</td>
+                                <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, color: (activeAction.outcome_evidence.deltas?.clicks_delta || 0) > 0 ? '#16a34a' : '#475569' }}>
+                                  {(activeAction.outcome_evidence.deltas?.clicks_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.clicks_delta}` : activeAction.outcome_evidence.deltas?.clicks_delta || 0}
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style={{ padding: '8px 12px', fontWeight: 600 }}>Impressions</td>
+                                <td style={{ padding: '8px 12px' }}>{activeAction.outcome_evidence.before_metrics?.impressions || 0}</td>
+                                <td style={{ padding: '8px 12px' }}>{activeAction.outcome_evidence.after_metrics?.impressions || 0}</td>
+                                <td style={{ padding: '8px 12px', fontWeight: 700 }}>
+                                  {(activeAction.outcome_evidence.deltas?.impressions_delta || 0) > 0 ? `+${activeAction.outcome_evidence.deltas.impressions_delta}` : activeAction.outcome_evidence.deltas?.impressions_delta || 0}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            Measured at: <strong>{activeAction.outcome_measured_at ? new Date(activeAction.outcome_measured_at).toLocaleString() : 'Recently'}</strong> |
+                            Window: <strong>{activeAction.outcome_evidence.window_days || 14} days symmetric</strong> |
+                            Significance: <strong>{activeAction.outcome_evidence.is_statistically_significant ? 'Statistically Significant' : 'Directional Signal'}</strong>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ padding: '32px 16px', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                          <span style={{ fontSize: '28px' }}>⏳</span>
+                          <p style={{ margin: '8px 0 4px 0', fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Outcome Not Measured Yet</p>
+                          <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748b' }}>
+                            Click "Measure SEO Outcome" to compare pre- and post-execution Search Console performance.
+                          </p>
+                          {activeAction.status === 'completed' && (
+                            <button
+                              onClick={() => handleMeasureActionOutcome(activeAction.id)}
+                              disabled={isMeasuring}
+                              style={btnOutcomeStyle}
+                            >
+                              📈 {isMeasuring ? 'Measuring...' : 'Measure Outcome Now'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {activeTab === 'execution' && (
                     <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                       <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700 }}>Connector Execution Metadata</h4>
@@ -1179,6 +1533,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
           </div>
         </div>
       )}
+
 
       {/* ========================================================================= */}
       {/* MODAL 1: PLAN GENERATOR */}
@@ -1431,6 +1786,22 @@ const btnVerifyStyle: React.CSSProperties = {
   fontWeight: 700,
   cursor: 'pointer',
 };
+
+const btnOutcomeStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  borderRadius: '7px',
+  backgroundColor: '#047857',
+  color: '#ffffff',
+  border: 'none',
+  fontSize: '12px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+};
+
 
 const btnGhostDangerStyle: React.CSSProperties = {
   padding: '7px 10px',

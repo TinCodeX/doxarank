@@ -101,3 +101,19 @@ export async function deleteSEOActionPlan(id: number): Promise<void> {
     method: 'DELETE',
   });
 }
+
+/**
+ * Perform empirical real-world outcome measurement on an SEO Action Plan.
+ */
+export async function measureSEOActionPlanOutcome(
+  id: number,
+  windowDays: number = 14
+): Promise<{ plan: SEOActionPlan; outcome_summary: Record<string, any> }> {
+  return apiFetch<{ plan: SEOActionPlan; outcome_summary: Record<string, any> }>(
+    `/api/seo/ai/action-plans/${id}/measure-outcome/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ window_days: windowDays }),
+    }
+  );
+}

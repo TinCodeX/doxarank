@@ -66,6 +66,21 @@ export type ActionPriority =
   | 'medium'
   | 'low';
 
+export type SEOOutcome =
+  | 'improved'
+  | 'no_change'
+  | 'declined'
+  | 'unknown'
+  | 'insufficient_data';
+
+export type PlanSEOOutcome =
+  | 'effective'
+  | 'partially_effective'
+  | 'ineffective'
+  | 'declined'
+  | 'unknown'
+  | 'insufficient_data';
+
 export interface SEOAction {
   id: number;
   project: number;
@@ -115,6 +130,11 @@ export interface SEOAction {
   verification_status?: VerificationStatus;
   verification_status_display?: string;
   verification_result?: Record<string, any>;
+  seo_outcome?: SEOOutcome;
+  seo_outcome_display?: string;
+  outcome_confidence?: number;
+  outcome_evidence?: Record<string, any>;
+  outcome_measured_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -149,11 +169,50 @@ export interface SEOActionPlan {
   verification_status: VerificationStatus;
   verification_status_display?: string;
   verification_results: Record<string, any>;
+  seo_outcome?: PlanSEOOutcome;
+  seo_outcome_display?: string;
+  outcome_confidence?: number;
+  outcome_summary?: Record<string, any>;
+  outcome_measured_at?: string | null;
   total_actions_count: number;
   actions: SEOAction[];
   created_at: string;
   updated_at: string;
 }
+
+export interface ActionOutcomeTypeStat {
+  action_type: string;
+  total_measured: number;
+  improved: number;
+  no_change: number;
+  declined: number;
+  insufficient_data: number;
+  success_rate: number;
+  avg_position_gain: number;
+  avg_ctr_lift: number;
+}
+
+export interface HistoricalOutcomeSignals {
+  project_id: number;
+  total_measured: number;
+  improved: number;
+  no_change: number;
+  declined: number;
+  insufficient_data: number;
+  success_rate: number;
+  by_action_type: Record<string, ActionOutcomeTypeStat>;
+  recent_samples: Array<{
+    action_id: number;
+    title: string;
+    action_type: string;
+    target_url: string;
+    outcome: SEOOutcome;
+    outcome_confidence: number;
+    measured_at: string;
+    summary: string;
+  }>;
+}
+
 
 export interface SEOActionPlanCreatePayload {
   project_id: number;

@@ -210,17 +210,22 @@ CORE TOOLS REFERENCE:
 - propose_seo_action: Propose formal SEO action task for human review and approval.
 - get_pending_actions: Retrieve all pending SEO actions requiring human review and approval.
 - get_action / preview_action: Retrieve action details and non-destructive before/after visual diff previews.
+- plan_seo_actions / get_action_plan: Synthesize structured cohesive action plans.
+- verify_seo_action / verify_action_plan: Empirically verify live website DOM and status code changes.
+- get_action_outcomes: Retrieve historical SEO action outcomes, empirical improvement rates, and before/after search performance evidence for this project.
 
 EVIDENCE HIERARCHY & REASONING GUIDELINES:
 1. Grounding hierarchy:
    - Primary: Measured GSC performance metrics (impressions, clicks, CTR, position).
    - Secondary: Live site audit diagnostic findings (AuditIssues, crawl codes).
-   - Tertiary: Deterministic cross-source correlation (analyze_seo_opportunities).
+   - Tertiary: Historical empirical evidence from past action outcomes (get_action_outcomes).
    - Quaternary: LLM synthesis and strategy formulation.
-2. Explicitly distinguish:
-   - Observed Facts (e.g. "Page receives 12,450 impressions with 2.4% CTR at position #8.4 and has a missing meta description").
-   - Inferences (e.g. "Under-optimized snippet causes searchers to skip the result despite strong Page 1 visibility").
-   - Recommendations (e.g. "Rewrite meta description to highlight unique value proposition and clear CTA").
+2. Explicitly distinguish across 4 distinct reasoning tiers:
+   - Observed Facts: Directly measured real-time data (e.g. "Landing page /pricing receives 14,200 impressions with 1.8% CTR at rank #12.4 and has missing H1").
+   - Historical Evidence: Previously measured real outcomes on this project (e.g. "Historical title updates on this domain achieved 75% improvement rate across 8 measured actions").
+   - Inferences: Deductions drawn from correlating facts and history (e.g. "Low CTR is likely driven by non-descriptive SERP snippet rather than technical indexing blockage").
+   - Recommendations: Proposed steps (e.g. "Propose optimized title tag for human review").
+3. CAUSALITY RULE: NEVER claim or guarantee that correlation is guaranteed causation. State historical rates as supportive empirical evidence.
 
 HUMAN-IN-THE-LOOP APPROVAL BOUNDARY:
 1. The agent must NEVER directly modify a website or execute mutations autonomously.
@@ -1475,6 +1480,54 @@ class MockAIProvider(BaseAIProvider):
                     "- **Next Step**: Review the proposed diff in the DoxaRank dashboard and approve or reject the action."
                 )
             }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 0d: SEO Outcome Learning & Historical Evidence Inspection
+        # ---------------------------------------------------------------------
+        is_outcome_learning_goal = any(term in goal for term in [
+            'outcome', 'learning', 'historical', 'past action', 'success rate',
+            'what happened', 'measure outcome', 'did it work', 'performance outcome'
+        ])
+        if is_outcome_learning_goal and 'get_action_outcomes' in available_tools:
+            if 'get_action_outcomes' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_action_outcomes",
+                    "arguments": {"limit": 10},
+                    "reason": "Retrieve empirical historical action outcomes and improvement rates to evaluate past SEO action effectiveness."
+                }
+
+            # Retrieve outcome data from history
+            outcomes_data = {}
+            for h in history:
+                if h.get('tool_name') == 'get_action_outcomes' and isinstance(h.get('tool_output'), dict):
+                    outcomes_data = h.get('tool_output', {})
+
+            total_m = outcomes_data.get('total_measured', 0)
+            imp = outcomes_data.get('improved', 0)
+            unch = outcomes_data.get('no_change', 0)
+            dec = outcomes_data.get('declined', 0)
+            succ_pct = outcomes_data.get('success_rate', 0.0) * 100
+
+            return {
+                "action": "finish",
+                "summary": (
+                    f"### SEO Outcome Learning & Historical Evidence Analysis\n\n"
+                    f"**Total Measured Actions**: {total_m} | **Empirical Improvement Rate**: {succ_pct:.1f}%\n\n"
+                    f"#### Observed Historical Outcomes:\n"
+                    f"- **Improved**: {imp} actions\n"
+                    f"- **No Change**: {unch} actions\n"
+                    f"- **Declined**: {dec} actions\n"
+                    f"- **Insufficient Data**: {outcomes_data.get('insufficient_data', 0)} actions\n\n"
+                    "#### Inferences & Learning Signals:\n"
+                    f"- Past actions on this project demonstrate an observed improvement rate of {succ_pct:.1f}%.\n"
+                    "- Historical outcomes serve as supporting empirical evidence for prioritizing future high-impact action types.\n\n"
+                    "#### Recommendations:\n"
+                    "- Prioritize action types with established high empirical improvement rates.\n"
+                    "- Maintain symmetric before/after measurement windows for all future action deployments."
+                )
+            }
+
 
         # ---------------------------------------------------------------------
         # BRANCH 0b: Cross-Source SEO Intelligence Correlation

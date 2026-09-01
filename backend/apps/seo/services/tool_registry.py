@@ -1032,6 +1032,23 @@ def handle_verify_action_plan(project: Project, args: Dict[str, Any]) -> Dict[st
     return verifier.verify_plan(plan)
 
 
+def handle_get_action_outcomes(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve aggregated historical SEO action outcomes, improvement rates, and before/after evidence."""
+    action_type = args.get("action_type")
+    target_url = args.get("target_url")
+    outcome_filter = args.get("outcome")
+    limit = min(args.get("limit", 20), 50)
+
+    from apps.seo.services.seo_outcome_learning import SEOHistoricalLearningService
+    return SEOHistoricalLearningService.get_historical_outcome_signals(
+        project=project,
+        action_type=action_type,
+        target_url=target_url,
+        outcome_filter=outcome_filter,
+        limit=limit
+    )
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1520,6 +1537,30 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=True,
         handler=handle_verify_action_plan
+    ))
+
+    # 21. get_action_outcomes
+    registry.register(AgentToolDefinition(
+        name="get_action_outcomes",
+        description="Retrieve aggregated historical SEO action outcomes, empirical improvement rates, and before/after search performance evidence for this project to ground future action recommendations in observed historical results.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_type": {"type": "string", "description": "Optional filter by action type (e.g. 'optimize_title', 'update_meta_description', 'fix_missing_h1')."},
+                "target_url": {"type": "string", "description": "Optional filter by landing page URL."},
+                "outcome": {
+                    "type": "string",
+                    "enum": ["improved", "no_change", "declined", "insufficient_data", "unknown"],
+                    "description": "Optional filter by outcome classification."
+                },
+                "limit": {"type": "integer", "description": "Maximum recent historical sample outcomes to include (default 20, max 50)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_action_outcomes
     ))
 
     return registry

@@ -74,6 +74,13 @@ class AgentEventType(str, Enum):
     SEO_ACTION_VERIFICATION_COMPLETED = "seo.action.verification.completed"
     SEO_ACTION_VERIFICATION_FAILED = "seo.action.verification.failed"
 
+    # SEO Outcome Learning & Adaptive Intelligence lifecycle
+    SEO_OUTCOME_MEASUREMENT_STARTED = "seo.outcome.measurement.started"
+    SEO_OUTCOME_EVIDENCE_COLLECTED = "seo.outcome.evidence.collected"
+    SEO_OUTCOME_CLASSIFIED = "seo.outcome.classified"
+    SEO_LEARNING_SIGNAL_GENERATED = "seo.learning.signal.generated"
+    SEO_OUTCOME_COMPLETED = "seo.outcome.completed"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """

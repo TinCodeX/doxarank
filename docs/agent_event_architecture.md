@@ -111,6 +111,12 @@ All events use the `AgentEventType` enum defined in `apps.seo.services.agent_eve
 | `seo.action.verification.started` | Verification | Empirical real-world verifier begins probing target live website URL/HTML state. |
 | `seo.action.verification.completed` | Verification | Real-world verification confirms that target HTML/metadata reflects proposed changes. |
 | `seo.action.verification.failed` | Verification | Real-world verification detects discrepancies, status errors, or missing metadata. |
+| `seo.outcome.measurement.started` | Outcome Learning | Empirical measurement worker begins collecting pre- vs. post-execution GSC performance metrics. |
+| `seo.outcome.evidence.collected` | Outcome Learning | Search performance evidence and metric deltas (CTR, impressions, position) collected. |
+| `seo.outcome.classified` | Outcome Learning | Deterministic classification engine categorizes outcome (`improved`, `no_change`, `declined`, etc.). |
+| `seo.learning.signal.generated` | Outcome Learning | Aggregated historical win/loss signals updated for future agent planning and confidence scoring. |
+| `seo.outcome.completed` | Outcome Learning | Full outcome measurement lifecycle completes and updates the database record. |
+
 
 ---
 

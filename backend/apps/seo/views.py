@@ -1162,6 +1162,51 @@ class SEOActionViewSet(viewsets.ModelViewSet):
             "verification": result
         }, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'], url_path='measure-outcome')
+    def measure_outcome(self, request, pk=None):
+        """
+        Empirically measure the real-world SEO outcome for an executed SEOAction.
+        (POST /api/seo/ai/actions/<id>/measure-outcome/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        window_days = int(request.data.get('window_days', 14))
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+        service = SEOOutcomeMeasurementService(project=action_obj.project)
+        evidence = service.measure_action_outcome(action_obj, window_days=window_days)
+        serializer = SEOActionSerializer(action_obj)
+        return Response({
+            "action": serializer.data,
+            "outcome_evidence": evidence
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='outcomes-summary')
+    def outcomes_summary(self, request):
+        """
+        Retrieve historical action outcome statistics and improvement rates for the project.
+        (GET /api/seo/ai/actions/outcomes-summary/?project_id=<id>&action_type=<type>)
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        action_type = request.query_params.get('action_type')
+        target_url = request.query_params.get('target_url')
+        limit = min(int(request.query_params.get('limit', 20)), 50)
+
+        from apps.seo.services.seo_outcome_learning import SEOHistoricalLearningService
+        summary = SEOHistoricalLearningService.get_historical_outcome_signals(
+            project=project,
+            action_type=action_type,
+            target_url=target_url,
+            limit=limit
+        )
+        return Response(summary, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'], url_path='status-counts')
     def status_counts(self, request):
         """
@@ -1188,6 +1233,7 @@ class SEOActionViewSet(viewsets.ModelViewSet):
             'total': base_qs.count()
         }
         return Response(counts, status=status.HTTP_200_OK)
+
 
 
 class SEOActionPlanViewSet(viewsets.ModelViewSet):
@@ -1346,6 +1392,24 @@ class SEOActionPlanViewSet(viewsets.ModelViewSet):
             "plan": out_serializer.data,
             "verification_summary": verification_summary
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='measure-outcome')
+    def measure_outcome(self, request, pk=None):
+        """
+        Empirically measure real-world SEO outcomes for all actions in an SEOActionPlan.
+        (POST /api/seo/ai/action-plans/<id>/measure-outcome/)
+        """
+        plan_obj = self.get_object()  # Enforces project.owner == request.user
+        window_days = int(request.data.get('window_days', 14))
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+        service = SEOOutcomeMeasurementService(project=plan_obj.project)
+        plan_summary = service.measure_plan_outcome(plan_obj, window_days=window_days)
+        out_serializer = SEOActionPlanSerializer(plan_obj)
+        return Response({
+            "plan": out_serializer.data,
+            "outcome_summary": plan_summary
+        }, status=status.HTTP_200_OK)
+
 
 
 class AgentRunViewSet(viewsets.ModelViewSet):

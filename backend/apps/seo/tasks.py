@@ -450,3 +450,105 @@ def verify_seo_action_plan_task(self, plan_id: int) -> Optional[int]:
     verifier = SEOActionVerifier(project=plan.project)
     verifier.verify_plan(plan)
     return plan.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.measure_seo_action_outcome_task'
+)
+def measure_seo_action_outcome_task(
+    self,
+    action_id: int,
+    window_days: int = 14
+) -> Optional[int]:
+    """
+    Asynchronously measure and classify empirical post-execution SEO outcome for an SEOAction.
+    Uses select_for_update() row locks, gathers Search Console pre/post evidence,
+    and updates persistent outcome records.
+    """
+    from apps.seo.models import SEOAction
+    from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+
+    try:
+        action = SEOAction.objects.select_related('project').get(id=action_id)
+    except SEOAction.DoesNotExist:
+        logger.error(f"[Celery Outcome Task] SEOAction #{action_id} does not exist.")
+        return None
+
+    try:
+        service = SEOOutcomeMeasurementService(project=action.project)
+        service.measure_action_outcome(action, window_days=window_days)
+        return action.id
+    except Exception as exc:
+        logger.exception(f"[Celery Outcome Task] Error measuring outcome for action #{action_id}: {exc}")
+        if isinstance(exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+        return action.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.measure_seo_action_plan_outcome_task'
+)
+def measure_seo_action_plan_outcome_task(
+    self,
+    plan_id: int,
+    window_days: int = 14
+) -> Optional[int]:
+    """
+    Asynchronously measure and aggregate empirical SEO outcomes for all actions in an SEOActionPlan.
+    """
+    from apps.seo.models import SEOActionPlan
+    from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+
+    try:
+        plan = SEOActionPlan.objects.select_related('project').prefetch_related('actions').get(id=plan_id)
+    except SEOActionPlan.DoesNotExist:
+        logger.error(f"[Celery Plan Outcome Task] SEOActionPlan #{plan_id} does not exist.")
+        return None
+
+    try:
+        service = SEOOutcomeMeasurementService(project=plan.project)
+        service.measure_plan_outcome(plan, window_days=window_days)
+        return plan.id
+    except Exception as exc:
+        logger.exception(f"[Celery Plan Outcome Task] Error measuring plan #{plan_id} outcome: {exc}")
+        if isinstance(exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+        return plan.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.aggregate_historical_learning_signals_task'
+)
+def aggregate_historical_learning_signals_task(
+    self,
+    project_id: int
+) -> Optional[int]:
+    """
+    Asynchronously calculate and cache historical learning signals and improvement rates for a project.
+    """
+    from apps.projects.models import Project
+    from apps.seo.services.seo_outcome_learning import SEOHistoricalLearningService
+
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        logger.error(f"[Celery Learning Task] Project #{project_id} does not exist.")
+        return None
+
+    try:
+        SEOHistoricalLearningService.get_historical_outcome_signals(project=project)
+        return project.id
+    except Exception as exc:
+        logger.exception(f"[Celery Learning Task] Error generating learning signals for project #{project_id}: {exc}")
+        if isinstance(exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+        return project.id

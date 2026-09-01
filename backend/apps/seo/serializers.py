@@ -919,6 +919,7 @@ class SEOActionSerializer(serializers.ModelSerializer):
     draft_title = serializers.CharField(source='draft.title', read_only=True, allow_null=True)
     approved_by_email = serializers.CharField(source='approved_by.email', read_only=True, allow_null=True)
     rejected_by_email = serializers.CharField(source='rejected_by.email', read_only=True, allow_null=True)
+    seo_outcome_display = serializers.CharField(source='get_seo_outcome_display', read_only=True)
 
     class Meta:
         model = SEOAction
@@ -971,6 +972,11 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'verification_status',
             'verification_status_display',
             'verification_result',
+            'seo_outcome',
+            'seo_outcome_display',
+            'outcome_confidence',
+            'outcome_evidence',
+            'outcome_measured_at',
             'created_at',
             'updated_at'
         )
@@ -983,6 +989,7 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'status_display',
             'priority_display',
             'verification_status_display',
+            'seo_outcome_display',
             'recommendation_title',
             'brief_title',
             'draft_title',
@@ -991,6 +998,7 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'execution_metadata',
             'execution_started_at',
             'completed_at',
+            'outcome_measured_at',
             'created_at',
             'updated_at'
         )
@@ -1012,6 +1020,7 @@ class SEOActionPlanSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     risk_level_display = serializers.CharField(source='get_risk_level_display', read_only=True)
     verification_status_display = serializers.CharField(source='get_verification_status_display', read_only=True)
+    seo_outcome_display = serializers.CharField(source='get_seo_outcome_display', read_only=True)
     created_by_email = serializers.CharField(source='created_by.email', read_only=True, allow_null=True)
     approved_by_email = serializers.CharField(source='approved_by.email', read_only=True, allow_null=True)
     rejected_by_email = serializers.CharField(source='rejected_by.email', read_only=True, allow_null=True)
@@ -1050,6 +1059,11 @@ class SEOActionPlanSerializer(serializers.ModelSerializer):
             'verification_status',
             'verification_status_display',
             'verification_results',
+            'seo_outcome',
+            'seo_outcome_display',
+            'outcome_confidence',
+            'outcome_summary',
+            'outcome_measured_at',
             'total_actions_count',
             'actions',
             'created_at',
@@ -1059,13 +1073,18 @@ class SEOActionPlanSerializer(serializers.ModelSerializer):
             'id',
             'project_name',
             'project_website_url',
+            'created_by_email',
             'status_display',
             'risk_level_display',
             'verification_status_display',
-            'created_by_email',
+            'seo_outcome_display',
             'approved_by_email',
             'rejected_by_email',
+            'execution_started_at',
+            'completed_at',
+            'outcome_measured_at',
             'total_actions_count',
+            'actions',
             'created_at',
             'updated_at'
         )

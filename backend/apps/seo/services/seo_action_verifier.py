@@ -53,15 +53,31 @@ class SEOActionVerifier:
         run_id: Optional[int] = None
     ) -> None:
         try:
+            seq_num = 1
+            if run_id:
+                try:
+                    from apps.seo.models import AgentRun
+                    run_obj = AgentRun.objects.filter(id=run_id).first()
+                    if run_obj:
+                        ctx = run_obj.context_snapshot or {}
+                        seq_num = int(ctx.get('_event_seq', 0)) + 1
+                        ctx['_event_seq'] = seq_num
+                        run_obj.context_snapshot = ctx
+                        run_obj.save(update_fields=['context_snapshot'])
+                except Exception:
+                    pass
+
             event = AgentEvent(
                 event_type=event_type,
                 run_id=run_id or 0,
                 project_id=self.project.id,
+                sequence_number=seq_num,
                 payload=payload
             )
             self.publisher.publish(event)
         except Exception as exc:
             logger.debug(f"[SEOActionVerifier] Event emission skipped/failed: {exc}")
+
 
     def fetch_page_content(self, url: str) -> Tuple[int, str, Dict[str, str]]:
         """

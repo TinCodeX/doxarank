@@ -3346,10 +3346,15 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action',
             'get_pending_actions',
             'get_action',
-            'preview_action'
+            'preview_action',
+            'plan_seo_actions',
+            'get_action_plan',
+            'verify_seo_action',
+            'verify_action_plan',
+            'get_action_outcomes'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 20)
+        self.assertEqual(len(registered_names), 25)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3359,7 +3364,8 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 20)
+        self.assertEqual(len(schemas), 25)
+
 
         for s in schemas:
             self.assertIn('name', s)
@@ -10237,3 +10243,465 @@ class SEOAutonomousActionPlanAndVerificationTests(TestCase):
         self.assertEqual(res_plan.status_code, status.HTTP_200_OK)
         self.assertIn('verification_summary', res_plan.data)
 
+
+class SEOOutcomeLearningAndAdaptiveAgentTests(TestCase):
+    """
+    Milestone 4, Phase 4.5: SEO Outcome Learning & Adaptive Agent Intelligence Test Suite.
+    Tests deterministic before/after SEO measurement, empirical outcome classification,
+    evidence gathering, historical learning signals, multi-tenant isolation, agent tool integration,
+    ReAct reasoning with historical evidence, Celery background tasks, and REST APIs.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        User = get_user_model()
+
+        self.user_a = User.objects.create_user(
+            email='user_outcome_a@example.com',
+            password='testpassword123'
+        )
+        self.user_b = User.objects.create_user(
+            email='user_outcome_b@example.com',
+            password='testpassword123'
+        )
+
+
+        self.project_a = Project.objects.create(
+            name="Alpha Corp",
+            website_url="https://alpha-seo.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Beta Ltd",
+            website_url="https://beta-seo.com",
+            owner=self.user_b
+        )
+
+        # Create Search Console Connection for Project A
+        self.conn_a = SearchConsoleConnection.objects.create(
+            project=self.project_a,
+            property_url="https://alpha-seo.com/",
+            is_connected=True,
+            encrypted_refresh_token="mock_token"
+        )
+
+        # Populate SearchAnalyticsData for pre/post windows
+        self.today = timezone.now().date()
+        # Pre-window metrics (-14 to -1 days)
+        for i in range(1, 15):
+            SearchAnalyticsData.objects.create(
+                connection=self.conn_a,
+                date=self.today - timedelta(days=i),
+                query="enterprise seo software",
+                page="https://alpha-seo.com/features",
+                clicks=5,
+                impressions=100,
+                ctr=0.05,
+                position=15.0
+            )
+        # Post-window metrics (0 to +14 days) -> improved ranking & CTR
+        for i in range(0, 15):
+            SearchAnalyticsData.objects.create(
+                connection=self.conn_a,
+                date=self.today + timedelta(days=i),
+                query="enterprise seo software",
+                page="https://alpha-seo.com/features",
+                clicks=15,
+                impressions=120,
+                ctr=0.125,
+                position=8.0
+            )
+
+        self.registry = get_tool_registry()
+
+    def test_deterministic_outcome_classifier_improved(self):
+        """1. Classifier correctly assigns IMPROVED when position and CTR improve with sufficient volume."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeClassifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Optimize Features Title",
+            target_url="https://alpha-seo.com/features",
+            target_keyword="enterprise seo software",
+            status=ActionStatus.COMPLETED,
+            completed_at=timezone.now()
+        )
+
+        before = {"impressions": 500, "clicks": 20, "ctr": 0.04, "position": 18.0}
+        after = {"impressions": 600, "clicks": 60, "ctr": 0.10, "position": 9.0}
+
+        res = SEOOutcomeClassifier.classify(
+            action=action,
+            before_metrics=before,
+            after_metrics=after,
+            verification_state=VerificationStatus.VERIFIED,
+            technical_resolved=True,
+            has_gsc_connection=True
+        )
+
+        self.assertEqual(res["seo_outcome"], SEOOutcome.IMPROVED)
+        self.assertGreaterEqual(res["confidence_score"], 0.70)
+        self.assertTrue(res["is_statistically_significant"])
+        self.assertIn("deltas", res)
+        self.assertEqual(res["deltas"]["position_delta"], 9.0)  # Gained 9 spots
+
+    def test_deterministic_outcome_classifier_no_change(self):
+        """2. Classifier assigns NO_CHANGE when metric movement is within statistical fluctuation bounds."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeClassifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_META_DESCRIPTION,
+            title="Update Description",
+            target_url="https://alpha-seo.com/features",
+            status=ActionStatus.COMPLETED
+        )
+
+        before = {"impressions": 400, "clicks": 20, "ctr": 0.050, "position": 10.0}
+        after = {"impressions": 410, "clicks": 21, "ctr": 0.051, "position": 9.8}
+
+        res = SEOOutcomeClassifier.classify(
+            action=action,
+            before_metrics=before,
+            after_metrics=after,
+            verification_state=VerificationStatus.VERIFIED,
+            technical_resolved=None,
+            has_gsc_connection=True
+        )
+
+        self.assertEqual(res["seo_outcome"], SEOOutcome.NO_CHANGE)
+        self.assertGreaterEqual(res["confidence_score"], 0.50)
+
+    def test_deterministic_outcome_classifier_declined(self):
+        """3. Classifier assigns DECLINED when rank and CTR drop significantly."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeClassifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.UPDATE_TITLE,
+            title="Experimental Title",
+            target_url="https://alpha-seo.com/features",
+            status=ActionStatus.COMPLETED
+        )
+
+        before = {"impressions": 500, "clicks": 50, "ctr": 0.10, "position": 6.0}
+        after = {"impressions": 300, "clicks": 10, "ctr": 0.033, "position": 16.0}
+
+        res = SEOOutcomeClassifier.classify(
+            action=action,
+            before_metrics=before,
+            after_metrics=after,
+            verification_state=VerificationStatus.FAILED,
+            technical_resolved=False,
+            has_gsc_connection=True
+        )
+
+        self.assertEqual(res["seo_outcome"], SEOOutcome.DECLINED)
+
+    def test_deterministic_outcome_classifier_insufficient_data(self):
+        """4. Classifier assigns INSUFFICIENT_DATA when post-execution impression volume is below threshold."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeClassifier
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.FIX_MISSING_H1,
+            title="Fix H1",
+            target_url="https://alpha-seo.com/low-volume-page",
+            status=ActionStatus.COMPLETED
+        )
+
+        before = {"impressions": 2, "clicks": 0, "ctr": 0.0, "position": 25.0}
+        after = {"impressions": 3, "clicks": 0, "ctr": 0.0, "position": 20.0}
+
+        res = SEOOutcomeClassifier.classify(
+            action=action,
+            before_metrics=before,
+            after_metrics=after,
+            verification_state=VerificationStatus.VERIFIED,
+            technical_resolved=True,
+            has_gsc_connection=True
+        )
+
+        self.assertEqual(res["seo_outcome"], SEOOutcome.INSUFFICIENT_DATA)
+        self.assertLessEqual(res["confidence_score"], 0.40)
+
+    def test_deterministic_outcome_classifier_unknown_without_gsc(self):
+        """5. Classifier assigns UNKNOWN without fabricating data when GSC connection is missing."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeClassifier
+
+        action = SEOAction.objects.create(
+            project=self.project_b,  # Project B has no GSC connection
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Optimize Title",
+            status=ActionStatus.COMPLETED
+        )
+
+        res = SEOOutcomeClassifier.classify(
+            action=action,
+            before_metrics={},
+            after_metrics={},
+            verification_state=VerificationStatus.PENDING,
+            technical_resolved=None,
+            has_gsc_connection=False
+        )
+
+        self.assertEqual(res["seo_outcome"], SEOOutcome.UNKNOWN)
+
+    def test_outcome_measurement_service_action(self):
+        """6. SEOOutcomeMeasurementService measures pre/post GSC data, updates action, and persists evidence."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Features Title Optimization",
+            target_url="https://alpha-seo.com/features",
+            target_keyword="enterprise seo software",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            completed_at=timezone.now()
+        )
+
+        service = SEOOutcomeMeasurementService(project=self.project_a)
+        evidence = service.measure_action_outcome(action, window_days=14)
+
+        action.refresh_from_db()
+        self.assertEqual(action.seo_outcome, SEOOutcome.IMPROVED)
+        self.assertGreaterEqual(action.outcome_confidence, 0.70)
+        self.assertIsNotNone(action.outcome_measured_at)
+        self.assertIn("before_metrics", action.outcome_evidence)
+        self.assertIn("after_metrics", action.outcome_evidence)
+        self.assertEqual(action.outcome_evidence["verification_state"], "verified")
+
+    def test_outcome_measurement_service_plan_aggregate(self):
+        """7. SEOOutcomeMeasurementService measures all actions in a plan and calculates aggregate outcome."""
+        from apps.seo.models import SEOAction, SEOActionPlan, ActionType, ActionStatus, VerificationStatus, SEOOutcome, PlanSEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+
+        plan = SEOActionPlan.objects.create(
+            project=self.project_a,
+            title="Multi-Action Optimization Plan",
+            summary="Test aggregate plan measurement"
+        )
+        action_1 = SEOAction.objects.create(
+            project=self.project_a,
+            plan=plan,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Action 1",
+            target_url="https://alpha-seo.com/features",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            completed_at=timezone.now()
+        )
+        action_2 = SEOAction.objects.create(
+            project=self.project_a,
+            plan=plan,
+            action_type=ActionType.FIX_MISSING_H1,
+            title="Action 2",
+            target_url="https://alpha-seo.com/features",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            completed_at=timezone.now()
+        )
+
+        service = SEOOutcomeMeasurementService(project=self.project_a)
+        summary = service.measure_plan_outcome(plan, window_days=14)
+
+        plan.refresh_from_db()
+        self.assertEqual(plan.seo_outcome, PlanSEOOutcome.EFFECTIVE)
+        self.assertEqual(summary["total_actions"], 2)
+        self.assertEqual(summary["improved"], 2)
+        self.assertEqual(summary["effectiveness_rate"], 1.0)
+
+    def test_historical_learning_signals_and_multi_tenant_isolation(self):
+        """8. SEOHistoricalLearningService calculates stats per action type and preserves strict project isolation."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOHistoricalLearningService
+
+        # Populate Project A historical actions
+        for i in range(8):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                title=f"Title Action {i}",
+                status=ActionStatus.COMPLETED,
+                seo_outcome=SEOOutcome.IMPROVED,
+                outcome_confidence=0.85,
+                outcome_measured_at=timezone.now()
+            )
+        for i in range(2):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                title=f"Title Action {i+8}",
+                status=ActionStatus.COMPLETED,
+                seo_outcome=SEOOutcome.NO_CHANGE,
+                outcome_confidence=0.75,
+                outcome_measured_at=timezone.now()
+            )
+        # Populate Project B action (must NOT leak to Project A)
+        SEOAction.objects.create(
+            project=self.project_b,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Project B Action",
+            status=ActionStatus.COMPLETED,
+            seo_outcome=SEOOutcome.DECLINED,
+            outcome_confidence=0.90,
+            outcome_measured_at=timezone.now()
+        )
+
+        # Query Project A signals
+        sig_a = SEOHistoricalLearningService.get_historical_outcome_signals(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE
+        )
+
+        self.assertEqual(sig_a["total_measured"], 10)
+        self.assertEqual(sig_a["improved"], 8)
+        self.assertEqual(sig_a["no_change"], 2)
+        self.assertEqual(sig_a["declined"], 0)  # Project B's declined action must not appear
+        self.assertEqual(sig_a["success_rate"], 0.80)  # 8 / 10 = 80%
+
+        # Query Project B signals
+        sig_b = SEOHistoricalLearningService.get_historical_outcome_signals(
+            project=self.project_b
+        )
+        self.assertEqual(sig_b["total_measured"], 1)
+        self.assertEqual(sig_b["declined"], 1)
+
+    def test_agent_tool_get_action_outcomes(self):
+        """9. ToolRegistry executes 'get_action_outcomes' tool with filtering and token-efficient response."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, SEOOutcome
+
+        SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.FIX_CANONICAL,
+            title="Fix Canonical",
+            status=ActionStatus.COMPLETED,
+            seo_outcome=SEOOutcome.IMPROVED,
+            outcome_confidence=0.90,
+            outcome_measured_at=timezone.now()
+        )
+
+        res = self.registry.execute(
+            tool_name="get_action_outcomes",
+            project=self.project_a,
+            arguments={"action_type": "fix_canonical"}
+        )
+
+        self.assertTrue(res["success"])
+        data = res["data"]
+        self.assertEqual(data["project_id"], self.project_a.id)
+        self.assertEqual(data["improved"], 1)
+        self.assertEqual(data["success_rate"], 1.0)
+        self.assertIn("by_action_type", data)
+        self.assertIn("recent_samples", data)
+
+    def test_react_agent_reasoning_with_historical_evidence(self):
+        """10. ReAct agent inspects historical outcomes and uses empirical evidence in summary."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, SEOOutcome, AgentRun, AgentRunStatus
+        from apps.seo.services.agent_orchestrator import AgentOrchestrator
+        from apps.seo.services.ai_providers import MockAIProvider
+
+        # Populate historical title outcomes for Project A
+        for i in range(3):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                title=f"Historical Title {i}",
+                status=ActionStatus.COMPLETED,
+                seo_outcome=SEOOutcome.IMPROVED,
+                outcome_confidence=0.85,
+                outcome_measured_at=timezone.now()
+            )
+
+        orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=MockAIProvider(),
+            registry=self.registry
+        )
+
+        run = orchestrator.start_run(goal="Analyze historical SEO action outcomes and evaluate past performance.")
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        self.assertIn("SEO Outcome Learning & Historical Evidence Analysis", run.summary)
+        self.assertIn("Observed Historical Outcomes", run.summary)
+
+    def test_celery_measure_outcome_tasks_and_idempotency(self):
+        """11. Celery outcome tasks execute asynchronously and idempotently without corrupting records."""
+        from apps.seo.models import SEOAction, SEOActionPlan, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.tasks import measure_seo_action_outcome_task, measure_seo_action_plan_outcome_task
+
+        plan = SEOActionPlan.objects.create(
+            project=self.project_a,
+            title="Async Celery Plan",
+            summary="Summary"
+        )
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            plan=plan,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Async Action",
+            target_url="https://alpha-seo.com/features",
+            target_keyword="enterprise seo software",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            completed_at=timezone.now()
+        )
+
+        # First task execution
+        act_res_1 = measure_seo_action_outcome_task(action_id=action.id, window_days=14)
+        self.assertEqual(act_res_1, action.id)
+        action.refresh_from_db()
+        self.assertEqual(action.seo_outcome, SEOOutcome.IMPROVED)
+
+        # Repeated idempotent execution
+        act_res_2 = measure_seo_action_outcome_task(action_id=action.id, window_days=14)
+        self.assertEqual(act_res_2, action.id)
+        action.refresh_from_db()
+        self.assertEqual(action.seo_outcome, SEOOutcome.IMPROVED)
+
+        # Plan task execution
+        plan_res = measure_seo_action_plan_outcome_task(plan_id=plan.id, window_days=14)
+        self.assertEqual(plan_res, plan.id)
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.outcome_measured_at)
+
+    def test_api_measure_outcome_and_outcomes_summary_endpoints(self):
+        """12. REST API endpoints for measure-outcome and outcomes-summary operate with authentication and multi-tenancy."""
+        from apps.seo.models import SEOAction, SEOActionPlan, ActionType, ActionStatus, VerificationStatus
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="API Measured Action",
+            target_url="https://alpha-seo.com/features",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            completed_at=timezone.now()
+        )
+
+        self.client.force_authenticate(user=self.user_a)
+
+        # 1. Action measure-outcome endpoint
+        res_act = self.client.post(f'/api/seo/ai/actions/{action.id}/measure-outcome/', {'window_days': 14})
+        self.assertEqual(res_act.status_code, status.HTTP_200_OK)
+        self.assertIn('outcome_evidence', res_act.data)
+        self.assertIn('action', res_act.data)
+
+        # 2. Action outcomes-summary endpoint
+        res_summary = self.client.get(f'/api/seo/ai/actions/outcomes-summary/?project_id={self.project_a.id}')
+        self.assertEqual(res_summary.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_summary.data['project_id'], self.project_a.id)
+
+        # 3. Unauthorized access check (User B cannot access Project A outcomes summary)
+        self.client.force_authenticate(user=self.user_b)
+        res_unauth = self.client.get(f'/api/seo/ai/actions/outcomes-summary/?project_id={self.project_a.id}')
+        self.assertEqual(res_unauth.status_code, status.HTTP_404_NOT_FOUND)

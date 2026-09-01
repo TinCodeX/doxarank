@@ -159,3 +159,39 @@ export async function getSEOActionStatusCounts(
 ): Promise<ActionStatusCounts> {
   return apiFetch<ActionStatusCounts>(`/api/seo/ai/actions/status-counts/?project_id=${projectId}`);
 }
+
+/**
+ * Empirically measure the real-world post-execution SEO outcome for an action.
+ */
+export async function measureSEOActionOutcome(
+  id: number,
+  windowDays: number = 14
+): Promise<{ action: SEOAction; outcome_evidence: Record<string, any> }> {
+  return apiFetch<{ action: SEOAction; outcome_evidence: Record<string, any> }>(
+    `/api/seo/ai/actions/${id}/measure-outcome/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ window_days: windowDays }),
+    }
+  );
+}
+
+/**
+ * Retrieve aggregated historical action outcome statistics and improvement rates for a project.
+ */
+export async function getHistoricalOutcomeSignals(
+  projectId: number,
+  actionType?: string,
+  targetUrl?: string,
+  limit: number = 20
+): Promise<import('../types/seoAction').HistoricalOutcomeSignals> {
+  const searchParams = new URLSearchParams();
+  searchParams.append('project_id', String(projectId));
+  if (actionType && actionType !== 'all') searchParams.append('action_type', actionType);
+  if (targetUrl) searchParams.append('target_url', targetUrl);
+  searchParams.append('limit', String(limit));
+
+  return apiFetch<import('../types/seoAction').HistoricalOutcomeSignals>(
+    `/api/seo/ai/actions/outcomes-summary/?${searchParams.toString()}`
+  );
+}
