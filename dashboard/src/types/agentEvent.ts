@@ -20,7 +20,18 @@ export type AgentEventType =
   // Human-in-the-loop approval lifecycle
   | 'approval.required'
   | 'approval.approved'
-  | 'approval.rejected';
+  | 'approval.rejected'
+  // SEO Intelligence lifecycle
+  | 'seo.intelligence.started'
+  | 'seo.evidence.collected'
+  | 'seo.opportunity.detected'
+  | 'seo.intelligence.completed'
+  // SEO Investigation lifecycle
+  | 'seo.investigation.started'
+  | 'seo.investigation.evidence_collected'
+  | 'seo.investigation.root_cause_identified'
+  | 'seo.investigation.recommendation_generated'
+  | 'seo.investigation.completed';
 
 export interface AgentEvent {
   event_id: string;

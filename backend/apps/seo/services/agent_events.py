@@ -51,6 +51,13 @@ class AgentEventType(str, Enum):
     SEO_OPPORTUNITY_DETECTED = "seo.opportunity.detected"
     SEO_INTELLIGENCE_COMPLETED = "seo.intelligence.completed"
 
+    # SEO Investigation & Decision Loop lifecycle
+    SEO_INVESTIGATION_STARTED = "seo.investigation.started"
+    SEO_INVESTIGATION_EVIDENCE_COLLECTED = "seo.investigation.evidence_collected"
+    SEO_INVESTIGATION_ROOT_CAUSE_IDENTIFIED = "seo.investigation.root_cause_identified"
+    SEO_INVESTIGATION_RECOMMENDATION_GENERATED = "seo.investigation.recommendation_generated"
+    SEO_INVESTIGATION_COMPLETED = "seo.investigation.completed"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """

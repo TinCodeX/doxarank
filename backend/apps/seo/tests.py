@@ -27,6 +27,17 @@ from apps.seo.services.seo_intelligence import (
     SEOCorrelationOpportunity,
     OpportunityType
 )
+from apps.seo.services.seo_investigation import (
+    SEOInvestigationService,
+    SEOInvestigationResult,
+    InvestigationStatus,
+    InvestigationConfidence,
+    RootCauseCategory,
+    ImpactEstimate,
+    EffortEstimate,
+    RiskLevel,
+    InvestigationActionType
+)
 from apps.seo.services.agent_events import (
     AgentEvent, AgentEventType, InMemoryEventPublisher
 )
@@ -3327,6 +3338,7 @@ class ToolRegistryTests(TestCase):
             'gsc_opportunity_audit',
             'gsc_performance_comparison',
             'analyze_seo_opportunities',
+            'investigate_seo_opportunity',
             'run_intelligence_analysis',
             'generate_recommendation',
             'generate_content_brief',
@@ -3334,7 +3346,7 @@ class ToolRegistryTests(TestCase):
             'propose_seo_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 16)
+        self.assertEqual(len(registered_names), 17)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3344,7 +3356,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 16)
+        self.assertEqual(len(schemas), 17)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -8871,3 +8883,483 @@ class SEOCorrelationIntelligenceTests(TestCase):
         tool_calls = AgentToolCall.objects.filter(step__run=run)
         called_tools = [tc.tool_name for tc in tool_calls]
         self.assertIn("analyze_seo_opportunities", called_tools)
+
+
+# =============================================================================
+# PHASE 4.2.3.3 TESTS: AUTONOMOUS SEO INVESTIGATION & DECISION LOOP
+# =============================================================================
+
+class SEOInvestigationServiceTests(TestCase):
+    """
+    Comprehensive tests for SEOInvestigationService & SEOInvestigationResult (Phase 4.2.3.3).
+    Verifies multi-source evidence collection, fact/inference separation, deterministic confidence scoring,
+    root-cause classification, impact/effort/risk classification, and human approval boundaries.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='investigator@doxarank.com',
+            password='Password123!',
+            first_name='Investigator',
+            last_name='User'
+        )
+        self.other_user = User.objects.create_user(
+            email='other_inv@doxarank.com',
+            password='Password123!',
+            first_name='Other',
+            last_name='User'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='DoxaRank Alpha',
+            website_url='https://doxarank.com'
+        )
+        self.other_project = Project.objects.create(
+            owner=self.other_user,
+            name='Other Project',
+            website_url='https://other.com'
+        )
+        self.publisher = InMemoryEventPublisher()
+
+    def test_valid_low_ctr_investigation(self):
+        """1. Valid opportunity investigation for LOW_CTR_HIGH_IMPRESSIONS."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=85)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_meta_description",
+            severity=IssueSeverity.WARNING,
+            title="Missing Meta Description",
+            description="Page is missing a meta description tag.",
+            page_url="https://doxarank.com/features"
+        )
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_h1",
+            severity=IssueSeverity.WARNING,
+            title="Missing H1 Heading",
+            description="Page is missing an H1 heading.",
+            page_url="https://doxarank.com/features"
+        )
+
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://doxarank.com",
+            is_connected=True
+        )
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            page="https://doxarank.com/features",
+            query="seo intelligence tool",
+            impressions=1250,
+            clicks=15,
+            ctr=0.012,
+            position=6.4,
+            date=timezone.now().date()
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://doxarank.com/features",
+            target_query="seo intelligence tool"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.COMPLETED.value)
+        self.assertEqual(result.opportunity_type, "LOW_CTR_HIGH_IMPRESSIONS")
+        self.assertEqual(result.root_cause_category, RootCauseCategory.CTR.value)
+        self.assertIn("CTR", result.root_cause_reason)
+        self.assertGreaterEqual(result.confidence_score, 0.75)
+        self.assertEqual(result.confidence_level, InvestigationConfidence.HIGH.value)
+        self.assertEqual(result.impact_estimate, ImpactEstimate.HIGH.value)
+        self.assertEqual(result.effort_estimate, EffortEstimate.LOW.value)
+        self.assertEqual(result.risk_level, RiskLevel.LOW.value)
+        self.assertTrue(result.requires_human_approval)
+
+        # Verify separation of facts and inferences
+        self.assertGreater(len(result.observed_facts), 0)
+        self.assertGreater(len(result.inferences), 0)
+        self.assertTrue(any("1,250 impressions" in f for f in result.observed_facts))
+        self.assertTrue(any("Missing Meta Description" in f or "missing_meta_description" in f for f in result.observed_facts))
+
+        # Verify recommended action
+        rec = result.recommended_action
+        self.assertEqual(rec["action_type"], InvestigationActionType.OPTIMIZE_META_DESCRIPTION.value)
+        self.assertTrue(rec["requires_human_approval"])
+        self.assertEqual(rec["risk"], RiskLevel.LOW.value)
+
+    def test_valid_ranking_technical_decay_investigation(self):
+        """2. Valid opportunity investigation for RANKING_TECHNICAL_DECAY."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=60)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_canonical",
+            severity=IssueSeverity.CRITICAL,
+            title="Missing Canonical Tag",
+            description="Page is missing a canonical URL tag.",
+            page_url="https://doxarank.com/docs/api"
+        )
+
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://doxarank.com",
+            is_connected=True
+        )
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            page="https://doxarank.com/docs/api",
+            query="doxarank api docs",
+            impressions=600,
+            clicks=8,
+            ctr=0.0133,
+            position=14.2,
+            date=timezone.now().date()
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="RANKING_TECHNICAL_DECAY",
+            target_url="https://doxarank.com/docs/api",
+            target_query="doxarank api docs"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.COMPLETED.value)
+        self.assertEqual(result.root_cause_category, RootCauseCategory.CANONICAL.value)
+        self.assertEqual(result.recommended_action["action_type"], InvestigationActionType.FIX_CANONICAL.value)
+        self.assertEqual(result.effort_estimate, EffortEstimate.HIGH.value)
+        self.assertEqual(result.risk_level, RiskLevel.HIGH.value)
+        self.assertTrue(result.requires_human_approval)
+
+    def test_invalid_opportunity_type_handling(self):
+        """3. Fails gracefully when an unsupported opportunity type is passed."""
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="UNSUPPORTED_RANDOM_TYPE",
+            target_url="https://doxarank.com/blog"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.FAILED.value)
+        self.assertEqual(result.confidence_score, 0.0)
+        self.assertEqual(result.confidence_level, InvestigationConfidence.LOW.value)
+        self.assertFalse(result.requires_human_approval)
+        self.assertEqual(result.recommended_action["action_type"], InvestigationActionType.NO_ACTION.value)
+
+    def test_missing_gsc_connection_graceful_investigation(self):
+        """4. Successfully investigates using audit diagnostics when GSC is not connected."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=75)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.WARNING,
+            title="Missing Page Title",
+            description="Page is missing a title element.",
+            page_url="https://doxarank.com/contact"
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="CONTENT_OPPORTUNITY",
+            target_url="https://doxarank.com/contact"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.COMPLETED.value)
+        self.assertEqual(result.root_cause_category, RootCauseCategory.ON_PAGE_SEO.value)
+        self.assertEqual(result.recommended_action["action_type"], InvestigationActionType.OPTIMIZE_TITLE.value)
+        self.assertTrue(any("Google Search Console connection is not configured" in f for f in result.observed_facts))
+
+    def test_missing_audit_graceful_investigation(self):
+        """5. Successfully investigates using GSC metrics when no site audit exists."""
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://doxarank.com",
+            is_connected=True
+        )
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            page="https://doxarank.com/rankings",
+            query="best rank tracker",
+            impressions=3400,
+            clicks=22,
+            ctr=0.0064,
+            position=4.1,
+            date=timezone.now().date()
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://doxarank.com/rankings",
+            target_query="best rank tracker"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.COMPLETED.value)
+        self.assertEqual(result.root_cause_category, RootCauseCategory.CTR.value)
+        self.assertTrue(any("No completed Site Audit crawl data" in f for f in result.observed_facts))
+
+    def test_insufficient_evidence_returns_monitor_no_mutation(self):
+        """6. When neither GSC nor audit data is available, returns LOW confidence and MONITOR action."""
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        result = service.investigate(
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://doxarank.com/unknown-page"
+        )
+
+        self.assertEqual(result.status, InvestigationStatus.COMPLETED.value)
+        self.assertEqual(result.confidence_level, InvestigationConfidence.LOW.value)
+        self.assertLess(result.confidence_score, 0.45)
+        self.assertEqual(result.recommended_action["action_type"], InvestigationActionType.MONITOR.value)
+        self.assertFalse(result.recommended_action["requires_human_approval"])
+        self.assertFalse(result.requires_human_approval)
+
+    def test_root_cause_and_risk_classifications(self):
+        """7. Tests deterministic root-cause and risk classifications across multiple issue types."""
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+
+        # Performance root cause
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=50)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="slow_response",
+            severity=IssueSeverity.WARNING,
+            title="Slow Server Response",
+            description="Response time > 2000ms",
+            page_url="https://doxarank.com/slow"
+        )
+        res_perf = service.investigate(
+            opportunity_type="TECHNICAL_SEO_ISSUE",
+            target_url="https://doxarank.com/slow"
+        )
+        self.assertEqual(res_perf.root_cause_category, RootCauseCategory.PERFORMANCE.value)
+        self.assertEqual(res_perf.recommended_action["action_type"], InvestigationActionType.INVESTIGATE_PERFORMANCE.value)
+
+        # Broken link root cause
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="broken_internal_link",
+            severity=IssueSeverity.CRITICAL,
+            title="Broken Internal Link",
+            description="404 link found",
+            page_url="https://doxarank.com/broken"
+        )
+        res_broken = service.investigate(
+            opportunity_type="RANKING_TECHNICAL_DECAY",
+            target_url="https://doxarank.com/broken"
+        )
+        self.assertEqual(res_broken.root_cause_category, RootCauseCategory.TECHNICAL_SEO.value)
+        self.assertEqual(res_broken.recommended_action["action_type"], InvestigationActionType.FIX_BROKEN_LINK.value)
+        self.assertEqual(res_broken.risk_level, RiskLevel.HIGH.value)
+
+    def test_event_emission_lifecycle(self):
+        """8. Verifies emission of all 5 strongly-typed investigation lifecycle events."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_image_alt",
+            severity=IssueSeverity.NOTICE,
+            title="Missing Image Alt",
+            description="Image missing alt text",
+            page_url="https://doxarank.com/gallery"
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        service.investigate(
+            opportunity_type="ON_PAGE_SEO",
+            target_url="https://doxarank.com/gallery",
+            run_id=555
+        )
+
+        events = self.publisher.get_events(run_id=555)
+        event_types = [e.event_type for e in events]
+
+        self.assertIn(AgentEventType.SEO_INVESTIGATION_STARTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_INVESTIGATION_EVIDENCE_COLLECTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_INVESTIGATION_ROOT_CAUSE_IDENTIFIED.value, event_types)
+        self.assertIn(AgentEventType.SEO_INVESTIGATION_RECOMMENDATION_GENERATED.value, event_types)
+        self.assertIn(AgentEventType.SEO_INVESTIGATION_COMPLETED.value, event_types)
+
+    def test_tenant_isolation_security(self):
+        """9. Strict multi-tenant isolation prevents leaking or querying other project data."""
+        other_audit = SiteAudit.objects.create(project=self.other_project, status=AuditStatus.COMPLETED, score=40)
+        AuditIssue.objects.create(
+            audit=other_audit,
+            issue_type="broken_link",
+            severity=IssueSeverity.CRITICAL,
+            title="Secret Competitor Bug",
+            description="Critical vulnerability in competitor site",
+            page_url="https://other.com/secret"
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        res = service.investigate(
+            opportunity_type="RANKING_TECHNICAL_DECAY",
+            target_url="https://other.com/secret"
+        )
+
+        # Must not see other project's audit issues
+        self.assertEqual(len(res.supporting_audit_issues), 0)
+        self.assertEqual(res.confidence_level, InvestigationConfidence.LOW.value)
+
+    def test_zero_credential_leakage(self):
+        """10. Ensures no OAuth tokens or client secrets leak into result dictionaries or events."""
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://doxarank.com",
+            is_connected=True,
+            encrypted_refresh_token="enc_refresh_secret_456"
+        )
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        res = service.investigate(
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://doxarank.com",
+            run_id=777
+        )
+
+        res_dict = res.to_dict()
+        res_str = str(res_dict)
+        self.assertNotIn("enc_token_secret_123", res_str)
+        self.assertNotIn("enc_refresh_secret_456", res_str)
+        self.assertNotIn("access_token", res_str)
+        self.assertNotIn("client_secret", res_str)
+
+        for event in self.publisher.get_events(run_id=777):
+            ev_str = str(event.payload)
+            self.assertNotIn("enc_token_secret_123", ev_str)
+            self.assertNotIn("enc_refresh_secret_456", ev_str)
+
+
+class ToolRegistryInvestigationTests(TestCase):
+    """
+    Tests ToolRegistry integration for the 'investigate_seo_opportunity' tool (Phase 4.2.3.3).
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='tool_tester@doxarank.com',
+            password='Password123!',
+            first_name='Tool',
+            last_name='Tester'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Tool Test Project',
+            website_url='https://tooltest.com'
+        )
+        self.registry = create_default_tool_registry()
+
+    def test_tool_registration(self):
+        """1. investigate_seo_opportunity is registered in ToolRegistry."""
+        tool = self.registry.get("investigate_seo_opportunity")
+        self.assertIsNotNone(tool)
+        self.assertEqual(tool.name, "investigate_seo_opportunity")
+        self.assertEqual(tool.category, ToolCategory.READ_ONLY)
+        self.assertFalse(tool.requires_approval)
+        self.assertFalse(tool.is_mutating)
+
+    def test_schema_validation_required_parameters(self):
+        """2. Validates that opportunity_type is required."""
+        is_valid, err = self.registry.validate_arguments("investigate_seo_opportunity", {})
+        self.assertFalse(is_valid)
+        self.assertIn("Missing required parameter 'opportunity_type'", err)
+
+        is_valid_ok, err_ok = self.registry.validate_arguments(
+            "investigate_seo_opportunity",
+            {"opportunity_type": "LOW_CTR_HIGH_IMPRESSIONS"}
+        )
+        self.assertTrue(is_valid_ok)
+        self.assertIsNone(err_ok)
+
+    def test_tool_execution_success(self):
+        """3. ToolRegistry executes investigate_seo_opportunity and returns structured dict."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.WARNING,
+            title="Missing Title",
+            description="Page is missing a title tag",
+            page_url="https://tooltest.com/about"
+        )
+
+        res = self.registry.execute(
+            project=self.project,
+            tool_name="investigate_seo_opportunity",
+            arguments={
+                "opportunity_type": "LOW_CTR_HIGH_IMPRESSIONS",
+                "target_url": "https://tooltest.com/about"
+            }
+        )
+
+        self.assertTrue(res["success"])
+        self.assertEqual(res["tool_name"], "investigate_seo_opportunity")
+        self.assertEqual(res["data"]["status"], "COMPLETED")
+        self.assertIn("investigation_id", res["data"])
+        self.assertIn("observed_facts", res["data"])
+        self.assertIn("inferences", res["data"])
+        self.assertIn("root_cause_category", res["data"])
+        self.assertIn("confidence_score", res["data"])
+        self.assertIn("recommended_action", res["data"])
+
+
+class ReActInvestigationAgentTests(TestCase):
+    """
+    Tests end-to-end autonomous reasoning loop using ReAct AgentOrchestrator and MockAIProvider.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='react_investigator@doxarank.com',
+            password='Password123!',
+            first_name='ReAct',
+            last_name='Investigator'
+        )
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Agent Test Project',
+            website_url='https://agenttest.com'
+        )
+        self.registry = create_default_tool_registry()
+
+    def test_investigation_goal_execution_loop(self):
+        """1. Agent executes autonomous investigation workflow end-to-end."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=75)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_meta_description",
+            severity=IssueSeverity.WARNING,
+            page_url="https://agenttest.com/products"
+        )
+
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://agenttest.com",
+            is_connected=True
+        )
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            page="https://agenttest.com/products",
+            query="best cloud products",
+            impressions=2100,
+            clicks=18,
+            ctr=0.0085,
+            position=5.8,
+            date=timezone.now().date()
+        )
+
+        orchestrator = AgentOrchestrator(
+            project=self.project,
+            user=self.user,
+            provider=MockAIProvider(),
+            registry=self.registry,
+            max_steps=6
+        )
+
+        run = orchestrator.start_run(goal="Investigate SEO opportunity and determine root cause for low CTR on landing pages")
+
+        self.assertEqual(run.status, AgentRunStatus.COMPLETED)
+        self.assertIn("Autonomous SEO Investigation & Decision Complete", run.summary)
+        self.assertIn("Observed Facts", run.summary)
+        self.assertIn("Inferences", run.summary)
+        self.assertIn("Recommended Action", run.summary)
+
+        tool_calls = AgentToolCall.objects.filter(step__run=run)
+        called_tools = [tc.tool_name for tc in tool_calls]
+        self.assertIn("investigate_seo_opportunity", called_tools)

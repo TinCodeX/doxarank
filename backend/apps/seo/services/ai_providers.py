@@ -195,6 +195,7 @@ Your goal is to inspect SEO signals, analyze Google Search Console performance, 
 
 CORE TOOLS REFERENCE:
 - analyze_seo_opportunities: Correlate Google Search Console metrics with live website audit diagnostics to discover high-leverage SEO opportunities (low CTR with on-page defects, ranking decay with technical crawl blockers, high-value page vulnerabilities, query-to-page gaps).
+- investigate_seo_opportunity: Autonomously investigate a specific SEO opportunity by gathering multi-source evidence from GSC and SiteAudit, classifying root causes, scoring confidence, and producing structured recommendations without destructive mutations.
 - trigger_site_audit: Trigger an asynchronous website crawl and technical SEO audit for the current project.
 - get_site_audit_summary: Retrieve a compact summary of the latest technical SEO site audit, including health score and issue breakdown.
 - get_audit_issues: Retrieve site audit technical SEO issues, warnings, and crawl diagnostics with optional severity/rule_code filtering.
@@ -1332,7 +1333,10 @@ class MockAIProvider(BaseAIProvider):
         rec_id = context.get('target_recommendation_id')
         brief_id = context.get('target_brief_id')
         draft_id = context.get('target_draft_id')
-        top_query_extracted = None
+        top_opportunity_type = None
+        top_target_url = None
+        top_target_query = None
+        investigation_result = None
 
         for h in history:
             t_name = h.get('tool_name')
@@ -1348,9 +1352,73 @@ class MockAIProvider(BaseAIProvider):
                     top_query_extracted = t_out['top_queries'][0].get('query')
                 elif t_name == 'gsc_search_analytics' and t_out.get('rows'):
                     top_query_extracted = t_out['rows'][0].get('query')
+                elif t_name == 'analyze_seo_opportunities' and t_out.get('opportunities'):
+                    first_opp = t_out['opportunities'][0]
+                    top_opportunity_type = first_opp.get('type')
+                    top_target_url = first_opp.get('target_url')
+                    top_target_query = first_opp.get('target_query')
+                elif t_name == 'investigate_seo_opportunity':
+                    investigation_result = t_out
 
         # ---------------------------------------------------------------------
-        # BRANCH 0: Cross-Source SEO Intelligence & GSC + Audit Correlation
+        # BRANCH 0: Autonomous SEO Investigation & Decision Loop
+        # ---------------------------------------------------------------------
+        is_investigation_goal = any(term in goal for term in [
+            'investigate', 'investigation', 'root cause', 'root-cause',
+            'diagnose', 'deep dive', 'deep-dive', 'decision loop'
+        ])
+        if is_investigation_goal and 'investigate_seo_opportunity' in available_tools:
+            # Step 1: Discover opportunities if not already analyzed and no specific opportunity provided
+            if 'analyze_seo_opportunities' in available_tools and 'analyze_seo_opportunities' not in tool_calls and not top_opportunity_type:
+                return {
+                    "action": "tool",
+                    "tool_name": "analyze_seo_opportunities",
+                    "arguments": {"min_impressions": 20, "limit": 5},
+                    "reason": "Analyze and correlate GSC performance with website audit diagnostics to discover candidate SEO opportunities for investigation."
+                }
+
+            # Step 2: Deep investigate the prioritized opportunity
+            if 'investigate_seo_opportunity' not in tool_calls:
+                opp_type = top_opportunity_type or "LOW_CTR_HIGH_IMPRESSIONS"
+                args = {"opportunity_type": opp_type}
+                if top_target_url:
+                    args["target_url"] = top_target_url
+                if top_target_query:
+                    args["target_query"] = top_target_query
+                return {
+                    "action": "tool",
+                    "tool_name": "investigate_seo_opportunity",
+                    "arguments": args,
+                    "reason": f"Perform deep multi-source investigation on opportunity '{opp_type}' to separate facts from inferences and determine root cause."
+                }
+
+            # Step 3: Reason over investigation evidence and formulate structured decision summary
+            rec = (investigation_result or {}).get('recommended_action', {})
+            facts_list = (investigation_result or {}).get('observed_facts', ["Correlated GSC performance and audit issues."])
+            inferences_list = (investigation_result or {}).get('inferences', ["Identified root cause and performance bottleneck."])
+            root_cause = (investigation_result or {}).get('root_cause_category', 'ON_PAGE_SEO')
+            conf_level = (investigation_result or {}).get('confidence_level', 'HIGH')
+
+            return {
+                "action": "finish",
+                "summary": (
+                    f"### Autonomous SEO Investigation & Decision Complete\n\n"
+                    f"**Target Opportunity**: {top_opportunity_type or 'LOW_CTR_HIGH_IMPRESSIONS'} | "
+                    f"**Confidence**: {conf_level} | **Root Cause**: {root_cause}\n\n"
+                    "#### Observed Facts:\n" +
+                    "\n".join([f"- {f}" for f in facts_list[:3]]) + "\n\n"
+                    "#### Inferences:\n" +
+                    "\n".join([f"- {inf}" for inf in inferences_list[:3]]) + "\n\n"
+                    "#### Recommended Action (Human Approval Required):\n"
+                    f"- **Action Type**: {rec.get('action_type', 'OPTIMIZE_META_DESCRIPTION')}\n"
+                    f"- **Description**: {rec.get('description', 'Optimize metadata')}\n"
+                    f"- **Expected Benefit**: {rec.get('expected_benefit', 'Increases organic click-through rate')}\n"
+                    f"- **Requires Human Approval**: {rec.get('requires_human_approval', True)}"
+                )
+            }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 0b: Cross-Source SEO Intelligence Correlation
         # ---------------------------------------------------------------------
         is_correlation_goal = any(term in goal for term in [
             'correlate', 'correlation', 'cross-source', 'gsc + audit', 'gsc and audit',
@@ -1363,6 +1431,17 @@ class MockAIProvider(BaseAIProvider):
                     "tool_name": "analyze_seo_opportunities",
                     "arguments": {"min_impressions": 20, "limit": 5},
                     "reason": "Execute cross-source deterministic correlation between GSC performance metrics and live site audit issues to discover high-leverage SEO opportunities."
+                }
+            if 'investigate_seo_opportunity' not in tool_calls and 'investigate_seo_opportunity' in available_tools and top_opportunity_type:
+                return {
+                    "action": "tool",
+                    "tool_name": "investigate_seo_opportunity",
+                    "arguments": {
+                        "opportunity_type": top_opportunity_type,
+                        "target_url": top_target_url,
+                        "target_query": top_target_query
+                    },
+                    "reason": f"Investigate top correlated opportunity '{top_opportunity_type}' to determine root cause and generate structured recommendations."
                 }
             if 'get_audit_issues' not in tool_calls and 'get_audit_issues' in available_tools:
                 return {

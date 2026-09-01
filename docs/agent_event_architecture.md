@@ -301,3 +301,102 @@ Phase 4.2.3.2 introduces cross-source deterministic correlation between Google S
 - `seo.evidence.collected`: Emitted after aggregating GSC and SiteAudit evidence metrics.
 - `seo.opportunity.detected`: Emitted for each prioritized candidate opportunity.
 - `seo.intelligence.completed`: Emitted upon pipeline completion with summary counts.
+
+---
+
+## 11. Autonomous SEO Investigation & Decision Loop (Phase 4.2.3.3)
+
+Phase 4.2.3.3 upgrades DoxaRank from passive opportunity detection to autonomous, evidence-grounded investigation and structured decision formulation without performing destructive website mutations.
+
+```text
+                     SEO Opportunity Detected
+                                │
+                                ▼
+                   Create Investigation Context
+                                │
+                                ▼
+                        Collect Evidence
+                  (GSC Metrics + SiteAudit Issues)
+                                │
+                                ▼
+                        Correlate Evidence
+                                │
+                                ▼
+                       Evaluate Confidence
+                      (Deterministic 0.0 - 1.0)
+                                │
+                                ▼
+                      Determine Root Cause
+                 (Deterministic Classification)
+                                │
+                                ▼
+                   Generate Recommended Action
+                                │
+                                ▼
+                       Risk Classification
+                     (HIGH / MEDIUM / LOW)
+                                │
+                                ▼
+                   Human Approval Boundary
+             (requires_human_approval = True)
+```
+
+### Evidence Hierarchy
+
+The investigation engine strictly separates factual observation from reasoned inference:
+
+1. **Observed Facts**: Empirical measurements retrieved directly from Google Search Console (impressions, clicks, CTR, position) and Site Audit diagnostics (HTTP status codes, title/meta length, canonical tags, heading counts, broken links).
+2. **Inferences**: Logical deductions reasoned from observed empirical facts (e.g. "High visibility with low CTR indicates snippet conversion failure rather than ranking deficit").
+3. **Root Causes**: Classification of primary bottleneck into deterministic categories (`CONTENT`, `ON_PAGE_SEO`, `TECHNICAL_SEO`, `CTR`, `INDEXING`, `CANONICAL`, `PERFORMANCE`, `INTERNAL_LINKING`, `SEARCH_INTENT`, `UNKNOWN`) accompanied by clear explanatory justification.
+4. **Recommendations**: Concrete action plans with expected benefits and risk ratings.
+
+### Deterministic Confidence Scoring Methodology
+
+Confidence is computed deterministically based on multi-source evidence verification:
+
+* **Direct GSC metrics matching target URL/query**: +0.30 (high-volume data adds +0.05)
+* **Direct SiteAudit issues matching target URL**: +0.25 (audit available +0.10, matching issues +0.15)
+* **Direct URL path match verified**: +0.10
+* **Query-to-page relationship confirmed in GSC**: +0.10
+* **Confidence Levels**:
+  * `HIGH`: Score $\ge 0.75$
+  * `MEDIUM`: $0.45 \le \text{Score} < 0.75$
+  * `LOW`: Score $< 0.45$
+
+### Impact, Effort & Risk Classification
+
+* **Impact**:
+  * `HIGH`: Impressions $\ge 500$, position $\le 10$, clicks $\ge 20$, or critical crawl issues.
+  * `MEDIUM`: Impressions $\ge 50$, position $\le 20$, or warning audit issues.
+  * `LOW`: Impressions $< 50$ or notice/info issues.
+* **Effort**:
+  * `LOW`: Title, meta description, missing H1, or image alt optimizations.
+  * `MEDIUM`: Content depth expansion, search intent rewrite, internal linking.
+  * `HIGH`: Canonical structure fixes, redirect loop resolution, Core Web Vitals latency.
+* **Risk**:
+  * `LOW`: Non-destructive snippet updates (title, meta description, alt text).
+  * `MEDIUM`: On-page content layout and heading reorganizations.
+  * `HIGH`: Canonical tags, HTTP redirects, and URL slug modifications.
+
+### Human-in-the-Loop Governance Boundary
+
+All recommendations that could modify website assets explicitly declare:
+```json
+{
+  "requires_human_approval": true
+}
+```
+No autonomous website mutation is performed during investigation. Non-mutating recommendations (`MONITOR`, `NO_ACTION`) declare `requires_human_approval = false`.
+
+### Registered Investigation Tool:
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `investigate_seo_opportunity` | `READ_ONLY` | No | No | Autonomously investigate a specific SEO opportunity by gathering multi-source evidence from Google Search Console and Site Audit diagnostics, classifying root cause, evaluating confidence, and generating structured recommended actions. |
+
+### Real-Time SEO Investigation Lifecycle Events:
+- `seo.investigation.started`: Emitted when an opportunity investigation begins.
+- `seo.investigation.evidence_collected`: Emitted after aggregating targeted GSC metrics and matching audit issues.
+- `seo.investigation.root_cause_identified`: Emitted upon deterministic root-cause classification.
+- `seo.investigation.recommendation_generated`: Emitted when recommended action and risk levels are computed.
+- `seo.investigation.completed`: Emitted with final investigation status and confidence score.

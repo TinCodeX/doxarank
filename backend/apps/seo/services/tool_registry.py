@@ -778,6 +778,30 @@ def handle_analyze_seo_opportunities(project: Project, args: Dict[str, Any]) -> 
     )
 
 
+def handle_investigate_seo_opportunity(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Autonomously investigate a specific SEO opportunity by collecting multi-source empirical evidence
+    from Search Console and Site Audit diagnostics, classifying root causes, and formulating structured recommendations.
+    """
+    from apps.seo.services.seo_investigation import SEOInvestigationService
+
+    opportunity_type = args.get("opportunity_type", "")
+    target_url = args.get("target_url")
+    target_query = args.get("target_query")
+    audit_id = args.get("audit_id")
+    date_range_days = args.get("date_range_days", 28)
+
+    service = SEOInvestigationService(project=project)
+    result = service.investigate(
+        opportunity_type=opportunity_type,
+        target_url=target_url,
+        target_query=target_query,
+        audit_id=audit_id,
+        date_range_days=date_range_days
+    )
+    return result.to_dict()
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1009,7 +1033,43 @@ def create_default_tool_registry() -> ToolRegistry:
         handler=handle_analyze_seo_opportunities
     ))
 
-    # 10. run_intelligence_analysis
+    # 10. investigate_seo_opportunity (Autonomous Deep Investigation & Root Cause Engine)
+    registry.register(AgentToolDefinition(
+        name="investigate_seo_opportunity",
+        description="Autonomously investigate a specific SEO opportunity by gathering multi-source evidence from Google Search Console and Site Audit diagnostics, classifying root cause, evaluating confidence, and generating structured recommended actions.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "opportunity_type": {
+                    "type": "string",
+                    "description": "Type identifier of the SEO opportunity to investigate (e.g. 'LOW_CTR_HIGH_IMPRESSIONS', 'RANKING_TECHNICAL_DECAY', 'HIGH_VALUE_PAGE_MAINTENANCE', 'QUERY_PAGE_OPPORTUNITY')."
+                },
+                "target_url": {
+                    "type": "string",
+                    "description": "Optional specific landing page URL to investigate."
+                },
+                "target_query": {
+                    "type": "string",
+                    "description": "Optional specific search query phrase associated with the opportunity."
+                },
+                "audit_id": {
+                    "type": "integer",
+                    "description": "Optional specific SiteAudit ID to evaluate."
+                },
+                "date_range_days": {
+                    "type": "integer",
+                    "description": "Number of days of Search Console metrics to analyze (default 28)."
+                }
+            },
+            "required": ["opportunity_type"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_investigate_seo_opportunity
+    ))
+
+    # 11. run_intelligence_analysis
     registry.register(AgentToolDefinition(
         name="run_intelligence_analysis",
         description="Run the deterministic SEO intelligence heuristic engine to analyze ranking movements, CTR anomalies, and audit issues, generating updated SEOInsight records.",

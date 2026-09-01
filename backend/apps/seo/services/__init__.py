@@ -23,6 +23,17 @@ from .live_site_crawler import (
     LiveSiteCrawlerService, CrawlResult, PageCrawlResult,
     CrawlError, CrawlMetadata
 )
+from .seo_investigation import (
+    SEOInvestigationService,
+    SEOInvestigationResult,
+    InvestigationStatus,
+    InvestigationConfidence,
+    RootCauseCategory,
+    ImpactEstimate,
+    EffortEstimate,
+    RiskLevel,
+    InvestigationActionType
+)
 from .seo_audit_engine import (
     SEOAuditEngine, AuditFinding, AuditResult,
     MISSING_TITLE, LONG_TITLE, SHORT_TITLE,
@@ -35,6 +46,15 @@ from .seo_audit_engine import (
 )
 
 __all__ = [
+    'SEOInvestigationService',
+    'SEOInvestigationResult',
+    'InvestigationStatus',
+    'InvestigationConfidence',
+    'RootCauseCategory',
+    'ImpactEstimate',
+    'EffortEstimate',
+    'RiskLevel',
+    'InvestigationActionType',
     'GoogleSearchConsoleService',
     'MockGoogleSearchConsoleClient',
     'SEOIntelligenceService',
