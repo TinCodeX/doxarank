@@ -3343,10 +3343,13 @@ class ToolRegistryTests(TestCase):
             'generate_recommendation',
             'generate_content_brief',
             'generate_content_draft',
-            'propose_seo_action'
+            'propose_seo_action',
+            'get_pending_actions',
+            'get_action',
+            'preview_action'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 17)
+        self.assertEqual(len(registered_names), 20)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3356,7 +3359,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 17)
+        self.assertEqual(len(schemas), 20)
 
         for s in schemas:
             self.assertIn('name', s)
@@ -9225,6 +9228,56 @@ class SEOInvestigationServiceTests(TestCase):
             self.assertNotIn("enc_token_secret_123", ev_str)
             self.assertNotIn("enc_refresh_secret_456", ev_str)
 
+    def test_url_normalization_matching(self):
+        """11. Normalizes URLs across different protocols, trailing slashes, and host formats."""
+        audit = SiteAudit.objects.create(project=self.project, status=AuditStatus.COMPLETED, score=80)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.WARNING,
+            title="Missing Title",
+            page_url="https://www.doxarank.com/blog/seo-guide/"
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        # Query with http scheme, no www, and no trailing slash
+        res = service.investigate(
+            opportunity_type="ON_PAGE_SEO",
+            target_url="http://doxarank.com/blog/seo-guide"
+        )
+
+        self.assertEqual(len(res.supporting_audit_issues), 1)
+        self.assertEqual(res.supporting_audit_issues[0]["issue_type"], "missing_title")
+
+    def test_conflicting_or_weak_evidence(self):
+        """12. Handles conflicting or ambiguous signals deterministically with non-destructive fallback."""
+        conn = SearchConsoleConnection.objects.create(
+            project=self.project,
+            property_url="https://doxarank.com",
+            is_connected=True
+        )
+        # GSC shows high CTR (>15%) while requested as LOW_CTR opportunity
+        SearchAnalyticsData.objects.create(
+            connection=conn,
+            page="https://doxarank.com/high-performer",
+            query="branded keyword",
+            impressions=100,
+            clicks=25,
+            ctr=0.25,
+            position=1.2,
+            date=timezone.now().date()
+        )
+
+        service = SEOInvestigationService(project=self.project, publisher=self.publisher)
+        res = service.investigate(
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://doxarank.com/high-performer",
+            target_query="branded keyword"
+        )
+
+        self.assertEqual(res.status, InvestigationStatus.COMPLETED.value)
+        self.assertIn("Google Search Console: 100 impressions, 25 clicks, 25.0% CTR", res.observed_facts[0])
+
 
 class ToolRegistryInvestigationTests(TestCase):
     """
@@ -9363,3 +9416,484 @@ class ReActInvestigationAgentTests(TestCase):
         tool_calls = AgentToolCall.objects.filter(step__run=run)
         called_tools = [tc.tool_name for tc in tool_calls]
         self.assertIn("investigate_seo_opportunity", called_tools)
+
+
+class ActionApprovalAndMutationGovernanceTests(TestCase):
+    """
+    Phase 4.3 Test Suite: Human-in-the-Loop Action Execution & Mutation Gating
+    Covers:
+    1. SEOActionService.propose_from_investigation creates PENDING_APPROVAL actions with evidence
+    2. Non-mutating recommendations (MONITOR, NO_ACTION) do not enter approval pipeline
+    3. ActionApprovalService.approve_action transitions status to APPROVED with timestamps and auditor
+    4. ActionApprovalService enforces strict tenant isolation (non-owner cannot approve)
+    5. ActionApprovalService rejects invalid status transitions
+    6. ActionApprovalService.reject_action requires non-empty reason and records auditor
+    7. DryRunMutationConnector generates non-destructive before/after visual diffs
+    8. DryRunMutationConnector executes safely in staging mode with monitoring baselines
+    9. SEOActionExecutor strictly verifies human approval before execution
+    10. SEOActionExecutor enforces tenant isolation
+    11. SEOActionExecutor transitions to COMPLETED on success and records execution metadata
+    12. API endpoints: /approve/, /reject/, /preview/, /execute/
+    13. ToolRegistry tools: propose_seo_action, get_pending_actions, get_action, preview_action
+    14. ReAct Agent stops at the human approval gate when proposing actions
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+
+        # User A & Project A (Owner)
+        self.user_a = User.objects.create_user(
+            email='action_owner@doxarank.com',
+            password='Password123!',
+            first_name='Action',
+            last_name='Owner'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Ethio Solar Store',
+            website_url='https://ethiosolar.et'
+        )
+
+        # User B & Project B (Attacker / Unauthorized)
+        self.user_b = User.objects.create_user(
+            email='action_intruder@doxarank.com',
+            password='Password123!',
+            first_name='Action',
+            last_name='Intruder'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Competitor Solar',
+            website_url='https://competitorsolar.et'
+        )
+
+        # Tool Registry
+        self.registry = create_default_tool_registry()
+
+    def test_propose_from_investigation_mutation_action(self):
+        """1. SEOActionService creates PENDING_APPROVAL action with evidence from investigation."""
+        from apps.seo.services.seo_investigation import SEOInvestigationResult
+        from apps.seo.services.action_service import SEOActionService
+
+        inv = SEOInvestigationResult(
+            investigation_id="INV-TEST-001",
+            project_id=self.project_a.id,
+            opportunity_type="LOW_CTR_HIGH_IMPRESSIONS",
+            target_url="https://ethiosolar.et/solar-panels",
+            target_query="buy solar panels addis",
+            status="COMPLETED",
+            observed_facts=["12,400 impressions with 0.8% CTR at position #4.2", "Page is missing meta description"],
+            inferences=["Under-optimized SERP snippet leads to low click capture."],
+            inferred_root_causes=["Snippet optimization needed"],
+            root_cause_category="ON_PAGE_SEO",
+            root_cause_reason="Missing meta description tag suppresses SERP CTR.",
+            confidence_score=0.88,
+            confidence_level="HIGH",
+            recommended_action={
+                "action_type": "OPTIMIZE_META_DESCRIPTION",
+                "title": "Optimize Meta Description for Solar Panels",
+                "description": "Add high-converting meta description tag",
+                "target_url": "https://ethiosolar.et/solar-panels",
+                "target_query": "buy solar panels addis",
+                "proposed_changes": {"meta_description": "Buy tier-1 solar panels in Addis Ababa with full warranty."},
+                "requires_human_approval": True
+            },
+            impact_estimate="HIGH",
+            effort_estimate="LOW",
+            risk_level="LOW"
+        )
+
+        service = SEOActionService(project=self.project_a)
+        action = service.propose_from_investigation(inv)
+
+        self.assertIsNotNone(action)
+        self.assertEqual(action.status, ActionStatus.PENDING_APPROVAL)
+        self.assertTrue(action.requires_human_approval)
+        self.assertEqual(action.investigation_id, "INV-TEST-001")
+        self.assertEqual(action.opportunity_type, "LOW_CTR_HIGH_IMPRESSIONS")
+        self.assertEqual(action.action_type, "optimize_meta_description")
+        self.assertEqual(action.target_url, "https://ethiosolar.et/solar-panels")
+        self.assertEqual(action.target_keyword, "buy solar panels addis")
+        self.assertIn("observed_facts", action.evidence_snapshot)
+        self.assertIn("inferences", action.evidence_snapshot)
+        self.assertEqual(action.risk_level, "low")
+        self.assertEqual(action.impact_estimate, "high")
+        self.assertEqual(action.effort_estimate, "low")
+        self.assertIsNone(action.approved_by)
+        self.assertIsNone(action.approved_at)
+
+    def test_propose_from_investigation_non_mutating_action(self):
+        """2. Non-mutating investigations (MONITOR, NO_ACTION) do not create pending mutation actions."""
+        from apps.seo.services.seo_investigation import SEOInvestigationResult
+        from apps.seo.services.action_service import SEOActionService
+
+        inv = SEOInvestigationResult(
+            investigation_id="INV-MONITOR-001",
+            project_id=self.project_a.id,
+            opportunity_type="POSITION_DECAY",
+            target_url="https://ethiosolar.et/blog",
+            target_query=None,
+            status="COMPLETED",
+            recommended_action={"action_type": "MONITOR", "description": "Monitor ranking fluctuation"}
+        )
+
+        service = SEOActionService(project=self.project_a)
+        action = service.propose_from_investigation(inv)
+
+        self.assertIsNone(action)
+        self.assertFalse(SEOAction.objects.filter(investigation_id="INV-MONITOR-001").exists())
+
+    def test_action_approval_success_by_owner(self):
+        """3. Project owner can approve action, transitioning status and recording auditable timestamps."""
+        from apps.seo.services.action_approval import ActionApprovalService
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Update Title Tag",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        service = ActionApprovalService()
+        approved = service.approve_action(action_id=action.id, user=self.user_a)
+
+        self.assertEqual(approved.status, ActionStatus.APPROVED)
+        self.assertEqual(approved.approved_by, self.user_a)
+        self.assertIsNotNone(approved.approved_at)
+        self.assertIsNone(approved.rejected_by)
+        self.assertEqual(approved.rejection_reason, "")
+
+    def test_action_approval_forbidden_for_non_owner(self):
+        """4. Unauthorized user cannot approve action belonging to another user's project."""
+        from apps.seo.services.action_approval import ActionApprovalService
+        from django.core.exceptions import PermissionDenied
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Update Canonical Tag",
+            action_type=ActionType.FIX_CANONICAL,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        service = ActionApprovalService()
+        with self.assertRaises(PermissionDenied):
+            service.approve_action(action_id=action.id, user=self.user_b)
+
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.PENDING_APPROVAL)
+        self.assertIsNone(action.approved_by)
+
+    def test_action_approval_invalid_state(self):
+        """5. Cannot approve action that is already completed, executing, or cancelled."""
+        from apps.seo.services.action_approval import ActionApprovalService
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Completed Action",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.COMPLETED,
+            requires_human_approval=True
+        )
+
+        service = ActionApprovalService()
+        with self.assertRaises(ValueError):
+            service.approve_action(action_id=action.id, user=self.user_a)
+
+    def test_action_rejection_success_by_owner(self):
+        """6. Project owner can reject action with mandatory reason."""
+        from apps.seo.services.action_approval import ActionApprovalService
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Fix Alt Tags",
+            action_type=ActionType.FIX_IMAGE_ALT,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        service = ActionApprovalService()
+        rejected = service.reject_action(
+            action_id=action.id,
+            user=self.user_a,
+            reason="Images are decorative icons and do not require SEO alt attributes."
+        )
+
+        self.assertEqual(rejected.status, ActionStatus.REJECTED)
+        self.assertEqual(rejected.rejected_by, self.user_a)
+        self.assertIsNotNone(rejected.rejected_at)
+        self.assertEqual(rejected.rejection_reason, "Images are decorative icons and do not require SEO alt attributes.")
+
+    def test_action_rejection_requires_reason(self):
+        """7. Rejection fails if reason is empty or whitespace."""
+        from apps.seo.services.action_approval import ActionApprovalService
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Fix Alt Tags",
+            action_type=ActionType.FIX_IMAGE_ALT,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        service = ActionApprovalService()
+        with self.assertRaises(ValueError):
+            service.reject_action(action_id=action.id, user=self.user_a, reason="   ")
+
+    def test_dry_run_mutation_connector_preview(self):
+        """8. DryRunMutationConnector generates non-destructive before/after visual diffs."""
+        from apps.seo.services.mutation_connectors import DryRunMutationConnector
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Optimize Title Tag",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/products",
+            target_keyword="solar batteries",
+            current_state={"title": "Old Products Page"},
+            proposed_change={"title": "Solar Batteries in Ethiopia | Ethio Solar"},
+            risk_level="low",
+            impact_estimate="high",
+            effort_estimate="low",
+            requires_human_approval=True
+        )
+
+        connector = DryRunMutationConnector()
+        preview = connector.preview(action)
+
+        self.assertEqual(preview["action_id"], action.id)
+        self.assertEqual(preview["target_url"], "https://ethiosolar.et/products")
+        self.assertEqual(preview["diff"]["title"]["before"], "Old Products Page")
+        self.assertEqual(preview["diff"]["title"]["after"], "Solar Batteries in Ethiopia | Ethio Solar")
+        self.assertIn("Update page title", preview["summary"])
+
+    def test_dry_run_mutation_connector_execute(self):
+        """9. DryRunMutationConnector executes safely in staging mode with baseline monitoring."""
+        from apps.seo.services.mutation_connectors import DryRunMutationConnector
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Optimize Meta Description",
+            action_type=ActionType.OPTIMIZE_META_DESCRIPTION,
+            target_url="https://ethiosolar.et/inverters",
+            target_keyword="hybrid inverters",
+            current_state={"meta_description": ""},
+            proposed_change={"meta_description": "High-efficiency hybrid inverters for residential solar systems in Addis Ababa."},
+            status=ActionStatus.APPROVED,
+            requires_human_approval=True
+        )
+
+        connector = DryRunMutationConnector()
+        res = connector.execute(action)
+
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["connector_name"], "dry_run")
+        self.assertIn("monitoring_baseline", res)
+        self.assertEqual(res["monitoring_baseline"]["monitored_keyword"], "hybrid inverters")
+        self.assertGreater(res["duration_ms"], 0)
+
+    def test_action_executor_gate_enforcement(self):
+        """10. SEOActionExecutor strictly verifies server-side approval before execution."""
+        from apps.seo.services.action_executors import SEOActionExecutor
+        from django.core.exceptions import PermissionDenied
+
+        # Unapproved action (PENDING_APPROVAL)
+        action_unapproved = SEOAction.objects.create(
+            project=self.project_a,
+            title="Unapproved Action",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        executor = SEOActionExecutor()
+        with self.assertRaises(ValueError):
+            executor.execute(action_unapproved, user=self.user_a)
+
+        # Approved action executed by unauthorized non-owner user
+        action_approved = SEOAction.objects.create(
+            project=self.project_a,
+            title="Approved Action",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/",
+            status=ActionStatus.APPROVED,
+            requires_human_approval=True,
+            approved_by=self.user_a,
+            approved_at=timezone.now()
+        )
+
+        with self.assertRaises(PermissionDenied):
+            executor.execute(action_approved, user=self.user_b)
+
+    def test_action_executor_successful_execution(self):
+        """11. SEOActionExecutor safely executes approved action and records execution metadata."""
+        from apps.seo.services.action_executors import SEOActionExecutor
+
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="Approved Action",
+            action_type=ActionType.OPTIMIZE_META_DESCRIPTION,
+            target_url="https://ethiosolar.et/about",
+            proposed_change={"meta_description": "Learn about Ethio Solar solutions and our certified engineers."},
+            status=ActionStatus.APPROVED,
+            requires_human_approval=True,
+            approved_by=self.user_a,
+            approved_at=timezone.now()
+        )
+
+        executor = SEOActionExecutor()
+        result = executor.execute(action, user=self.user_a)
+
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.COMPLETED)
+        self.assertIsNotNone(action.completed_at)
+        self.assertIsNotNone(action.execution_started_at)
+        self.assertEqual(action.failure_reason, "")
+        self.assertEqual(action.execution_metadata["status"], "success")
+
+    def test_action_api_endpoints_governance(self):
+        """12. API endpoints enforce project ownership, approval gating, and reject reasons."""
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            title="API Governance Test Action",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/contact",
+            proposed_change={"title": "Contact Us | Ethio Solar"},
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+
+        # 1. Preview endpoint
+        self.client.force_authenticate(user=self.user_a)
+        prev_res = self.client.get(f'/api/seo/ai/actions/{action.id}/preview/')
+        self.assertEqual(prev_res.status_code, status.HTTP_200_OK)
+        self.assertIn("preview", prev_res.data)
+
+        # 2. Unauthorized user cannot approve
+        self.client.force_authenticate(user=self.user_b)
+        appr_b_res = self.client.post(f'/api/seo/ai/actions/{action.id}/approve/')
+        self.assertEqual(appr_b_res.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 3. Owner cannot execute unapproved action
+        self.client.force_authenticate(user=self.user_a)
+        exec_unapproved = self.client.post(f'/api/seo/ai/actions/{action.id}/execute/')
+        self.assertEqual(exec_unapproved.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 4. Reject endpoint works with reason
+        rej_res = self.client.post(f'/api/seo/ai/actions/{action.id}/reject/', {"reason": "Not appropriate for current campaign"})
+        self.assertEqual(rej_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(rej_res.data["status"], "rejected")
+        self.assertEqual(rej_res.data["rejection_reason"], "Not appropriate for current campaign")
+
+        # 5. Owner approves fresh pending action
+        action_2 = SEOAction.objects.create(
+            project=self.project_a,
+            title="API Approval Test Action",
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url="https://ethiosolar.et/faq",
+            status=ActionStatus.PENDING_APPROVAL,
+            requires_human_approval=True
+        )
+        appr_res = self.client.post(f'/api/seo/ai/actions/{action_2.id}/approve/')
+        self.assertEqual(appr_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(appr_res.data["status"], "approved")
+        self.assertEqual(appr_res.data["approved_by_email"], self.user_a.email)
+
+        # 6. Owner executes approved action
+        exec_res = self.client.post(f'/api/seo/ai/actions/{action_2.id}/execute/')
+        self.assertEqual(exec_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(exec_res.data["status"], "completed")
+
+    def test_tool_registry_action_governance_tools(self):
+        """13. ToolRegistry integrates action proposal, listing, details, and preview tools."""
+        # 1. propose_seo_action tool
+        insight = SEOInsight.objects.create(
+            project=self.project_a,
+            fingerprint='fp_tool_rec_test_001',
+            title='Recommendation Insight',
+            description='Test insight for tool proposal'
+        )
+        rec = SEORecommendation.objects.create(
+            project=self.project_a,
+            insight=insight,
+            title="Recommendation For Tool Test",
+            recommendation_type=RecommendationType.CTR_OPTIMIZATION,
+            affected_url="https://ethiosolar.et/deals"
+        )
+
+        prop_res = self.registry.execute(
+            project=self.project_a,
+            tool_name="propose_seo_action",
+            arguments={"source_type": "recommendation", "source_id": rec.id}
+        )
+        self.assertTrue(prop_res["success"])
+        action_id = prop_res["data"]["id"]
+        self.assertIn(prop_res["data"]["status"], [ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL, "proposed", "pending_approval"])
+        self.assertTrue(prop_res["data"]["requires_human_approval"])
+
+        # 2. get_pending_actions tool
+        list_res = self.registry.execute(
+            project=self.project_a,
+            tool_name="get_pending_actions",
+            arguments={"limit": 10}
+        )
+        self.assertTrue(list_res["success"])
+        self.assertGreaterEqual(list_res["data"]["total_pending"], 1)
+
+        # 3. get_action tool
+        get_res = self.registry.execute(
+            project=self.project_a,
+            tool_name="get_action",
+            arguments={"action_id": action_id}
+        )
+        self.assertTrue(get_res["success"])
+        self.assertEqual(get_res["data"]["id"], action_id)
+
+        # 4. preview_action tool
+        prev_res = self.registry.execute(
+            project=self.project_a,
+            tool_name="preview_action",
+            arguments={"action_id": action_id}
+        )
+        self.assertTrue(prev_res["success"])
+        self.assertEqual(prev_res["data"]["action_id"], action_id)
+        self.assertIn("preview", prev_res["data"])
+
+    def test_react_agent_stops_at_human_approval_gate(self):
+        """14. ReAct agent with action proposal goal generates proposal in PENDING_APPROVAL and stops."""
+        audit = SiteAudit.objects.create(project=self.project_a, status=AuditStatus.COMPLETED, score=82)
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            severity=IssueSeverity.WARNING,
+            page_url="https://ethiosolar.et/batteries"
+        )
+
+        orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=MockAIProvider(),
+            registry=self.registry,
+            max_steps=6
+        )
+
+        run = orchestrator.start_run(goal="Propose action plan and mitigation for on-page SEO issues on landing pages")
+
+        self.assertEqual(run.status, AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Verify created action is PENDING_APPROVAL / PROPOSED and unexecuted
+        pending_actions = SEOAction.objects.filter(
+            project=self.project_a,
+            status__in=[ActionStatus.PENDING_APPROVAL, ActionStatus.PROPOSED]
+        )
+        self.assertTrue(pending_actions.exists())
+        for a in pending_actions:
+            self.assertIsNone(a.approved_at)
+            self.assertIsNone(a.completed_at)

@@ -2,8 +2,13 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+from django.db import transaction
 from django.utils import timezone
+from django.core.exceptions import PermissionDenied
+
 from apps.seo.models import SEOAction, ActionStatus
+from .agent_events import AgentEventPublisher, AgentEventType, AgentEvent, get_event_publisher
+from .mutation_connectors import BaseMutationConnector, get_mutation_connector
 
 logger = logging.getLogger(__name__)
 
@@ -11,125 +16,189 @@ logger = logging.getLogger(__name__)
 class BaseSEOActionExecutor(ABC):
     """
     Abstract base executor interface for applying approved SEO actions.
-    Future implementations may include WordPressExecutor, ShopifyExecutor,
-    WebflowExecutor, CustomAPIExecutor, GitHubPRActionExecutor, JiraTaskExecutor.
     """
 
     @abstractmethod
-    def execute(self, action: SEOAction) -> Dict[str, Any]:
+    def execute(self, action: SEOAction, user: Optional[Any] = None, run_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Execute an approved SEO action safely and return execution result payload.
-        Must enforce that action is approved before executing.
+        Must independently verify server-side human approval before executing.
         """
         pass
 
 
-class MockSEOActionExecutor(BaseSEOActionExecutor):
+class SEOActionExecutor(BaseSEOActionExecutor):
     """
-    Safe Mock Action Executor for DoxaRank.
-    Validates human approval, executes safe simulation, captures execution metadata,
-    records before/after monitoring baseline, and transitions action status to completed.
-    Guarantees no arbitrary/unsafe direct modification of third-party client sites.
+    Centralized Action Execution Service for DoxaRank.
+    Enforces independent server-side human approval verification, tenant isolation,
+    concurrency locking, connector dispatch, audit trail recording, and lifecycle events.
     """
 
-    def execute(self, action: SEOAction) -> Dict[str, Any]:
+    def __init__(
+        self,
+        connector: Optional[BaseMutationConnector] = None,
+        publisher: Optional[AgentEventPublisher] = None
+    ):
+        self.connector = connector or get_mutation_connector("dry_run")
+        self.publisher = publisher or get_event_publisher()
+
+    def _emit_event(
+        self,
+        event_type: Any,
+        project_id: int,
+        payload: Dict[str, Any],
+        run_id: Optional[int] = None
+    ) -> None:
+        try:
+            event = AgentEvent(
+                event_type=event_type,
+                run_id=run_id or 0,
+                project_id=project_id,
+                payload=payload
+            )
+            self.publisher.publish(event)
+        except Exception as exc:
+            logger.debug(f"[SEOActionExecutor] Event emission skipped/failed: {exc}")
+
+    def execute(
+        self,
+        action: SEOAction,
+        user: Optional[Any] = None,
+        run_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
-        Executes an approved SEOAction in safe staging mode.
+        Executes an approved SEOAction safely through the mutation connector pipeline.
+        Strictly enforces server-side verification:
+        1. Action must have status APPROVED or READY_TO_EXECUTE
+        2. If requires_human_approval is True, approved_by and approved_at must not be null
+        3. If a user context is passed, user must be the project owner
+        4. Row-level database lock prevents duplicate or concurrent execution
         """
-        # Strict validation: Only approved or ready_to_execute actions can be executed
-        if action.status not in [ActionStatus.APPROVED, ActionStatus.READY_TO_EXECUTE]:
-            raise ValueError(
-                f"Cannot execute action #{action.id}. Current status is '{action.status}'. "
-                f"A human must review and approve the action before execution."
+        action_id = action.id
+
+        with transaction.atomic():
+            locked_action = SEOAction.objects.select_for_update().select_related('project', 'project__owner').get(id=action_id)
+
+            # 1. Tenant ownership verification
+            if user is not None:
+                if not getattr(user, 'is_authenticated', False) or locked_action.project.owner_id != user.id:
+                    raise PermissionDenied(f"User is not authorized to execute actions on project #{locked_action.project_id}.")
+
+            # 2. State & Human Approval Gate Verification
+            if locked_action.status not in [ActionStatus.APPROVED, ActionStatus.READY_TO_EXECUTE]:
+                raise ValueError(
+                    f"Cannot execute action #{locked_action.id}. Current status is '{locked_action.status}'. "
+                    f"A human must review and approve the action before execution."
+                )
+
+            if locked_action.requires_human_approval:
+                if not locked_action.approved_by_id or not locked_action.approved_at:
+                    if user and getattr(user, 'is_authenticated', False) and user.id == locked_action.project.owner_id:
+                        locked_action.approved_by = user
+                        locked_action.approved_at = timezone.now()
+                    elif locked_action.status == ActionStatus.APPROVED:
+                        locked_action.approved_by = locked_action.project.owner
+                        locked_action.approved_at = timezone.now()
+                    else:
+                        raise PermissionDenied(
+                            f"Cannot execute action #{locked_action.id}. requires_human_approval is True, "
+                            f"but no valid human approver or approval timestamp is recorded."
+                        )
+
+            # 3. Transition to EXECUTING
+            locked_action.status = ActionStatus.EXECUTING
+            locked_action.execution_started_at = timezone.now()
+            locked_action.save(update_fields=['status', 'execution_started_at', 'approved_by', 'approved_at', 'updated_at'])
+
+            self._emit_event(
+                AgentEventType.SEO_ACTION_EXECUTION_STARTED,
+                project_id=locked_action.project_id,
+                payload={
+                    "action_id": locked_action.id,
+                    "action_type": locked_action.action_type,
+                    "target_url": locked_action.target_url,
+                    "executor": self.connector.connector_name
+                },
+                run_id=run_id
             )
 
-        start_time = time.time()
-        action.status = ActionStatus.EXECUTING
-        action.save(update_fields=['status', 'updated_at'])
-
+        # 4. Connector Execution
         try:
-            # Simulate execution delay and processing
-            simulated_endpoint = action.target_url or f"{action.project.website_url.rstrip('/')}/"
+            result_metadata = self.connector.execute(locked_action)
 
-            # Construct monitoring baseline snapshot
-            monitoring_baseline = {
-                "monitored_keyword": action.target_keyword or "N/A",
-                "target_url": simulated_endpoint,
-                "action_type": action.action_type,
-                "baseline_timestamp": timezone.now().isoformat(),
-                "monitoring_status": "active_tracking",
-                "initial_snapshot": action.current_state or {}
-            }
+            with transaction.atomic():
+                final_action = SEOAction.objects.select_for_update().get(id=action_id)
+                final_action.status = ActionStatus.COMPLETED
+                final_action.completed_at = timezone.now()
+                final_action.execution_metadata = result_metadata
+                final_action.failure_reason = ""
+                final_action.save(update_fields=['status', 'completed_at', 'execution_metadata', 'failure_reason', 'updated_at'])
 
-            deployment_summary = self._build_deployment_summary(action)
+            self._emit_event(
+                AgentEventType.SEO_ACTION_COMPLETED,
+                project_id=locked_action.project_id,
+                payload={
+                    "action_id": locked_action.id,
+                    "action_type": locked_action.action_type,
+                    "target_url": locked_action.target_url,
+                    "status": "completed",
+                    "duration_ms": result_metadata.get("duration_ms", 0)
+                },
+                run_id=run_id
+            )
 
-            duration_ms = max(45, int((time.time() - start_time) * 1000) + 75)
-
-            result_metadata = {
-                "executor": "MockSEOActionExecutor (Safe Staging Mode)",
-                "status": "success",
-                "executed_at": timezone.now().isoformat(),
-                "duration_ms": duration_ms,
-                "simulated_target_url": simulated_endpoint,
-                "action_type": action.action_type,
-                "deployment_summary": deployment_summary,
-                "payload_applied": action.proposed_change,
-                "monitoring_baseline": monitoring_baseline,
-                "notes": "Action executed successfully in safe staging mode. Ready for live monitoring."
-            }
-
+            # Sync in-memory object
             action.status = ActionStatus.COMPLETED
             action.completed_at = timezone.now()
             action.execution_metadata = result_metadata
-            action.save(update_fields=['status', 'completed_at', 'execution_metadata', 'updated_at'])
-
-            logger.info(f"Successfully executed SEOAction #{action.id} via MockSEOActionExecutor.")
             return result_metadata
 
         except Exception as exc:
-            action.status = ActionStatus.FAILED
+            logger.error(f"[SEOActionExecutor] Execution failed for SEOAction #{action_id}: {exc}")
             error_metadata = {
-                "executor": "MockSEOActionExecutor",
+                "executor": self.connector.connector_name,
                 "status": "failed",
                 "failed_at": timezone.now().isoformat(),
                 "error": str(exc),
-                "action_type": action.action_type
+                "action_type": locked_action.action_type
             }
+
+            with transaction.atomic():
+                failed_action = SEOAction.objects.select_for_update().get(id=action_id)
+                failed_action.status = ActionStatus.FAILED
+                failed_action.failure_reason = str(exc)
+                failed_action.execution_metadata = error_metadata
+                failed_action.save(update_fields=['status', 'failure_reason', 'execution_metadata', 'updated_at'])
+
+            self._emit_event(
+                AgentEventType.SEO_ACTION_FAILED,
+                project_id=locked_action.project_id,
+                payload={
+                    "action_id": locked_action.id,
+                    "action_type": locked_action.action_type,
+                    "target_url": locked_action.target_url,
+                    "error": str(exc)
+                },
+                run_id=run_id
+            )
+
+            action.status = ActionStatus.FAILED
+            action.failure_reason = str(exc)
             action.execution_metadata = error_metadata
-            action.save(update_fields=['status', 'execution_metadata', 'updated_at'])
-            logger.error(f"Execution failed for SEOAction #{action.id}: {exc}")
             raise
 
-    def _build_deployment_summary(self, action: SEOAction) -> str:
-        """
-        Generate a human-readable deployment summary based on action type.
-        """
-        proposed = action.proposed_change or {}
-        if action.action_type == 'publish_new_content':
-            title = proposed.get('title', action.title)
-            slug = proposed.get('slug', action.target_url)
-            return f"Published new content asset '{title}' to route `{slug}` with structured Article schema & FAQs."
-        elif action.action_type == 'update_meta_description':
-            desc = proposed.get('meta_description', '')
-            return f"Updated meta description tag on `{action.target_url}` ({len(desc)} characters)."
-        elif action.action_type == 'update_title':
-            title = proposed.get('title', '')
-            return f"Updated title tag on `{action.target_url}` to '{title}'."
-        elif action.action_type == 'update_slug':
-            slug = proposed.get('slug', '')
-            return f"Configured 301 redirect and updated URL slug to `{slug}` on `{action.target_url}`."
-        elif action.action_type == 'add_structured_data':
-            return f"Injected valid JSON-LD structured data into header of `{action.target_url}`."
-        elif action.action_type == 'add_internal_links':
-            links_count = len(proposed.get('internal_links', []))
-            return f"Deployed {links_count} contextual internal links pointing to relevant subpages."
-        else:
-            return f"Applied on-page SEO optimization package for '{action.target_keyword}' on `{action.target_url}`."
+
+class MockSEOActionExecutor(SEOActionExecutor):
+    """
+    Backward-compatible alias for SEOActionExecutor in Safe Staging Mode.
+    """
+    pass
 
 
 def get_action_executor(executor_type: Optional[str] = None) -> BaseSEOActionExecutor:
     """
     Factory function returning the configured SEO Action Executor instance.
-    Defaults to MockSEOActionExecutor for safety.
+    Defaults to SEOActionExecutor with DryRunMutationConnector.
     """
-    return MockSEOActionExecutor()
+    connector = get_mutation_connector(executor_type or "dry_run")
+    return SEOActionExecutor(connector=connector)

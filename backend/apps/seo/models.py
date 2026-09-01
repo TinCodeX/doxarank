@@ -1161,10 +1161,22 @@ class ActionType(models.TextChoices):
     ADD_STRUCTURED_DATA = 'add_structured_data', 'Add Structured Data'
     TECHNICAL_SEO_FIX = 'technical_seo_fix', 'Technical SEO Fix'
     CONTENT_REFRESH = 'content_refresh', 'Content Refresh'
+    # Investigation Action Types
+    OPTIMIZE_TITLE = 'optimize_title', 'Optimize Title'
+    OPTIMIZE_META_DESCRIPTION = 'optimize_meta_description', 'Optimize Meta Description'
+    FIX_MISSING_H1 = 'fix_missing_h1', 'Fix Missing H1'
+    FIX_CANONICAL = 'fix_canonical', 'Fix Canonical'
+    FIX_IMAGE_ALT = 'fix_image_alt', 'Fix Image Alt'
+    FIX_BROKEN_LINK = 'fix_broken_link', 'Fix Broken Link'
+    IMPROVE_CONTENT = 'improve_content', 'Improve Content'
+    INVESTIGATE_PERFORMANCE = 'investigate_performance', 'Investigate Performance'
+    MONITOR = 'monitor', 'Monitor'
+    NO_ACTION = 'no_action', 'No Action'
 
 
 class ActionStatus(models.TextChoices):
     PROPOSED = 'proposed', 'Proposed'
+    PENDING_APPROVAL = 'pending_approval', 'Pending Approval'
     REVIEWED = 'reviewed', 'Reviewed'
     APPROVED = 'approved', 'Approved'
     READY_TO_EXECUTE = 'ready_to_execute', 'Ready to Execute'
@@ -1185,8 +1197,8 @@ class ActionPriority(models.TextChoices):
 class SEOAction(models.Model):
     """
     SEOAction model representing an actionable, executable SEO task derived from
-    an existing recommendation, content brief, or content draft.
-    Includes human-in-the-loop review/approval lifecycle and safe execution tracking.
+    an investigation, recommendation, content brief, or content draft.
+    Includes a strict human-in-the-loop approval lifecycle and safe mutation execution gating.
     Relationship: Project 1 ─────── * SEOAction
                   SEORecommendation 1 ─────── * SEOAction (optional)
                   SEOContentBrief 1 ─────── * SEOAction (optional)
@@ -1223,12 +1235,35 @@ class SEOAction(models.Model):
         related_name='actions',
         help_text='Optional originating SEO content draft.'
     )
+    investigation_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Optional originating SEO investigation reference ID.'
+    )
+    opportunity_type = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Originating SEO opportunity classification.'
+    )
     title = models.CharField(
         max_length=255,
         help_text='Concise title for the executable SEO task.'
     )
     description = models.TextField(
         help_text='Detailed explanation of why this action is required and expected SEO impact.'
+    )
+    rationale = models.TextField(
+        blank=True,
+        default='',
+        help_text='Detailed causal reasoning and justification for the proposed action.'
+    )
+    evidence_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured evidence snapshot (GSC metrics, audit issues, observed facts, inferences, confidence).'
     )
     action_type = models.CharField(
         max_length=50,
@@ -1269,12 +1304,33 @@ class SEOAction(models.Model):
         db_index=True,
         help_text='Execution priority level.'
     )
+    risk_level = models.CharField(
+        max_length=20,
+        default='low',
+        db_index=True,
+        help_text='Evaluated risk level (low, medium, high).'
+    )
+    impact_estimate = models.CharField(
+        max_length=20,
+        default='medium',
+        help_text='Estimated impact (low, medium, high).'
+    )
+    effort_estimate = models.CharField(
+        max_length=20,
+        default='low',
+        help_text='Estimated effort (low, medium, high).'
+    )
+    requires_human_approval = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text='Whether this action mutates state and requires explicit human sign-off.'
+    )
     status = models.CharField(
         max_length=30,
         choices=ActionStatus.choices,
-        default=ActionStatus.PROPOSED,
+        default=ActionStatus.PENDING_APPROVAL,
         db_index=True,
-        help_text='Human approval workflow status (proposed, reviewed, approved, ready_to_execute, executing, completed, rejected, failed, cancelled).'
+        help_text='Human approval workflow status.'
     )
     assigned_to = models.CharField(
         max_length=100,
@@ -1282,15 +1338,56 @@ class SEOAction(models.Model):
         default='',
         help_text='Person or team responsible for executing or reviewing this action.'
     )
-    execution_metadata = models.JSONField(
-        default=dict,
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text='Safe execution execution logs, timestamps, target endpoints, monitoring baselines, and results.'
+        related_name='approved_seo_actions',
+        help_text='Authenticated user who explicitly approved this action.'
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp of human approval.'
+    )
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rejected_seo_actions',
+        help_text='Authenticated user who rejected this action.'
+    )
+    rejected_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp of rejection.'
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Mandatory explanation given by human reviewer when rejecting.'
+    )
+    execution_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when executor began applying the action.'
     )
     completed_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text='Timestamp when the action was completed or executed.'
+    )
+    failure_reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Detailed error message if execution failed.'
+    )
+    execution_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Safe execution logs, timestamps, target endpoints, monitoring baselines, and results.'
     )
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -1313,6 +1410,7 @@ class SEOAction(models.Model):
             models.Index(fields=['recommendation', 'status'], name='seo_act_rec_stat_idx'),
             models.Index(fields=['draft', 'status'], name='seo_act_draft_stat_idx'),
             models.Index(fields=['project', '-created_at'], name='seo_act_proj_date_idx'),
+            models.Index(fields=['investigation_id'], name='seo_act_inv_id_idx'),
         ]
 
     def __str__(self):

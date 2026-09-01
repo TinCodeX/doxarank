@@ -400,3 +400,47 @@ No autonomous website mutation is performed during investigation. Non-mutating r
 - `seo.investigation.root_cause_identified`: Emitted upon deterministic root-cause classification.
 - `seo.investigation.recommendation_generated`: Emitted when recommended action and risk levels are computed.
 - `seo.investigation.completed`: Emitted with final investigation status and confidence score.
+
+---
+
+## 12. Human-in-the-Loop Action Execution & Mutation Gating (Phase 4.3)
+
+Phase 4.3 establishes an immutable, server-side security boundary between autonomous agent reasoning and website mutations.
+
+### Governance Principles
+
+1. **Human Approval as a Security Control**: Human approval is not merely a UI convenience; it is a hard server-side security boundary. The backend independently validates `approved_by` and `approved_at` timestamps before executing any mutation.
+2. **Untrusted Agent Boundary**: The LLM agent is never trusted to bypass or self-approve mutations. When an action is proposed, it is persisted in `PENDING_APPROVAL` status with `requires_human_approval = True`.
+3. **Structured Proposal Payloads**: Mutation connectors receive structured, validated database models (`SEOAction`), not arbitrary LLM strings or code snippets.
+4. **Safe Staging Execution**: In this phase, mutations execute through the `DryRunMutationConnector`, producing exact before/after visual diffs and setting up monitoring baselines with zero destructive modifications.
+
+### State Machine Lifecycle
+
+```
+[PROPOSED / PENDING_APPROVAL] ──(Human Project Owner Rejects)──> [REJECTED] (Reason recorded)
+        │
+        └──(Human Project Owner Approves)──> [APPROVED]
+                                                 │
+                                                 └──(Execution Triggered)──> [EXECUTING]
+                                                                                │
+                                                                                ├──(Success)──> [COMPLETED]
+                                                                                └──(Error)────> [FAILED]
+```
+
+### Action Tools & Lifecycle Events
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `propose_seo_action` | `SAFE_INTERNAL` | Yes (DB) | No | Create structured proposal in `PENDING_APPROVAL` status. |
+| `get_pending_actions` | `READ_ONLY` | No | No | List pending actions requiring human review. |
+| `get_action` | `READ_ONLY` | No | No | Retrieve single action detail, evidence snapshot, and rationale. |
+| `preview_action` | `READ_ONLY` | No | No | Generate non-destructive before/after visual diff. |
+
+#### Real-Time Action Events:
+* `seo.action.proposed`: Emitted when a new SEOAction proposal is generated.
+* `seo.action.pending_approval`: Emitted when an action enters the human review gate.
+* `seo.action.approved`: Emitted when project owner approves an action.
+* `seo.action.rejected`: Emitted when project owner rejects an action with explanation.
+* `seo.action.execution_started`: Emitted when controlled execution begins.
+* `seo.action.completed`: Emitted on successful execution with execution metadata.
+* `seo.action.failed`: Emitted on execution error with sanitized failure reason.

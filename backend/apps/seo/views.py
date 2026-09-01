@@ -25,7 +25,7 @@ from .serializers import (
     SEORecommendationSerializer, SEORecommendationGenerateRequestSerializer,
     SEOContentBriefSerializer, SEOContentBriefGenerateRequestSerializer, SEOContentBriefStatusUpdateSerializer,
     SEOContentDraftSerializer, SEOContentDraftGenerateRequestSerializer, SEOContentDraftUpdateSerializer,
-    SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer,
+    SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer, SEOActionRejectRequestSerializer,
     AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
@@ -42,7 +42,9 @@ from .services.content_brief_service import SEOContentBriefService
 from .services.content_writer_service import SEOContentWriterService
 from .services.export_service import ContentBriefExportService, ContentDraftExportService
 from .services.action_service import SEOActionService
-from .services.action_executors import get_action_executor
+from .services.action_approval import ActionApprovalService
+from .services.action_executors import get_action_executor, SEOActionExecutor
+from .services.mutation_connectors import get_mutation_connector
 from .services.agent_orchestrator import AgentOrchestrator
 from apps.projects.models import Project
 
@@ -1063,26 +1065,52 @@ class SEOActionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='approve')
     def approve(self, request, pk=None):
         """
-        Human approves the SEOAction, making it ready to execute.
+        Human approves the SEOAction, making it ready for controlled execution.
         (POST /api/seo/ai/actions/<id>/approve/)
         """
         action_obj = self.get_object()  # Enforces project.owner == request.user
-        action_obj.status = ActionStatus.APPROVED
-        action_obj.save(update_fields=['status', 'updated_at'])
-        serializer = SEOActionSerializer(action_obj)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        service = ActionApprovalService()
+        try:
+            approved_action = service.approve_action(action_id=action_obj.id, user=request.user)
+            serializer = SEOActionSerializer(approved_action)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):
         """
-        Human rejects the proposed SEOAction.
+        Human rejects the proposed SEOAction with a mandatory reason.
         (POST /api/seo/ai/actions/<id>/reject/)
         """
         action_obj = self.get_object()  # Enforces project.owner == request.user
-        action_obj.status = ActionStatus.REJECTED
-        action_obj.save(update_fields=['status', 'updated_at'])
-        serializer = SEOActionSerializer(action_obj)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        req_serializer = SEOActionRejectRequestSerializer(data=request.data)
+        req_serializer.is_valid(raise_exception=True)
+        reason = req_serializer.validated_data['reason']
+
+        service = ActionApprovalService()
+        try:
+            rejected_action = service.reject_action(action_id=action_obj.id, user=request.user, reason=reason)
+            serializer = SEOActionSerializer(rejected_action)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'], url_path='preview')
+    def preview(self, request, pk=None):
+        """
+        Generate a safe, non-destructive visual diff preview for an SEOAction.
+        (GET /api/seo/ai/actions/<id>/preview/)
+        """
+        action_obj = self.get_object()  # Enforces project.owner == request.user
+        connector = get_mutation_connector("dry_run")
+        preview_data = connector.preview(action_obj)
+        return Response({
+            "action_id": action_obj.id,
+            "preview": preview_data,
+            "status": action_obj.status,
+            "requires_human_approval": action_obj.requires_human_approval
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel(self, request, pk=None):
@@ -1104,27 +1132,15 @@ class SEOActionViewSet(viewsets.ModelViewSet):
         (POST /api/seo/ai/actions/<id>/execute/)
         """
         action_obj = self.get_object()  # Enforces project.owner == request.user
-
-        if action_obj.status not in [ActionStatus.APPROVED, ActionStatus.READY_TO_EXECUTE]:
-            return Response(
-                {
-                    "detail": (
-                        f"Cannot execute action #{action_obj.id}. Current status is '{action_obj.get_status_display()}'. "
-                        "A human must review and approve the action before execution."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         executor = get_action_executor()
         try:
-            result = executor.execute(action_obj)
+            result = executor.execute(action_obj, user=request.user)
             serializer = SEOActionSerializer(action_obj)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response(
                 {"detail": f"Execution error: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(detail=False, methods=['get'], url_path='status-counts')

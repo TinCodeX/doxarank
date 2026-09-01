@@ -31,7 +31,15 @@ export type AgentEventType =
   | 'seo.investigation.evidence_collected'
   | 'seo.investigation.root_cause_identified'
   | 'seo.investigation.recommendation_generated'
-  | 'seo.investigation.completed';
+  | 'seo.investigation.completed'
+  // SEO Action & Mutation Gating lifecycle
+  | 'seo.action.proposed'
+  | 'seo.action.pending_approval'
+  | 'seo.action.approved'
+  | 'seo.action.rejected'
+  | 'seo.action.execution_started'
+  | 'seo.action.completed'
+  | 'seo.action.failed';
 
 export interface AgentEvent {
   event_id: string;

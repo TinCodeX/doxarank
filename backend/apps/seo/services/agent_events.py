@@ -58,6 +58,15 @@ class AgentEventType(str, Enum):
     SEO_INVESTIGATION_RECOMMENDATION_GENERATED = "seo.investigation.recommendation_generated"
     SEO_INVESTIGATION_COMPLETED = "seo.investigation.completed"
 
+    # SEO Action & Human-in-the-Loop Governance lifecycle
+    SEO_ACTION_PROPOSED = "seo.action.proposed"
+    SEO_ACTION_PENDING_APPROVAL = "seo.action.pending_approval"
+    SEO_ACTION_APPROVED = "seo.action.approved"
+    SEO_ACTION_REJECTED = "seo.action.rejected"
+    SEO_ACTION_EXECUTION_STARTED = "seo.action.execution_started"
+    SEO_ACTION_COMPLETED = "seo.action.completed"
+    SEO_ACTION_FAILED = "seo.action.failed"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """

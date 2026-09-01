@@ -89,12 +89,30 @@ export async function approveSEOAction(id: number): Promise<SEOAction> {
 }
 
 /**
- * Human reject an SEO Action.
+ * Human reject an SEO Action with mandatory reason.
  */
-export async function rejectSEOAction(id: number): Promise<SEOAction> {
+export async function rejectSEOAction(id: number, reason: string): Promise<SEOAction> {
   return apiFetch<SEOAction>(`/api/seo/ai/actions/${id}/reject/`, {
     method: 'POST',
+    body: JSON.stringify({ reason }),
   });
+}
+
+/**
+ * Generate a safe non-destructive visual diff preview for an SEO Action.
+ */
+export async function previewSEOAction(id: number): Promise<{
+  action_id: number;
+  preview: any;
+  status: ActionStatus;
+  requires_human_approval: boolean;
+}> {
+  return apiFetch<{
+    action_id: number;
+    preview: any;
+    status: ActionStatus;
+    requires_human_approval: boolean;
+  }>(`/api/seo/ai/actions/${id}/preview/`);
 }
 
 /**

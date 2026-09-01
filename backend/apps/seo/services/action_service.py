@@ -11,6 +11,8 @@ from .ai_providers import BaseAIProvider, get_ai_provider
 
 logger = logging.getLogger(__name__)
 
+from .agent_events import AgentEventPublisher, AgentEventType, AgentEvent, get_event_publisher
+
 VALID_ACTION_TYPES = set(ActionType.values)
 VALID_STATUSES = set(ActionStatus.values)
 VALID_PRIORITIES = set(ActionPriority.values)
@@ -19,14 +21,211 @@ VALID_PRIORITIES = set(ActionPriority.values)
 class SEOActionService:
     """
     SEO Action Generator Service for DoxaRank.
-    Converts structured recommendations, content briefs, or content drafts into
-    actionable, executable SEOAction tasks with clear implementation instructions
-    for Marketer, SEO Specialist, and Developer roles.
+    Converts structured recommendations, content briefs, content drafts, or SEO investigation
+    results into actionable, executable SEOAction tasks with clear implementation instructions
+    and strict human-in-the-loop approval gating.
     """
 
-    def __init__(self, project: Project, provider: Optional[BaseAIProvider] = None):
+    def __init__(
+        self,
+        project: Project,
+        provider: Optional[BaseAIProvider] = None,
+        publisher: Optional[AgentEventPublisher] = None
+    ):
         self.project = project
         self.provider = provider or get_ai_provider()
+        self.publisher = publisher or get_event_publisher()
+
+    def _emit_event(
+        self,
+        event_type: Any,
+        payload: Dict[str, Any],
+        run_id: Optional[int] = None
+    ) -> None:
+        try:
+            event = AgentEvent(
+                event_type=event_type,
+                run_id=run_id or 0,
+                project_id=self.project.id,
+                payload=payload
+            )
+            self.publisher.publish(event)
+        except Exception as exc:
+            logger.debug(f"[SEOActionService] Event emission skipped/failed: {exc}")
+
+    def propose_from_investigation(
+        self,
+        investigation: Any,
+        run_id: Optional[int] = None
+    ) -> Optional[SEOAction]:
+        """
+        Convert an SEOInvestigationResult or investigation dictionary into a structured,
+        persistent SEOAction in PENDING_APPROVAL status.
+        Preserves empirical facts, inferences, causal root cause, and estimated impact.
+        Marks requires_human_approval=True for every mutation action.
+        Non-mutating actions (MONITOR, NO_ACTION) do not enter the mutation approval pipeline.
+        """
+        if hasattr(investigation, 'to_dict'):
+            data = investigation.to_dict()
+            inv_proj_id = getattr(investigation, 'project_id', self.project.id)
+        elif isinstance(investigation, dict):
+            data = investigation
+            inv_proj_id = data.get('project_id', self.project.id)
+        else:
+            raise ValueError("Invalid investigation payload: Expected SEOInvestigationResult or dict.")
+
+        if inv_proj_id != self.project.id:
+            raise ValueError(f"Investigation belongs to project #{inv_proj_id}, not current project #{self.project.id}.")
+
+        inv_id = data.get('investigation_id', '')
+        opp_type = data.get('opportunity_type', '')
+        rec_action = data.get('recommended_action') or {}
+        raw_action_type = (rec_action.get('action_type') or 'NO_ACTION').upper()
+
+        # Non-mutating actions (MONITOR, NO_ACTION) do not create pending mutation actions
+        if raw_action_type in ['MONITOR', 'NO_ACTION']:
+            logger.info(f"[SEOActionService] Investigation #{inv_id} resulted in non-mutating action '{raw_action_type}'. No mutation action proposed.")
+            return None
+
+        # Normalize action type
+        mapped_action_type = raw_action_type.lower()
+        if mapped_action_type not in VALID_ACTION_TYPES:
+            mapped_action_type = ActionType.OPTIMIZE_EXISTING_CONTENT
+
+        target_url = rec_action.get('target_url') or data.get('target_url') or self.project.website_url
+        target_query = rec_action.get('target_query') or data.get('target_query') or ''
+        title = rec_action.get('title') or f"Apply {raw_action_type} for {target_url}"
+        description = rec_action.get('description') or data.get('root_cause_reason') or 'Automated SEO optimization proposal.'
+        rationale = data.get('root_cause_reason') or ''
+
+        # Build evidence snapshot
+        evidence_snapshot = {
+            "investigation_id": inv_id,
+            "opportunity_type": opp_type,
+            "root_cause_category": data.get('root_cause_category', 'UNKNOWN'),
+            "root_cause_reason": data.get('root_cause_reason', ''),
+            "confidence_score": data.get('confidence_score', 0.0),
+            "confidence_level": data.get('confidence_level', 'LOW'),
+            "observed_facts": data.get('observed_facts', []),
+            "inferences": data.get('inferences', []),
+            "supporting_gsc_metrics": data.get('supporting_gsc_metrics', {}),
+            "supporting_audit_issues": data.get('supporting_audit_issues', [])
+        }
+
+        # Build proposed change payload
+        proposed_change = rec_action.get('proposed_changes') or {}
+        if not proposed_change:
+            if 'title' in mapped_action_type:
+                proposed_change = {"title": rec_action.get('suggested_title') or title}
+            elif 'meta_description' in mapped_action_type:
+                proposed_change = {"meta_description": rec_action.get('suggested_description') or description}
+            elif 'canonical' in mapped_action_type:
+                proposed_change = {"canonical_url": target_url}
+            elif 'h1' in mapped_action_type:
+                proposed_change = {"h1": title}
+            else:
+                proposed_change = {"target_url": target_url, "action": raw_action_type}
+
+        # Current state snapshot
+        current_state = {
+            "target_url": target_url,
+            "target_query": target_query,
+            "audit_issues": [i.get('issue_type') for i in data.get('supporting_audit_issues', []) if isinstance(i, dict)],
+            "gsc_metrics": data.get('supporting_gsc_metrics', {})
+        }
+
+        instructions = (
+            f"### Proposed Mutation Action: {title}\n\n"
+            f"**Target URL:** {target_url}\n"
+            f"**Target Query:** {target_query or 'N/A'}\n"
+            f"**Causal Root Cause:** {rationale}\n\n"
+            f"**1. Human Review:** Review proposed change and confirm accuracy.\n"
+            f"**2. Human Approval:** Approve action in DoxaRank dashboard.\n"
+            f"**3. Safe Execution:** Apply verified changes via safe mutation connector."
+        )
+
+        risk_lvl = str(data.get('risk_level') or 'low').lower()
+        impact_est = str(data.get('impact_estimate') or 'medium').lower()
+        effort_est = str(data.get('effort_estimate') or 'low').lower()
+
+        # Check existing action for deduplication
+        existing = SEOAction.objects.filter(
+            project=self.project,
+            investigation_id=inv_id
+        ).first() if inv_id else None
+
+        if existing:
+            action = existing
+            action.opportunity_type = opp_type
+            action.title = title[:255]
+            action.description = description
+            action.rationale = rationale
+            action.evidence_snapshot = evidence_snapshot
+            action.action_type = mapped_action_type
+            action.target_url = target_url[:500]
+            action.target_keyword = target_query[:255]
+            action.current_state = current_state
+            action.proposed_change = proposed_change
+            action.implementation_instructions = instructions
+            action.risk_level = risk_lvl
+            action.impact_estimate = impact_est
+            action.effort_estimate = effort_est
+            action.requires_human_approval = True
+            action.status = ActionStatus.PENDING_APPROVAL
+            action.save()
+        else:
+            action = SEOAction.objects.create(
+                project=self.project,
+                investigation_id=inv_id,
+                opportunity_type=opp_type,
+                title=title[:255],
+                description=description,
+                rationale=rationale,
+                evidence_snapshot=evidence_snapshot,
+                action_type=mapped_action_type,
+                target_url=target_url[:500],
+                target_keyword=target_query[:255],
+                current_state=current_state,
+                proposed_change=proposed_change,
+                implementation_instructions=instructions,
+                priority=ActionPriority.HIGH,
+                risk_level=risk_lvl,
+                impact_estimate=impact_est,
+                effort_estimate=effort_est,
+                requires_human_approval=True,
+                status=ActionStatus.PENDING_APPROVAL
+            )
+
+        logger.info(f"[SEOActionService] Proposed SEOAction #{action.id} ('{action.title}') from Investigation #{inv_id}. Status: PENDING_APPROVAL.")
+
+        self._emit_event(
+            AgentEventType.SEO_ACTION_PROPOSED,
+            payload={
+                "action_id": action.id,
+                "investigation_id": inv_id,
+                "action_type": action.action_type,
+                "title": action.title,
+                "target_url": action.target_url,
+                "risk_level": action.risk_level,
+                "requires_human_approval": True,
+                "status": action.status
+            },
+            run_id=run_id
+        )
+
+        self._emit_event(
+            AgentEventType.SEO_ACTION_PENDING_APPROVAL,
+            payload={
+                "action_id": action.id,
+                "investigation_id": inv_id,
+                "title": action.title,
+                "target_url": action.target_url,
+                "requires_human_approval": True
+            },
+            run_id=run_id
+        )
+
+        return action
 
     def generate_for_recommendation(
         self,

@@ -904,7 +904,7 @@ class SEOContentDraftUpdateSerializer(serializers.ModelSerializer):
 class SEOActionSerializer(serializers.ModelSerializer):
     """
     Serializer for SEOAction model.
-    Represents structured executable SEO tasks with human-in-the-loop lifecycle.
+    Represents structured executable SEO tasks with human-in-the-loop lifecycle and audit fields.
     """
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_website_url = serializers.CharField(source='project.website_url', read_only=True)
@@ -914,6 +914,8 @@ class SEOActionSerializer(serializers.ModelSerializer):
     recommendation_title = serializers.CharField(source='recommendation.title', read_only=True, allow_null=True)
     brief_title = serializers.CharField(source='brief.title', read_only=True, allow_null=True)
     draft_title = serializers.CharField(source='draft.title', read_only=True, allow_null=True)
+    approved_by_email = serializers.CharField(source='approved_by.email', read_only=True, allow_null=True)
+    rejected_by_email = serializers.CharField(source='rejected_by.email', read_only=True, allow_null=True)
 
     class Meta:
         model = SEOAction
@@ -928,8 +930,12 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'brief_title',
             'draft',
             'draft_title',
+            'investigation_id',
+            'opportunity_type',
             'title',
             'description',
+            'rationale',
+            'evidence_snapshot',
             'action_type',
             'action_type_display',
             'target_url',
@@ -939,11 +945,24 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'implementation_instructions',
             'priority',
             'priority_display',
+            'risk_level',
+            'impact_estimate',
+            'effort_estimate',
+            'requires_human_approval',
             'status',
             'status_display',
             'assigned_to',
-            'execution_metadata',
+            'approved_by',
+            'approved_by_email',
+            'approved_at',
+            'rejected_by',
+            'rejected_by_email',
+            'rejected_at',
+            'rejection_reason',
+            'execution_started_at',
             'completed_at',
+            'failure_reason',
+            'execution_metadata',
             'created_at',
             'updated_at'
         )
@@ -957,7 +976,10 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'recommendation_title',
             'brief_title',
             'draft_title',
+            'approved_by_email',
+            'rejected_by_email',
             'execution_metadata',
+            'execution_started_at',
             'completed_at',
             'created_at',
             'updated_at'
@@ -969,6 +991,23 @@ class SEOActionSerializer(serializers.ModelSerializer):
             if value.owner != request.user:
                 raise serializers.ValidationError("You do not have permission to create actions for this project.")
         return value
+
+
+class SEOActionRejectRequestSerializer(serializers.Serializer):
+    """
+    Serializer for human rejection of an SEO Action.
+    """
+    reason = serializers.CharField(
+        required=False,
+        default="Rejected by user.",
+        allow_blank=True,
+        help_text="Reason for rejecting the action proposal."
+    )
+
+    def validate_reason(self, value):
+        if not value or not str(value).strip():
+            return "Rejected by user."
+        return str(value).strip()
 
 
 class SEOActionUpdateSerializer(serializers.ModelSerializer):

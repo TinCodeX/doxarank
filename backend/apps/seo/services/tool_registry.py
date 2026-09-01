@@ -601,16 +601,39 @@ def handle_generate_content_draft(project: Project, args: Dict[str, Any]) -> Dic
 
 def handle_propose_seo_action(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Generate an SEOAction proposal in 'proposed' state.
+    Generate an SEOAction proposal in 'pending_approval' state.
     Strictly requires human approval before any future execution.
     """
     source_type = args.get("source_type")
     source_id = args.get("source_id")
     action_type_override = args.get("action_type_override")
+    investigation_id = args.get("investigation_id")
+    opportunity_type = args.get("opportunity_type")
+    target_url = args.get("target_url")
+    target_query = args.get("target_query")
 
     action_service = SEOActionService(project=project)
 
-    if source_type == "recommendation":
+    if source_type == "investigation" or investigation_id or (opportunity_type and not source_id):
+        if not opportunity_type and not investigation_id:
+            raise ValueError("Must provide either opportunity_type or investigation_id when source_type='investigation'.")
+
+        from apps.seo.services.seo_investigation import SEOInvestigationService
+        inv_service = SEOInvestigationService(project=project)
+        inv_result = inv_service.investigate(
+            opportunity_type=opportunity_type or "LOW_CTR_HIGH_IMPRESSIONS",
+            target_url=target_url,
+            target_query=target_query
+        )
+        action = action_service.propose_from_investigation(inv_result)
+        if not action:
+            return {
+                "success": True,
+                "proposed": False,
+                "message": f"Investigation resulted in non-mutating action '{inv_result.recommended_action.get('action_type')}'. No mutation action proposed.",
+                "requires_human_approval": False
+            }
+    elif source_type == "recommendation":
         try:
             rec = SEORecommendation.objects.get(id=source_id, project=project)
         except SEORecommendation.DoesNotExist:
@@ -629,7 +652,7 @@ def handle_propose_seo_action(project: Project, args: Dict[str, Any]) -> Dict[st
             raise ValueError(f"SEOContentBrief #{source_id} not found on project #{project.id}.")
         action = action_service.generate_for_brief(brief)
     else:
-        raise ValueError(f"Invalid source_type '{source_type}'. Allowed values: ['recommendation', 'draft', 'brief'].")
+        raise ValueError(f"Invalid source_type '{source_type}'. Allowed values: ['investigation', 'recommendation', 'draft', 'brief'].")
 
     return {
         "id": action.id,
@@ -643,7 +666,94 @@ def handle_propose_seo_action(project: Project, args: Dict[str, Any]) -> Dict[st
         "target_url": action.target_url,
         "assigned_to": action.assigned_to,
         "proposed_change": action.proposed_change,
-        "requires_human_approval": True
+        "requires_human_approval": action.requires_human_approval,
+        "risk_level": action.risk_level,
+        "impact_estimate": action.impact_estimate,
+        "effort_estimate": action.effort_estimate
+    }
+
+
+def handle_get_pending_actions(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve all pending SEO actions requiring human review and approval."""
+    limit = args.get("limit", 20)
+    qs = SEOAction.objects.filter(
+        project=project,
+        status__in=[ActionStatus.PENDING_APPROVAL, ActionStatus.PROPOSED, ActionStatus.REVIEWED]
+    ).order_by('-created_at')[:limit]
+
+    items = [
+        {
+            "id": a.id,
+            "title": a.title,
+            "action_type": a.action_type,
+            "target_url": a.target_url,
+            "status": a.status,
+            "risk_level": a.risk_level,
+            "impact_estimate": a.impact_estimate,
+            "requires_human_approval": a.requires_human_approval,
+            "created_at": a.created_at.isoformat()
+        }
+        for a in qs
+    ]
+    return {
+        "project_id": project.id,
+        "total_pending": len(items),
+        "actions": items
+    }
+
+
+def handle_get_action(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve detailed state of a single SEO action by ID."""
+    action_id = args.get("action_id")
+    try:
+        a = SEOAction.objects.get(id=action_id, project=project)
+    except SEOAction.DoesNotExist:
+        raise ValueError(f"SEOAction #{action_id} not found on project #{project.id}.")
+
+    return {
+        "id": a.id,
+        "project_id": project.id,
+        "investigation_id": a.investigation_id,
+        "opportunity_type": a.opportunity_type,
+        "title": a.title,
+        "description": a.description,
+        "rationale": a.rationale,
+        "action_type": a.action_type,
+        "target_url": a.target_url,
+        "target_keyword": a.target_keyword,
+        "current_state": a.current_state,
+        "proposed_change": a.proposed_change,
+        "implementation_instructions": a.implementation_instructions,
+        "status": a.status,
+        "risk_level": a.risk_level,
+        "impact_estimate": a.impact_estimate,
+        "effort_estimate": a.effort_estimate,
+        "requires_human_approval": a.requires_human_approval,
+        "approved_by_id": a.approved_by_id,
+        "approved_at": a.approved_at.isoformat() if a.approved_at else None,
+        "rejected_at": a.rejected_at.isoformat() if a.rejected_at else None,
+        "rejection_reason": a.rejection_reason,
+        "execution_metadata": a.execution_metadata,
+        "created_at": a.created_at.isoformat()
+    }
+
+
+def handle_preview_action(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate a safe, non-destructive visual diff preview for an SEOAction."""
+    action_id = args.get("action_id")
+    try:
+        a = SEOAction.objects.get(id=action_id, project=project)
+    except SEOAction.DoesNotExist:
+        raise ValueError(f"SEOAction #{action_id} not found on project #{project.id}.")
+
+    from apps.seo.services.mutation_connectors import get_mutation_connector
+    connector = get_mutation_connector("dry_run")
+    preview_data = connector.preview(a)
+    return {
+        "action_id": a.id,
+        "preview": preview_data,
+        "status": a.status,
+        "requires_human_approval": a.requires_human_approval
     }
 
 
@@ -1146,24 +1256,79 @@ def create_default_tool_registry() -> ToolRegistry:
     # 13. propose_seo_action
     registry.register(AgentToolDefinition(
         name="propose_seo_action",
-        description="Create a formal, structured SEOAction task proposal for human review and approval. Does NOT execute the action.",
+        description="Create a formal, structured SEOAction task proposal for human review and approval from an SEO investigation, recommendation, draft, or brief. Does NOT execute the action.",
         category=ToolCategory.HIGH_IMPACT,
         parameters_schema={
             "type": "object",
             "properties": {
                 "source_type": {
                     "type": "string",
-                    "enum": ["recommendation", "draft", "brief"],
+                    "enum": ["investigation", "recommendation", "draft", "brief"],
                     "description": "Originating entity type."
                 },
-                "source_id": {"type": "integer", "description": "ID of the source entity belonging to this project."},
+                "source_id": {"type": "integer", "description": "ID of the source entity belonging to this project (recommendation, draft, or brief)."},
+                "opportunity_type": {"type": "string", "description": "Opportunity classification if proposing directly from an investigation."},
+                "investigation_id": {"type": "string", "description": "Optional reference ID of an SEO investigation."},
+                "target_url": {"type": "string", "description": "Target landing page URL."},
+                "target_query": {"type": "string", "description": "Target search query."},
                 "action_type_override": {"type": "string", "description": "Optional SEO action type override."}
             },
-            "required": ["source_type", "source_id"]
+            "required": []
         },
         requires_approval=True,
         is_mutating=True,
         handler=handle_propose_seo_action
+    ))
+
+    # 14. get_pending_actions
+    registry.register(AgentToolDefinition(
+        name="get_pending_actions",
+        description="Retrieve all proposed and pending SEO actions requiring human review and approval for this project.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Maximum number of pending actions to return (default 20)."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_pending_actions
+    ))
+
+    # 15. get_action
+    registry.register(AgentToolDefinition(
+        name="get_action",
+        description="Retrieve full details, rationale, evidence snapshot, and approval state of a specific SEO action by ID.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "integer", "description": "ID of the SEO action to retrieve."}
+            },
+            "required": ["action_id"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_action
+    ))
+
+    # 16. preview_action
+    registry.register(AgentToolDefinition(
+        name="preview_action",
+        description="Generate a safe, non-destructive before/after visual diff preview for an SEOAction without modifying any live state.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "integer", "description": "ID of the SEO action to preview."}
+            },
+            "required": ["action_id"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_preview_action
     ))
 
     return registry

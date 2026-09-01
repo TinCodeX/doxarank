@@ -13,7 +13,12 @@ from .content_brief_service import SEOContentBriefService
 from .content_writer_service import SEOContentWriterService
 from .export_service import ContentBriefExportService, ContentDraftExportService
 from .action_service import SEOActionService
-from .action_executors import BaseSEOActionExecutor, MockSEOActionExecutor, get_action_executor
+from .action_approval import ActionApprovalService
+from .action_executors import BaseSEOActionExecutor, SEOActionExecutor, MockSEOActionExecutor, get_action_executor
+from .mutation_connectors import (
+    BaseMutationConnector, DryRunMutationConnector, CMSMutationConnector,
+    GitMutationConnector, WebhookMutationConnector, get_mutation_connector
+)
 from .tool_registry import (
     ToolCategory, AgentToolDefinition, ToolRegistry,
     get_tool_registry, create_default_tool_registry
@@ -75,9 +80,17 @@ __all__ = [
     'ContentBriefExportService',
     'ContentDraftExportService',
     'SEOActionService',
+    'ActionApprovalService',
     'BaseSEOActionExecutor',
+    'SEOActionExecutor',
     'MockSEOActionExecutor',
     'get_action_executor',
+    'BaseMutationConnector',
+    'DryRunMutationConnector',
+    'CMSMutationConnector',
+    'GitMutationConnector',
+    'WebhookMutationConnector',
+    'get_mutation_connector',
     'ToolCategory',
     'AgentToolDefinition',
     'ToolRegistry',

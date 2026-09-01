@@ -208,6 +208,8 @@ CORE TOOLS REFERENCE:
 - run_intelligence_analysis: Run deterministic SEO heuristic engine to generate updated SEOInsight records.
 - generate_recommendation / generate_content_brief / generate_content_draft: Synthesize AI strategy, briefs, and drafts.
 - propose_seo_action: Propose formal SEO action task for human review and approval.
+- get_pending_actions: Retrieve all pending SEO actions requiring human review and approval.
+- get_action / preview_action: Retrieve action details and non-destructive before/after visual diff previews.
 
 EVIDENCE HIERARCHY & REASONING GUIDELINES:
 1. Grounding hierarchy:
@@ -219,6 +221,12 @@ EVIDENCE HIERARCHY & REASONING GUIDELINES:
    - Observed Facts (e.g. "Page receives 12,450 impressions with 2.4% CTR at position #8.4 and has a missing meta description").
    - Inferences (e.g. "Under-optimized snippet causes searchers to skip the result despite strong Page 1 visibility").
    - Recommendations (e.g. "Rewrite meta description to highlight unique value proposition and clear CTA").
+
+HUMAN-IN-THE-LOOP APPROVAL BOUNDARY:
+1. The agent must NEVER directly modify a website or execute mutations autonomously.
+2. Every mutation action must be proposed via propose_seo_action with status PENDING_APPROVAL and requires_human_approval=True.
+3. The agent must STOP at the human gate once an action is proposed. Direct execution is blocked until the project owner explicitly approves.
+4. The agent can never approve its own actions.
 
 SAFETY & GOVERNANCE RULES:
 1. NEVER invent parameters or call tools that are not in the provided tool registry.
@@ -1414,6 +1422,57 @@ class MockAIProvider(BaseAIProvider):
                     f"- **Description**: {rec.get('description', 'Optimize metadata')}\n"
                     f"- **Expected Benefit**: {rec.get('expected_benefit', 'Increases organic click-through rate')}\n"
                     f"- **Requires Human Approval**: {rec.get('requires_human_approval', True)}"
+                )
+            }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 0c: Propose Action & Stop at Human Gate
+        # ---------------------------------------------------------------------
+        is_action_proposal_goal = any(term in goal for term in [
+            'propose action', 'action proposal', 'propose fix', 'remediation',
+            'action task', 'create action', 'mutation proposal', 'mitigate'
+        ])
+        if is_action_proposal_goal and 'propose_seo_action' in available_tools:
+            if 'investigate_seo_opportunity' not in tool_calls and not investigation_result:
+                opp_type = top_opportunity_type or "LOW_CTR_HIGH_IMPRESSIONS"
+                args = {"opportunity_type": opp_type}
+                if top_target_url:
+                    args["target_url"] = top_target_url
+                if top_target_query:
+                    args["target_query"] = top_target_query
+                return {
+                    "action": "tool",
+                    "tool_name": "investigate_seo_opportunity",
+                    "arguments": args,
+                    "reason": f"Investigate opportunity '{opp_type}' before generating action proposal."
+                }
+
+            if 'propose_seo_action' not in tool_calls:
+                opp_type = top_opportunity_type or "LOW_CTR_HIGH_IMPRESSIONS"
+                args = {
+                    "source_type": "investigation",
+                    "opportunity_type": opp_type
+                }
+                if top_target_url:
+                    args["target_url"] = top_target_url
+                if top_target_query:
+                    args["target_query"] = top_target_query
+                return {
+                    "action": "tool",
+                    "tool_name": "propose_seo_action",
+                    "arguments": args,
+                    "reason": "Generate formal SEOAction proposal in PENDING_APPROVAL state requiring human review."
+                }
+
+            return {
+                "action": "finish",
+                "summary": (
+                    "### Action Proposal Generated — Waiting for Human Approval\n\n"
+                    "I have investigated the opportunity and created a formal action proposal in `PENDING_APPROVAL` status.\n\n"
+                    "#### Governance & Safety Controls:\n"
+                    "- **Human Approval Required**: `True`\n"
+                    "- **Direct Execution**: Blocked until project owner explicitly approves\n"
+                    "- **Next Step**: Review the proposed diff in the DoxaRank dashboard and approve or reject the action."
                 )
             }
 
