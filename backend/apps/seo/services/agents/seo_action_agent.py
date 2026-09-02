@@ -45,12 +45,13 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
         investigation_objs = []
         # If there are investigations in context, retrieve or construct them
         if context.investigation_findings:
-            from apps.seo.services.seo_investigation import SEOInvestigation
-            for inv_dict in context.investigation_findings:
-                try:
-                    investigation_objs.append(SEOInvestigation.from_dict(inv_dict))
-                except Exception:
-                    pass
+            try:
+                from apps.seo.services.seo_investigation import SEOInvestigationResult
+                for inv in context.investigation_findings:
+                    if isinstance(inv, SEOInvestigationResult):
+                        investigation_objs.append(inv)
+            except Exception:
+                pass
 
         plan = planner.create_action_plan(
             title=f"Autonomous Plan: {context.task_goal or 'SEO Strategy Execution'}"[:255],
@@ -62,6 +63,7 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
         )
 
         context.created_plan_id = plan.id
+        context.action_plan_id = plan.id
         actions = plan.actions.all()
 
         findings.append(

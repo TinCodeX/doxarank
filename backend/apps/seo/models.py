@@ -84,6 +84,15 @@ class Keyword(models.Model):
     def __str__(self):
         return f"{self.keyword} ({self.project.name} - {self.country}/{self.language})"
 
+    @property
+    def normalized_keyword(self) -> str:
+        """Return canonicalized keyword form for matching (with Amharic homophone collapsing)."""
+        if self.language == Language.AM:
+            from apps.seo.services.amharic_normalizer import normalize_amharic_query
+            return normalize_amharic_query(self.keyword)
+        return self.keyword.strip().lower()
+
+
 
 class KeywordRanking(models.Model):
     """

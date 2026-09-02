@@ -1,3 +1,4 @@
+from .amharic_normalizer import normalize_amharic_query, are_keywords_equivalent
 from .search_console import GoogleSearchConsoleService, MockGoogleSearchConsoleClient
 from .seo_intelligence import (
     SEOIntelligenceService,
@@ -122,5 +123,7 @@ __all__ = [
     'REDIRECT_LOOP',
     'CRAWL_ERROR',
     'SLOW_RESPONSE',
-    'MISSING_STRUCTURED_DATA'
+    'MISSING_STRUCTURED_DATA',
+    'normalize_amharic_query',
+    'are_keywords_equivalent'
 ]

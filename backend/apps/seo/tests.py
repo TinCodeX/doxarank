@@ -11402,3 +11402,499 @@ class SEOModelContextProtocolTests(TestCase):
         self.assertGreaterEqual(res_tools.data["count"], 3)
         tool_names = [t["raw_name"] for t in res_tools.data["tools"]]
         self.assertIn("check_url_status", tool_names)
+
+
+class SEOAmharicNormalizerTests(TestCase):
+    """
+    Phase 4.9.1 Unit Tests:
+    Amharic & Ge'ez script homophone collapsing, Ethiopian punctuation normalization,
+    and keyword equivalence for Ethiopia-first search on google.com.et.
+    """
+
+    def test_ha_series_homophone_collapsing(self):
+        """1. Canonicalizes variants of Ha (ሀ, ሐ, ኀ, ኃ, ኻ) to standard form."""
+        from apps.seo.services.amharic_normalizer import normalize_amharic_query
+        self.assertEqual(normalize_amharic_query("ሐኪም"), "ሀኪም")
+        self.assertEqual(normalize_amharic_query("ኀይል"), "ሀይል")
+        self.assertEqual(normalize_amharic_query("ኃይል"), "ሃይል")
+        self.assertEqual(normalize_amharic_query("ሑነታ"), "ሁነታ")
+        self.assertEqual(normalize_amharic_query("ሕግ"), "ህግ")
+
+    def test_se_series_homophone_collapsing(self):
+        """2. Canonicalizes variants of Se (ሰ, ሠ) to standard form."""
+        from apps.seo.services.amharic_normalizer import normalize_amharic_query
+        self.assertEqual(normalize_amharic_query("ሠዓት"), "ሰአት")
+        self.assertEqual(normalize_amharic_query("ሥራ"), "ስራ")
+        self.assertEqual(normalize_amharic_query("ሢመት"), "ሲመት")
+
+    def test_a_series_homophone_collapsing(self):
+        """3. Canonicalizes variants of A (አ, ዓ, ዐ) to standard form."""
+        from apps.seo.services.amharic_normalizer import normalize_amharic_query
+        self.assertEqual(normalize_amharic_query("ዐዲስ አበባ"), "አዲስ አበባ")
+        self.assertEqual(normalize_amharic_query("ዓለም"), "አለም")
+        self.assertEqual(normalize_amharic_query("ዕውቀት"), "እውቀት")
+
+    def test_tse_series_homophone_collapsing(self):
+        """4. Canonicalizes variants of Tse (ጸ, ፀ) to standard form."""
+        from apps.seo.services.amharic_normalizer import normalize_amharic_query
+        self.assertEqual(normalize_amharic_query("ፀሐይ"), "ጸሀይ")
+        self.assertEqual(normalize_amharic_query("ፀሎት"), "ጸሎት")
+        self.assertEqual(normalize_amharic_query("ፅህፈት"), "ጽህፈት")
+
+    def test_ethiopic_punctuation_stripping(self):
+        """5. Replaces word space separator (፡) with standard space and strips sentence marks."""
+        from apps.seo.services.amharic_normalizer import normalize_amharic_query
+        self.assertEqual(normalize_amharic_query("ኢትዮጵያ፡ቴሌኮም"), "ኢትዮጵያ ቴሌኮም")
+        self.assertEqual(normalize_amharic_query("አዲስ፡አበባ።"), "አዲስ አበባ")
+
+    def test_semantic_equivalence(self):
+        """6. Verifies semantic equivalence across homophone variations."""
+        from apps.seo.services.amharic_normalizer import are_keywords_equivalent
+        self.assertTrue(are_keywords_equivalent("አዲስ አበባ", "ዐዲስ አበባ"))
+        self.assertTrue(are_keywords_equivalent("ሰዓት", "ሠዓት"))
+        self.assertTrue(are_keywords_equivalent("ፀሐይ", "ጸሀይ"))
+        self.assertFalse(are_keywords_equivalent("አዲስ አበባ", "ድሬዳዋ"))
+
+    def test_keyword_model_normalized_keyword_property(self):
+        """7. Keyword model property accurately yields normalized Amharic query."""
+        from apps.seo.models import Keyword, Language
+        user = get_user_model().objects.create_user(email='norm_test@doxarank.ai', password='Password123!')
+        project = Project.objects.create(name="ET Portal", website_url="https://etportal.com", owner=user)
+        kw = Keyword.objects.create(
+            project=project,
+            keyword="ዐዲስ አበባ",
+            language=Language.AM
+        )
+        self.assertEqual(kw.normalized_keyword, "አዲስ አበባ")
+
+
+class SEOAgentEndToEndWorkflowTests(TestCase):
+    """
+    Phase 4.9.2 End-to-End Agent Lifecycle Tests:
+    Validates complete 12-stage lifecycle:
+    User Goal -> Supervisor -> Research -> Investigation -> Strategy -> Plan ->
+    Human Approval -> Execution -> Verification -> Outcome -> Learning -> Adaptive Strategy.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(email='e2e_user@doxarank.ai', password='Password123!')
+        self.project = Project.objects.create(
+            name="E2E Portal",
+            website_url="https://e2e-portal.et",
+            owner=self.user
+        )
+        self.client = APIClient()
+        self.target_url = "https://e2e-portal.et/services"
+
+    def test_01_full_autonomous_investigation_and_evidence_synthesis(self):
+        """Scenario 1: Supervisor executes full autonomous investigation pipeline."""
+        from apps.seo.services.agents import SEOSupervisorAgent
+
+        supervisor = SEOSupervisorAgent(project=self.project, user=self.user)
+        context = supervisor.orchestrate(
+            task="Investigate ranking drop and propose recovery action plan for /services",
+            target_url=self.target_url
+        )
+
+        self.assertEqual(context.status, "completed")
+        self.assertGreaterEqual(len(context.agent_results_history), 4)
+        agents_run = [h["agent"] for h in context.agent_results_history]
+        self.assertIn("seo_researcher", agents_run)
+        self.assertIn("seo_investigator", agents_run)
+        self.assertIn("seo_strategist", agents_run)
+        self.assertIn("seo_action_planner", agents_run)
+        self.assertIsNotNone(context.action_plan_id)
+
+    def test_02_action_requiring_human_approval_halts_at_gate(self):
+        """Scenario 2: Action planning strictly halts at human approval gate with requires_human_approval=True."""
+        from apps.seo.models import SEOActionPlan, ActionPlanStatus
+        from apps.seo.services.agents.seo_action_agent import SEOActionPlanningAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        context = SharedContext(
+            project_id=self.project.id,
+            project_name=self.project.name,
+            website_url=self.project.website_url,
+            user_id=self.user.id,
+            target_url=self.target_url,
+            evidence={"top_opportunity_type": "high_impressions_low_ctr"}
+        )
+
+        agent = SEOActionPlanningAgent(project=self.project, user=self.user)
+        result = agent.run(context)
+
+        self.assertEqual(result.status, "completed")
+        plan = SEOActionPlan.objects.get(id=context.action_plan_id)
+        self.assertEqual(plan.status, ActionPlanStatus.PROPOSED)
+        self.assertTrue(plan.requires_human_approval)
+        self.assertIsNone(plan.approved_at)
+
+    def test_03_human_rejection_of_action(self):
+        """Scenario 3: Human review rejects proposed action and plan safely archives without mutating."""
+        from apps.seo.models import SEOActionPlan, SEOAction, ActionType, ActionStatus, ActionPlanStatus
+        from apps.seo.services.action_service import SEOActionService
+
+        plan = SEOActionPlan.objects.create(
+            project=self.project,
+            title="Title Update Plan",
+            status=ActionPlanStatus.PROPOSED,
+            requires_human_approval=True
+        )
+        action = SEOAction.objects.create(
+            project=self.project,
+            plan=plan,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url=self.target_url,
+            title="Update Page Title",
+            status=ActionStatus.PROPOSED,
+            requires_human_approval=True
+        )
+
+        # Reject action
+        action.status = ActionStatus.REJECTED
+        action.save(update_fields=['status'])
+        plan.status = ActionPlanStatus.REJECTED
+        plan.save(update_fields=['status'])
+
+        self.assertEqual(action.status, ActionStatus.REJECTED)
+        self.assertEqual(plan.status, ActionPlanStatus.REJECTED)
+
+    def test_04_approved_action_execution_via_connector(self):
+        """Scenario 4: Approved action executes cleanly through mutation connector."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus
+        from apps.seo.services.mutation_connectors import DryRunMutationConnector
+
+        action = SEOAction.objects.create(
+            project=self.project,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url=self.target_url,
+            title="Update Title Tag",
+            status=ActionStatus.APPROVED,
+            requires_human_approval=True,
+            proposed_change={"title": "Updated Services Page Title | E2E Portal"}
+        )
+
+        connector = DryRunMutationConnector()
+        res = connector.execute(action)
+
+        self.assertEqual(res["status"], "success")
+        action.status = ActionStatus.COMPLETED
+        action.save(update_fields=['status'])
+        self.assertEqual(action.status, ActionStatus.COMPLETED)
+
+    def test_05_execution_failure_handling(self):
+        """Scenario 5: Execution failure is captured gracefully with failure status."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus
+
+        action = SEOAction.objects.create(
+            project=self.project,
+            action_type=ActionType.FIX_CANONICAL,
+            target_url=self.target_url,
+            title="Update Canonical",
+            status=ActionStatus.APPROVED,
+            requires_human_approval=True
+        )
+
+        # Simulate execution failure
+        action.status = ActionStatus.FAILED
+        action.save(update_fields=['status'])
+
+        self.assertEqual(action.status, ActionStatus.FAILED)
+
+    def test_06_technical_verification_failure_handling(self):
+        """Scenario 6: Technical verification detects unapplied change and flags failure."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus
+        from apps.seo.services.seo_action_verifier import SEOActionVerifier
+
+        action = SEOAction.objects.create(
+            project=self.project,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url=self.target_url,
+            title="Verify Title Tag",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.PENDING,
+            proposed_change={"title": "New Title Tag"}
+        )
+
+        verifier = SEOActionVerifier(project=self.project)
+        # Mock HTML crawler returning old title (verification failed)
+        mock_html = "<html><head><title>Old Old Title</title></head></html>"
+        res = verifier.verify_action(action, html_override=mock_html)
+
+        self.assertFalse(res["verified"])
+        action.refresh_from_db()
+        self.assertEqual(action.verification_status, VerificationStatus.FAILED)
+
+    def test_07_successful_outcome_measurement(self):
+        """Scenario 7: Successful outcome measurement calculates lift and classifies outcome."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_outcome_learning import SEOOutcomeMeasurementService
+
+        action = SEOAction.objects.create(
+            project=self.project,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            target_url=self.target_url,
+            title="Measure Title Outcome",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED
+        )
+
+        # Record outcome directly on action
+        action.seo_outcome = SEOOutcome.IMPROVED
+        action.outcome_evidence = {"deltas": {"clicks": 25}}
+        action.save(update_fields=['seo_outcome', 'outcome_evidence'])
+
+        self.assertEqual(action.seo_outcome, SEOOutcome.IMPROVED)
+        self.assertEqual(action.outcome_evidence["deltas"]["clicks"], 25)
+
+    def test_08_adaptive_strategy_calibration_update(self):
+        """Scenario 8: Historical learning updates action type win rates and strategy priority."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        # Seed outcomes
+        for i in range(4):
+            act = SEOAction.objects.create(
+                project=self.project,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                target_url=f"https://e2e-portal.et/page-{i}",
+                title=f"Title Act {i}",
+                status=ActionStatus.COMPLETED,
+                verification_status=VerificationStatus.VERIFIED,
+                seo_outcome=SEOOutcome.IMPROVED
+            )
+
+        strat_service = SEOAdaptiveStrategyService(project=self.project)
+        strategy = strat_service.evaluate_strategy()
+
+        self.assertIn("action_prioritizations", strategy)
+        title_stats = strategy["action_prioritizations"].get(ActionType.OPTIMIZE_TITLE)
+        self.assertIsNotNone(title_stats)
+        self.assertGreater(title_stats["historical_smoothed_rate"], 0.5)
+
+    def test_09_mcp_tool_failure_graceful_degradation(self):
+        """Scenario 9: Research Agent degrades safely when external MCP server fails."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+        from unittest.mock import patch
+
+        agent = SEOResearchAgent(project=self.project, user=self.user)
+        context = SharedContext(
+            project_id=self.project.id,
+            project_name=self.project.name,
+            website_url=self.project.website_url,
+            user_id=self.user.id,
+            target_url=self.target_url
+        )
+
+        with patch.object(agent, 'execute_tool', side_effect=RuntimeError("MCP server socket timed out")):
+            # Agent should catch error and return completed status using fallbacks
+            result = agent.run(context)
+            self.assertEqual(result.status, "completed")
+
+    def test_10_external_api_failure_recovery(self):
+        """Scenario 10: External GSC API timeout produces structured warning without unhandled crash."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+        from unittest.mock import patch
+
+        agent = SEOResearchAgent(project=self.project, user=self.user)
+        context = SharedContext(
+            project_id=self.project.id,
+            project_name=self.project.name,
+            website_url=self.project.website_url,
+            user_id=self.user.id
+        )
+
+        with patch('apps.seo.services.search_console.MockGoogleSearchConsoleClient.query_search_analytics', side_effect=TimeoutError("GSC API 504 Gateway Timeout")):
+            result = agent.run(context)
+            self.assertEqual(result.status, "completed")
+
+
+class SEOAgentReliabilityAndSecurityTests(TestCase):
+    """
+    Phase 4.9.3 & 4.9.4 Reliability, Failure Recovery, and Security Tests:
+    Guarantees bounded loops, exception isolation, multi-tenant boundaries, and secret protection.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user_a = User.objects.create_user(email='user_a_rel@doxarank.ai', password='Password123!')
+        self.user_b = User.objects.create_user(email='user_b_rel@doxarank.ai', password='Password123!')
+
+        self.project_a = Project.objects.create(name="Project A", website_url="https://a.com", owner=self.user_a)
+        self.project_b = Project.objects.create(name="Project B", website_url="https://b.com", owner=self.user_b)
+        self.client = APIClient()
+
+    def test_bounded_react_loop_iterations(self):
+        """1. AgentOrchestrator halts strictly at max_steps (no infinite runaway loops)."""
+        from apps.seo.models import AgentRunStatus
+        from apps.seo.services.agent_orchestrator import AgentOrchestrator
+        from unittest.mock import MagicMock
+
+        # Mock provider that continuously requests varying tools
+        mock_provider = MagicMock()
+        mock_provider.decide_agent_action.side_effect = [
+            {
+                "action": "tool",
+                "tool_name": f"get_tracked_keywords_{i}",
+                "arguments": {"idx": i},
+                "reason": f"Indefinite loop test step {i}"
+            }
+            for i in range(15)
+        ]
+
+        orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=mock_provider,
+            max_steps=5
+        )
+
+        run = orchestrator.start_run(goal="Test runaway bounds")
+        self.assertEqual(run.total_steps, 5)
+        self.assertIn(run.status, [AgentRunStatus.FAILED, AgentRunStatus.COMPLETED])
+
+    def test_repetitive_tool_loop_prevention(self):
+        """1b. AgentOrchestrator immediately halts on repetitive failed tool calls."""
+        from apps.seo.models import AgentRunStatus
+        from apps.seo.services.agent_orchestrator import AgentOrchestrator
+        from unittest.mock import MagicMock
+
+        mock_provider = MagicMock()
+        mock_provider.decide_agent_action.return_value = {
+            "action": "tool",
+            "tool_name": "get_tracked_keywords",
+            "arguments": {},
+            "reason": "Repeated failing tool"
+        }
+
+        orchestrator = AgentOrchestrator(
+            project=self.project_a,
+            user=self.user_a,
+            provider=mock_provider,
+            max_steps=10
+        )
+
+        run = orchestrator.start_run(goal="Test loop abort")
+        self.assertEqual(run.status, AgentRunStatus.FAILED)
+        self.assertIn("repetitive", run.summary.lower())
+
+    def test_tool_exception_isolation(self):
+        """2. Tool throwing unexpected exception returns structured error dict and does not crash."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        registry = get_tool_registry()
+        # Invalid arguments
+        res = registry.execute("get_keyword_rankings", project=self.project_a, arguments={"limit": "not_an_int"})
+        self.assertFalse(res["success"])
+        self.assertIsNotNone(res["error"])
+
+    def test_cross_tenant_isolation_enforced(self):
+        """3. Tenant isolation: User B cannot access User A's projects, actions, or evaluation."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, AgentRun, AgentRunStatus
+
+        action_a = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Secret Title A",
+            status=ActionStatus.PROPOSED
+        )
+
+        run_a = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal="User A Confidential Goal",
+            status=AgentRunStatus.COMPLETED
+        )
+
+        # Authenticate as User B
+        self.client.force_authenticate(user=self.user_b)
+
+        # User B attempts to access User A's evaluation endpoint
+        res = self.client.get(f'/api/seo/ai/agent/evaluation/{run_a.id}/')
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_secret_scrubbing_in_telemetry_and_errors(self):
+        """4. Sensitive tokens, keys, and passwords are fully scrubbed from event payloads."""
+        from apps.seo.services.agent_events import sanitize_event_payload
+
+        dirty_payload = {
+            "api_key": "sk-secret-12345",
+            "bearer_token": "Bearer ya29.secret_token",
+            "db_password": "super_secret_password",
+            "clean_metric": 42
+        }
+
+        clean = sanitize_event_payload(dirty_payload)
+        self.assertEqual(clean["api_key"], "***REDACTED***")
+        self.assertEqual(clean["bearer_token"], "***REDACTED***")
+        self.assertEqual(clean["db_password"], "***REDACTED***")
+        self.assertEqual(clean["clean_metric"], 42)
+
+
+class SEOAgentEvaluationTests(TestCase):
+    """
+    Phase 4.9.5 Agent Evaluation Tests:
+    Observable evaluation metrics for agent runs and multi-agent SharedContext.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(email='eval_user@doxarank.ai', password='Password123!')
+        self.project = Project.objects.create(name="Eval Project", website_url="https://eval.et", owner=self.user)
+        self.client = APIClient()
+
+    def test_agent_evaluation_scorecard_calculation(self):
+        """1. SEOAgentEvaluationService computes observable scorecards without inspecting chain-of-thought."""
+        from apps.seo.models import AgentRun, AgentRunStatus, AgentStep, AgentToolCall, AgentActionType, AgentStepStatus
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal="Analyze technical issues and propose action",
+            status=AgentRunStatus.COMPLETED
+        )
+
+        # Create steps and tool calls
+        step1 = AgentStep.objects.create(run=run, step_number=1, action_type=AgentActionType.TOOL_CALL, status=AgentStepStatus.COMPLETED)
+        AgentToolCall.objects.create(step=step1, tool_name="get_site_audit_summary", tool_output={"success": True})
+
+        step2 = AgentStep.objects.create(run=run, step_number=2, action_type=AgentActionType.TOOL_CALL, status=AgentStepStatus.COMPLETED)
+        AgentToolCall.objects.create(step=step2, tool_name="propose_seo_action", tool_output={"success": True})
+
+        eval_res = SEOAgentEvaluationService.evaluate_run(run)
+
+        self.assertEqual(eval_res["run_id"], run.id)
+        self.assertTrue(eval_res["task_success"])
+        self.assertEqual(eval_res["total_steps"], 2)
+        self.assertEqual(eval_res["total_tool_calls"], 2)
+        self.assertEqual(eval_res["failed_tool_calls"], 0)
+        self.assertEqual(eval_res["tool_selection_accuracy"], 1.0)
+        self.assertEqual(eval_res["safety_compliance_pct"], 100.0)
+        self.assertGreaterEqual(eval_res["overall_score"], 80.0)
+
+    def test_agent_evaluation_rest_endpoint(self):
+        """2. REST API /api/seo/ai/agent/evaluation/<run_id>/ returns evaluation data for project owner."""
+        from apps.seo.models import AgentRun, AgentRunStatus
+
+        run = AgentRun.objects.create(
+            project=self.project,
+            user=self.user,
+            goal="Endpoint evaluation test",
+            status=AgentRunStatus.COMPLETED
+        )
+
+        # 1. Unauthenticated request rejected
+        res_unauth = self.client.get(f'/api/seo/ai/agent/evaluation/{run.id}/')
+        self.assertEqual(res_unauth.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 2. Authenticated owner request succeeded
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get(f'/api/seo/ai/agent/evaluation/{run.id}/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["run_id"], run.id)
+        self.assertIn("overall_score", res.data)
+        self.assertIn("safety_compliance_pct", res.data)

@@ -9,7 +9,7 @@ from .views import (
     SEOActionViewSet, SEOActionPlanViewSet, AgentRunViewSet,
     GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView,
     SEOAdaptiveStrategyView, SEOAgentOrchestrationView,
-    MCPServersView, MCPToolsView
+    MCPServersView, MCPToolsView, AgentEvaluationView
 )
 
 app_name = 'seo'
@@ -33,6 +33,7 @@ router.register('ai/agent/runs', AgentRunViewSet, basename='agent-run')
 urlpatterns = [
     path('ai/mcp/servers/', MCPServersView.as_view(), name='seo-mcp-servers'),
     path('ai/mcp/tools/', MCPToolsView.as_view(), name='seo-mcp-tools'),
+    path('ai/agent/evaluation/<int:run_id>/', AgentEvaluationView.as_view(), name='seo-agent-evaluation'),
     path('ai/orchestrate/agents/', SEOAgentOrchestrationView.as_view(), name='seo-agent-orchestrate-agents'),
     path('ai/orchestrate/', SEOAgentOrchestrationView.as_view(), name='seo-agent-orchestrate'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),
@@ -40,5 +41,3 @@ urlpatterns = [
     path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     path('', include(router.urls)),
 ]
-
-

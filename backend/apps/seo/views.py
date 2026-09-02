@@ -1799,3 +1799,23 @@ class MCPToolsView(APIView):
             "tools": tools,
             "count": len(tools)
         }, status=status.HTTP_200_OK)
+
+
+class AgentEvaluationView(APIView):
+    """
+    Retrieve objective observable evaluation metrics for an AgentRun.
+    GET /api/seo/ai/agent/evaluation/<run_id>/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        from apps.seo.models import AgentRun
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        try:
+            run = AgentRun.objects.get(id=run_id, project__owner=request.user)
+        except AgentRun.DoesNotExist:
+            return Response({"detail": "AgentRun not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        evaluation = SEOAgentEvaluationService.evaluate_run(run)
+        return Response(evaluation, status=status.HTTP_200_OK)
