@@ -457,6 +457,65 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         </div>
       </div>
 
+      {/* Model Context Protocol (MCP) Interoperability Section (Phase 4.8) */}
+      <div
+        id="mcp-tools-banner"
+        style={{
+          padding: '14px 18px',
+          borderRadius: '12px',
+          backgroundColor: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+          marginBottom: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '16px' }}>🔌</span>
+            <strong style={{ fontSize: '13px', color: '#0f172a' }}>External Tool Interoperability — Model Context Protocol (MCP)</strong>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '12px',
+                backgroundColor: '#dcfce7',
+                color: '#15803d'
+              }}
+            >
+              ● seo-local-diagnostics (JSON-RPC 2.0 CONNECTED)
+            </span>
+          </div>
+          <span style={{ fontSize: '11px', color: '#64748b' }}>
+            Protocol-standard external diagnostic tools adapted into DoxaRank ToolRegistry
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ check_url_status</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ get_page_metadata</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ get_external_page_signals</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGoal('Inspect URL with external MCP diagnostic tools: check live HTTP status latency, OpenGraph head tags, and DOM text-to-HTML ratio.')}
+            style={{ ...suggestionPillStyle, backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#334155', marginLeft: 'auto' }}
+          >
+            ⚡ Test MCP Diagnostics Mission
+          </button>
+        </div>
+      </div>
+
       {/* Goal Input & Trigger Box */}
       <div style={goalCardStyle}>
         <label htmlFor="agent-goal-input" style={goalLabelStyle}>

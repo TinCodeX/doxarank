@@ -1607,9 +1607,22 @@ def create_default_tool_registry() -> ToolRegistry:
     return registry
 
 
+
+def mount_default_mcp_tools(registry: ToolRegistry) -> None:
+    """Discover and mount approved external MCP tools into ToolRegistry."""
+    try:
+        from apps.seo.services.mcp.registry import get_mcp_registry
+        get_mcp_registry(tool_registry=registry)
+    except Exception as exc:
+        logger.warning(f"[ToolRegistry] Failed to mount default MCP tools: {exc}")
+
+
 # Module singleton
 default_tool_registry = create_default_tool_registry()
 
 def get_tool_registry() -> ToolRegistry:
     """Return the default global ToolRegistry instance."""
     return default_tool_registry
+
+
+mount_default_mcp_tools(default_tool_registry)

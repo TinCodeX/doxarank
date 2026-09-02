@@ -96,6 +96,15 @@ class AgentEventType(str, Enum):
     SEO_AGENT_ROUTING_STARTED = "seo.agent.routing.started"
     SEO_AGENT_ROUTING_COMPLETED = "seo.agent.routing.completed"
 
+    # Model Context Protocol (MCP) Interoperability lifecycle (Phase 4.8)
+    MCP_SERVER_REGISTERED = "mcp.server.registered"
+    MCP_TOOLS_DISCOVERED = "mcp.tools.discovered"
+    MCP_TOOL_AUTHORIZATION_CHECKED = "mcp.tool.authorization.checked"
+    MCP_TOOL_INVOCATION_STARTED = "mcp.tool.invocation.started"
+    MCP_TOOL_INVOCATION_COMPLETED = "mcp.tool.invocation.completed"
+    MCP_TOOL_INVOCATION_FAILED = "mcp.tool.invocation.failed"
+
+
 
 
 def sanitize_event_payload(data: Any) -> Any:

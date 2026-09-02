@@ -1765,3 +1765,37 @@ class SEOAgentOrchestrationView(APIView):
         )
 
         return Response(context.to_dict(), status=status.HTTP_200_OK)
+
+
+class MCPServersView(APIView):
+    """
+    List all registered Model Context Protocol (MCP) servers and their status.
+    GET /api/seo/ai/mcp/servers/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.seo.services.mcp.registry import get_mcp_registry
+        mcp_registry = get_mcp_registry()
+        servers = mcp_registry.list_servers()
+        return Response({
+            "servers": servers,
+            "count": len(servers)
+        }, status=status.HTTP_200_OK)
+
+
+class MCPToolsView(APIView):
+    """
+    List all discovered and approved external MCP tools.
+    GET /api/seo/ai/mcp/tools/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.seo.services.mcp.registry import get_mcp_registry
+        mcp_registry = get_mcp_registry()
+        tools = mcp_registry.list_mcp_tools()
+        return Response({
+            "tools": tools,
+            "count": len(tools)
+        }, status=status.HTTP_200_OK)

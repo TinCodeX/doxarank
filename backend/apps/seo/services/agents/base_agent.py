@@ -135,12 +135,21 @@ class BaseSpecializedAgent(ABC):
         self.registry = registry or get_tool_registry()
         self.publisher = publisher or get_event_publisher()
 
+    def is_tool_allowed(self, tool_name: str) -> bool:
+        """Verify whether the tool is permitted for this agent (including external MCP tools)."""
+        if tool_name in self.allowed_tools:
+            return True
+        if tool_name.startswith("mcp__"):
+            from apps.seo.services.mcp.permissions import MCPPermissionPolicy
+            return MCPPermissionPolicy.is_agent_authorized(self.name, tool_name)
+        return False
+
     def execute_tool(self, tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Execute a registered tool subject to this agent's strict permission allowlist.
         Raises PermissionError if the tool is not explicitly permitted for this agent.
         """
-        if tool_name not in self.allowed_tools:
+        if not self.is_tool_allowed(tool_name):
             err_msg = f"Agent '{self.name}' is NOT authorized to execute tool '{tool_name}'. Allowed tools: {self.allowed_tools}"
             logger.error(f"[ToolPermissionDenied] {err_msg}")
             raise PermissionError(err_msg)

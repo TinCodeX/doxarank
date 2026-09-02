@@ -11226,3 +11226,179 @@ class SEOAgentOrchestrationTests(TestCase):
             self.assertEqual(executed, ["seo_researcher", "seo_investigator"])
             self.assertEqual(context.agent_results_history[0]["status"], "completed")
             self.assertEqual(context.agent_results_history[1]["status"], "failed")
+
+
+class SEOModelContextProtocolTests(TestCase):
+    """
+    Phase 4.8 Integration & Unit Tests:
+    Model Context Protocol (MCP) server, client discovery, tool adaptation,
+    strict read-only permissions, agent integration, and REST API endpoints.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='mcp_user_a@doxarank.ai',
+            password='Password123!'
+        )
+        self.project_a = Project.objects.create(
+            name="Project Alpha MCP",
+            website_url="https://alpha-mcp.com",
+            owner=self.user_a
+        )
+        self.client = APIClient()
+
+    def test_mcp_server_and_tool_discovery(self):
+        """1. Local MCP server implements tools/list and returns valid tool declarations and schemas."""
+        from apps.seo.services.mcp.server import LocalSEOExternalServer
+        from apps.seo.services.mcp.client import MCPClient
+
+        server = LocalSEOExternalServer()
+        client = MCPClient(server=server, server_id="seo_local")
+        tools = client.discover_tools()
+
+        self.assertEqual(len(tools), 3)
+        tool_names = [t["name"] for t in tools]
+        self.assertIn("check_url_status", tool_names)
+        self.assertIn("get_page_metadata", tool_names)
+        self.assertIn("get_external_page_signals", tool_names)
+
+        # Verify JSON-Schema compliance
+        status_tool = next(t for t in tools if t["name"] == "check_url_status")
+        self.assertEqual(status_tool["category"], "read_only")
+        self.assertFalse(status_tool["is_mutating"])
+        self.assertIn("url", status_tool["inputSchema"]["required"])
+
+    def test_mcp_tool_invocation_protocol(self):
+        """2. MCPClient calls tools/call on server and returns structured, normalized content."""
+        from apps.seo.services.mcp.server import LocalSEOExternalServer
+        from apps.seo.services.mcp.client import MCPClient
+
+        server = LocalSEOExternalServer()
+        client = MCPClient(server=server, server_id="seo_local")
+
+        # Test URL status call
+        result = client.call_tool("check_url_status", {"url": "https://alpha-mcp.com/pricing"})
+        self.assertTrue(result["success"])
+        self.assertIn("latency_ms", result["data"])
+        self.assertIn("url", result["data"])
+
+        # Test Page metadata call
+        meta_result = client.call_tool("get_page_metadata", {"url": "https://alpha-mcp.com/features"})
+        self.assertTrue(meta_result["success"])
+        self.assertIn("metadata_present", meta_result["data"])
+        self.assertIn("title", meta_result["data"])
+
+    def test_tool_adapter_and_central_registry_integration(self):
+        """3. Discovered MCP tools adapt into AgentToolDefinition and mount into central ToolRegistry."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        registry = get_tool_registry()
+        adapted_tool = registry.get("mcp__seo_local__check_url_status")
+
+        self.assertIsNotNone(adapted_tool)
+        self.assertEqual(adapted_tool.category, "read_only")
+        self.assertFalse(adapted_tool.requires_approval)
+        self.assertFalse(adapted_tool.is_mutating)
+
+        # Execute through central ToolRegistry
+        exec_res = registry.execute(
+            "mcp__seo_local__check_url_status",
+            project=self.project_a,
+            arguments={"url": "https://alpha-mcp.com/blog"}
+        )
+
+        self.assertTrue(exec_res["success"])
+        self.assertEqual(exec_res["data"]["source"], "mcp")
+        self.assertEqual(exec_res["data"]["server"], "seo_local")
+        self.assertEqual(exec_res["data"]["status"], "success")
+
+    def test_security_and_permission_enforcement(self):
+        """4. Security policy rejects unapproved servers, mutating tools, and unauthorized agents."""
+        from apps.seo.services.mcp.permissions import MCPPermissionPolicy
+        from apps.seo.services.agents.seo_action_agent import SEOActionPlanningAgent
+
+        # 1. Unapproved server is rejected
+        self.assertFalse(MCPPermissionPolicy.is_server_approved("rogue_untrusted_server"))
+        is_valid, err = MCPPermissionPolicy.validate_tool_for_registration(
+            server_id="rogue_server",
+            tool_declaration={"name": "test", "is_mutating": False}
+        )
+        self.assertFalse(is_valid)
+
+        # 2. Mutating tool declaration is strictly rejected
+        is_valid, err = MCPPermissionPolicy.validate_tool_for_registration(
+            server_id="seo_local",
+            tool_declaration={"name": "publish_content", "is_mutating": True, "category": "mutating"}
+        )
+        self.assertFalse(is_valid)
+        self.assertIn("MCP mutation is forbidden", err)
+
+        # 3. Path traversal attack in arguments is caught by sanitizer
+        valid_args, clean, err = MCPPermissionPolicy.sanitize_arguments({"url": "https://example.com/../../etc/passwd"})
+        self.assertFalse(valid_args)
+        self.assertIn("Path traversal forbidden", err)
+
+        # 4. Unauthorized agent (e.g. action planner) cannot call MCP tools
+        planner_agent = SEOActionPlanningAgent(project=self.project_a, user=self.user_a)
+        with self.assertRaises(PermissionError) as ctx:
+            planner_agent.execute_tool("mcp__seo_local__check_url_status", {"url": "https://example.com"})
+        self.assertIn("is NOT authorized to execute tool", str(ctx.exception))
+
+    def test_specialized_agent_mcp_integration(self):
+        """5. SEOResearchAgent successfully queries external MCP tools and enriches shared context."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            target_url="https://alpha-mcp.com/features"
+        )
+
+        agent = SEOResearchAgent(project=self.project_a, user=self.user_a)
+        result = agent.run(context)
+
+        self.assertEqual(result.status, "completed")
+        # Verify MCP URL status was collected and added to evidence
+        self.assertIn("mcp_url_status", context.evidence)
+        self.assertIn("url", context.evidence["mcp_url_status"])
+        self.assertTrue(any("MCP External Diagnostics" in f for f in result.findings))
+
+    def test_mcp_failure_handling_and_graceful_degradation(self):
+        """6. Agent continues safely when external MCP server encounters a failure or timeout."""
+        from apps.seo.services.mcp.client import MCPClient
+        from unittest.mock import MagicMock
+
+        # Mock a failing server
+        mock_server = MagicMock()
+        mock_server.handle_request.side_effect = RuntimeError("Socket connection timed out")
+
+        client = MCPClient(server=mock_server, server_id="seo_local")
+        res = client.call_tool("check_url_status", {"url": "https://fail-test.com"})
+
+        # Client must handle failure gracefully without crashing
+        self.assertFalse(res["success"])
+        self.assertIn("Socket connection timed out", res["error"])
+
+    def test_rest_api_endpoints(self):
+        """7. REST API endpoints /api/seo/ai/mcp/servers/ and /api/seo/ai/mcp/tools/ require auth and return valid data."""
+        # 1. Unauthenticated request is rejected
+        res_unauth = self.client.get('/api/seo/ai/mcp/servers/')
+        self.assertEqual(res_unauth.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 2. Authenticated user lists servers
+        self.client.force_authenticate(user=self.user_a)
+        res_servers = self.client.get('/api/seo/ai/mcp/servers/')
+        self.assertEqual(res_servers.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(res_servers.data["count"], 1)
+        self.assertEqual(res_servers.data["servers"][0]["server_id"], "seo_local")
+
+        # 3. Authenticated user lists discovered MCP tools
+        res_tools = self.client.get('/api/seo/ai/mcp/tools/')
+        self.assertEqual(res_tools.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(res_tools.data["count"], 3)
+        tool_names = [t["raw_name"] for t in res_tools.data["tools"]]
+        self.assertIn("check_url_status", tool_names)

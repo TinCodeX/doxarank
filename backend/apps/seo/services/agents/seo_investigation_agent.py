@@ -34,7 +34,10 @@ class SEOInvestigationAgent(BaseSpecializedAgent):
         "analyze_seo_opportunities",
         "investigate_seo_opportunity",
         "get_action_outcomes",
-        "get_adaptive_seo_strategy"
+        "get_adaptive_seo_strategy",
+        "mcp__seo_local__check_url_status",
+        "mcp__seo_local__get_page_metadata",
+        "mcp__seo_local__get_external_page_signals"
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

@@ -214,6 +214,9 @@ CORE TOOLS REFERENCE:
 - verify_seo_action / verify_action_plan: Empirically verify live website DOM and status code changes.
 - get_action_outcomes: Retrieve historical SEO action outcomes, empirical improvement rates, and before/after search performance evidence for this project.
 - get_adaptive_seo_strategy: Retrieve calibrated adaptive SEO strategy, historical action effectiveness, Bayesian-smoothed improvement rates, and planning priority adjustments for this project.
+- mcp__seo_local__check_url_status: [MCP External Tool] Inspects live HTTP response code, latency, redirects, and SSL validity.
+- mcp__seo_local__get_page_metadata: [MCP External Tool] Fetches live HTML head tags, meta title, meta description, canonical link, OpenGraph tags, and robots directives.
+- mcp__seo_local__get_external_page_signals: [MCP External Tool] Analyzes external DOM structural metrics including word count, text-to-HTML ratio, total images, and images lacking alt text.
 
 EVIDENCE HIERARCHY & REASONING GUIDELINES:
 1. Grounding hierarchy:
@@ -1584,6 +1587,39 @@ class MockAIProvider(BaseAIProvider):
                 )
             }
 
+        # ---------------------------------------------------------------------
+        # BRANCH 0f: Model Context Protocol (MCP) External Diagnostics Reasoning
+        # ---------------------------------------------------------------------
+        is_mcp_goal = any(term in goal for term in [
+            'mcp', 'external tool', 'external diagnostic', 'check url status',
+            'get page metadata', 'external page signals', 'page signals'
+        ])
+        if is_mcp_goal:
+            url_to_inspect = target_url or project.website_url
+            if 'mcp__seo_local__check_url_status' in available_tools and 'mcp__seo_local__check_url_status' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "mcp__seo_local__check_url_status",
+                    "arguments": {"url": url_to_inspect, "timeout_seconds": 5},
+                    "reason": f"Invoke external MCP tool 'check_url_status' to inspect live HTTP response latency and SSL validity for {url_to_inspect}."
+                }
+            if 'mcp__seo_local__get_page_metadata' in available_tools and 'mcp__seo_local__get_page_metadata' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "mcp__seo_local__get_page_metadata",
+                    "arguments": {"url": url_to_inspect},
+                    "reason": f"Invoke external MCP tool 'get_page_metadata' to verify head tags, OpenGraph metadata, and indexing directives."
+                }
+            if 'mcp__seo_local__check_url_status' in tool_calls or 'mcp__seo_local__get_page_metadata' in tool_calls:
+                return {
+                    "action": "finish",
+                    "summary": (
+                        f"### Model Context Protocol (MCP) External Diagnostics Summary\n\n"
+                        f"- Successfully queried external MCP diagnostic tools for `{url_to_inspect}`.\n"
+                        f"- Verified live HTTP accessibility, latency metrics, and OpenGraph metadata directives.\n"
+                        f"- External signals incorporated into DoxaRank evidence hierarchy without bypassing governance boundaries."
+                    )
+                }
 
         # ---------------------------------------------------------------------
         # BRANCH 0b: Cross-Source SEO Intelligence Correlation

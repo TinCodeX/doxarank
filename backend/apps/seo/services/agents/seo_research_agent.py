@@ -33,7 +33,10 @@ class SEOResearchAgent(BaseSpecializedAgent):
         "get_site_audit_summary",
         "get_audit_issues",
         "get_action_outcomes",
-        "get_adaptive_seo_strategy"
+        "get_adaptive_seo_strategy",
+        "mcp__seo_local__check_url_status",
+        "mcp__seo_local__get_page_metadata",
+        "mcp__seo_local__get_external_page_signals"
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:
@@ -72,6 +75,21 @@ class SEOResearchAgent(BaseSpecializedAgent):
                     findings.append(f"Retrieved {len(queries_res['data'])} active search queries for {context.target_url}.")
             except Exception as exc:
                 logger.warning(f"[{self.name}] Top queries collection failed: {exc}")
+
+            # 2b. External MCP Diagnostics (check URL status & metadata)
+            try:
+                mcp_status = self.execute_tool(
+                    "mcp__seo_local__check_url_status",
+                    {"url": context.target_url}
+                )
+                if mcp_status.get("success") and mcp_status.get("data"):
+                    st_data = mcp_status["data"]
+                    inner = st_data.get("data", st_data)
+                    evidence_collected["mcp_url_status"] = inner
+                    code = inner.get("status_code", "N/A")
+                    findings.append(f"MCP External Diagnostics: URL status HTTP {code} (latency {inner.get('latency_ms', 0)}ms).")
+            except Exception as exc:
+                logger.warning(f"[{self.name}] MCP status check skipped: {exc}")
 
         # 3. Gather Site Audit Diagnostics
         try:

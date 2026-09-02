@@ -531,3 +531,24 @@ Supervisor ──(routing)──> ResearchAgent ──(handoff)──> Investiga
 
 ### Governance & Privacy:
 - All event payloads are sanitized via `sanitize_event_payload` to guarantee that credentials, tokens, and internal chain-of-thought tokens are never leaked into the event stream.
+
+---
+
+## 16. Model Context Protocol (MCP) Interoperability Lifecycle Events (Phase 4.8)
+
+Phase 4.8 establishes observable telemetry for external MCP server registration, capability discovery, and tool invocations:
+
+```text
+MCP Server Registered ──> Tools Discovered ──> Tool Authorization Checked ──> Tool Invocation Started ──> Tool Invocation Completed / Failed
+```
+
+### Real-Time MCP Events:
+- `mcp.server.registered`: Emitted when an approved MCP server is connected and registered into the subsystem.
+- `mcp.tools.discovered`: Emitted upon scanning an MCP server's declared tool capabilities (`tools/list`).
+- `mcp.tool.authorization.checked`: Emitted when an agent's permission to execute an external MCP tool is validated against the security policy.
+- `mcp.tool.invocation.started`: Emitted before dispatching a `tools/call` JSON-RPC message to an external server.
+- `mcp.tool.invocation.completed`: Emitted upon receiving a valid, parsed tool response with execution latency.
+- `mcp.tool.invocation.failed`: Emitted when an external tool invocation fails, times out, or returns a protocol error.
+
+### Governance & Privacy:
+- Invocations preserve multi-tenant project isolation and sanitize external parameters against injection payloads.
