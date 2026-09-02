@@ -135,6 +135,7 @@ export interface SEOAction {
   outcome_confidence?: number;
   outcome_evidence?: Record<string, any>;
   outcome_measured_at?: string | null;
+  strategy_reasoning?: AdaptiveActionPrioritization | null;
   created_at: string;
   updated_at: string;
 }
@@ -211,6 +212,48 @@ export interface HistoricalOutcomeSignals {
     measured_at: string;
     summary: string;
   }>;
+}
+
+export type StrategyConfidenceLevel = 'high' | 'medium' | 'low' | 'none';
+
+export interface AdaptiveActionPrioritization {
+  action_type: string;
+  base_priority?: number;
+  final_priority?: number;
+  historical_sample_size: number;
+  total_recorded: number;
+  improved: number;
+  no_change: number;
+  declined: number;
+  insufficient_data: number;
+  historical_success_rate: number;
+  historical_smoothed_rate: number;
+  historical_confidence: number;
+  confidence_level: StrategyConfidenceLevel;
+  historical_adjustment: number;
+  learning_signal: 'positive' | 'negative' | 'neutral' | 'insufficient_data';
+  reasoning: string;
+}
+
+export interface AdaptiveSEOStrategyResponse {
+  project_id: number;
+  project_name: string;
+  strategy_confidence: StrategyConfidenceLevel;
+  historical_sample_size: number;
+  evaluatable_sample_size: number;
+  overall_success_rate: number;
+  overall_smoothed_rate: number;
+  preferred_actions: string[];
+  deprioritized_actions: string[];
+  neutral_actions: string[];
+  action_prioritizations: Record<string, AdaptiveActionPrioritization>;
+  reason: string;
+  evidence_hierarchy?: {
+    tier_1_observed_facts: string;
+    tier_2_historical_evidence: string;
+    tier_3_inferences: string;
+    tier_4_recommendations: string;
+  };
 }
 
 

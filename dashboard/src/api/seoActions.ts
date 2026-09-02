@@ -195,3 +195,21 @@ export async function getHistoricalOutcomeSignals(
     `/api/seo/ai/actions/outcomes-summary/?${searchParams.toString()}`
   );
 }
+
+/**
+ * Retrieve calibrated project adaptive SEO strategy, Bayesian-smoothed win rates, and prioritization signals.
+ */
+export async function getAdaptiveSEOStrategy(
+  projectId: number,
+  actionType?: string,
+  targetUrl?: string
+): Promise<import('../types/seoAction').AdaptiveSEOStrategyResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.append('project_id', String(projectId));
+  if (actionType && actionType !== 'all') searchParams.append('action_type', actionType);
+  if (targetUrl) searchParams.append('target_url', targetUrl);
+
+  return apiFetch<import('../types/seoAction').AdaptiveSEOStrategyResponse>(
+    `/api/seo/ai/actions/strategy/?${searchParams.toString()}`
+  );
+}

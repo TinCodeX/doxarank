@@ -1049,6 +1049,27 @@ def handle_get_action_outcomes(project: Project, args: Dict[str, Any]) -> Dict[s
     )
 
 
+def handle_get_adaptive_seo_strategy(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve calibrated adaptive SEO strategy, historical effectiveness, and action prioritization signals."""
+    action_type = args.get("action_type")
+    from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+    service = SEOAdaptiveStrategyService(project=project)
+    strategy = service.evaluate_strategy(action_type_filter=action_type)
+
+    # Return compact, token-efficient response suitable for LLM reasoning
+    return {
+        "strategy_confidence": strategy.get("strategy_confidence", "none"),
+        "historical_sample_size": strategy.get("historical_sample_size", 0),
+        "evaluatable_sample_size": strategy.get("evaluatable_sample_size", 0),
+        "preferred_actions": strategy.get("preferred_actions", []),
+        "deprioritized_actions": strategy.get("deprioritized_actions", []),
+        "neutral_actions": strategy.get("neutral_actions", []),
+        "action_prioritizations": strategy.get("action_prioritizations", {}),
+        "reason": strategy.get("reason", ""),
+        "evidence_hierarchy": strategy.get("evidence_hierarchy", {})
+    }
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1561,6 +1582,26 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=False,
         handler=handle_get_action_outcomes
+    ))
+
+    # 22. get_adaptive_seo_strategy
+    registry.register(AgentToolDefinition(
+        name="get_adaptive_seo_strategy",
+        description="Retrieve calibrated adaptive SEO strategy, historical action effectiveness, and empirical planning signals for this project. Use before planning or prioritizing actions to ground recommendations in past observed outcomes.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_type": {
+                    "type": "string",
+                    "description": "Optional filter for specific action type (e.g. 'optimize_title', 'update_meta_description')."
+                }
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_adaptive_seo_strategy
     ))
 
     return registry

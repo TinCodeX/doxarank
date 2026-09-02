@@ -13,7 +13,8 @@ import type {
   PlanSEOOutcome,
   HistoricalOutcomeSignals,
   ActionStatusCounts,
-  ActionPreviewDiff
+  ActionPreviewDiff,
+  AdaptiveSEOStrategyResponse
 } from '../types/seoAction';
 import {
   getSEOActions,
@@ -28,6 +29,7 @@ import {
   verifySEOAction,
   measureSEOActionOutcome,
   getHistoricalOutcomeSignals,
+  getAdaptiveSEOStrategy,
   getSEOActionStatusCounts
 } from '../api/seoActions';
 import {
@@ -71,6 +73,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [isMeasuring, setIsMeasuring] = useState<boolean>(false);
   const [historicalSignals, setHistoricalSignals] = useState<HistoricalOutcomeSignals | null>(null);
+  const [adaptiveStrategy, setAdaptiveStrategy] = useState<AdaptiveSEOStrategyResponse | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -180,12 +183,23 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     }
   }, [project]);
 
+  const fetchAdaptiveStrategy = useCallback(async () => {
+    if (!project) return;
+    try {
+      const strat = await getAdaptiveSEOStrategy(project.id);
+      setAdaptiveStrategy(strat);
+    } catch (err) {
+      console.warn('Adaptive strategy fetch skipped', err);
+    }
+  }, [project]);
+
 
   useEffect(() => {
     fetchActions();
     fetchPlans();
     fetchHistoricalSignals();
-  }, [fetchActions, fetchPlans, fetchHistoricalSignals]);
+    fetchAdaptiveStrategy();
+  }, [fetchActions, fetchPlans, fetchHistoricalSignals, fetchAdaptiveStrategy]);
 
 
 
@@ -776,6 +790,121 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         </div>
       </div>
 
+      {/* Adaptive SEO Strategy & Historical Learning Section */}
+      {adaptiveStrategy && (
+        <div
+          id="adaptive-seo-strategy-banner"
+          style={{
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>🧠</span>
+              <strong style={{ fontSize: '14px', color: '#0f172a' }}>Adaptive SEO Strategy</strong>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor:
+                    adaptiveStrategy.strategy_confidence === 'high' ? '#dcfce7' :
+                    adaptiveStrategy.strategy_confidence === 'medium' ? '#dbeafe' :
+                    adaptiveStrategy.strategy_confidence === 'low' ? '#fef3c7' : '#f1f5f9',
+                  color:
+                    adaptiveStrategy.strategy_confidence === 'high' ? '#15803d' :
+                    adaptiveStrategy.strategy_confidence === 'medium' ? '#1d4ed8' :
+                    adaptiveStrategy.strategy_confidence === 'low' ? '#b45309' : '#64748b',
+                }}
+              >
+                {adaptiveStrategy.strategy_confidence === 'none' ? 'INSUFFICIENT DATA' : `${adaptiveStrategy.strategy_confidence.toUpperCase()} CONFIDENCE`}
+              </span>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                ({adaptiveStrategy.historical_sample_size} Measured, {adaptiveStrategy.evaluatable_sample_size} Evaluatable)
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#334155' }}>
+                Smoothed Win Rate: <strong style={{ color: '#0f172a' }}>{Math.round(adaptiveStrategy.overall_smoothed_rate * 100)}%</strong>
+                <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px' }}>
+                  (Raw: {Math.round(adaptiveStrategy.overall_success_rate * 100)}%)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: '1.4' }}>
+            {adaptiveStrategy.reason}
+          </p>
+
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
+            {/* Preferred Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#15803d' }}>Historically Effective:</span>
+              {adaptiveStrategy.preferred_actions.length > 0 ? (
+                adaptiveStrategy.preferred_actions.map((actType) => {
+                  const pInfo = adaptiveStrategy.action_prioritizations[actType];
+                  return (
+                    <span
+                      key={actType}
+                      style={{
+                        backgroundColor: '#dcfce7',
+                        color: '#166534',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        border: '1px solid #bbf7d0',
+                      }}
+                    >
+                      {actType} {pInfo ? `(+${Math.round(pInfo.historical_adjustment * 100)}%)` : ''}
+                    </span>
+                  );
+                })
+              ) : (
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>None classified yet</span>
+              )}
+            </div>
+
+            {/* Deprioritized Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#b91c1c' }}>Historically Weak:</span>
+              {adaptiveStrategy.deprioritized_actions.length > 0 ? (
+                adaptiveStrategy.deprioritized_actions.map((actType) => {
+                  const pInfo = adaptiveStrategy.action_prioritizations[actType];
+                  return (
+                    <span
+                      key={actType}
+                      style={{
+                        backgroundColor: '#fee2e2',
+                        color: '#991b1b',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        border: '1px solid #fecaca',
+                      }}
+                    >
+                      {actType} {pInfo ? `(${Math.round(pInfo.historical_adjustment * 100)}%)` : ''}
+                    </span>
+                  );
+                })
+              ) : (
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>None suppressed</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Historical Outcome Learning Signals Banner */}
       {historicalSignals && historicalSignals.total_measured > 0 && (
         <div
@@ -792,8 +921,8 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>🧠</span>
-              <strong style={{ fontSize: '14px', color: '#166534' }}>Empirical SEO Outcome Learning Signals</strong>
+              <span style={{ fontSize: '18px' }}>📊</span>
+              <strong style={{ fontSize: '14px', color: '#166534' }}>Empirical Outcome Measurements</strong>
               <span style={{ fontSize: '12px', color: '#15803d' }}>
                 ({historicalSignals.total_measured} Actions Measured)
               </span>
@@ -1250,6 +1379,22 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           {renderPriorityBadge(act.priority)}
                           {renderVerificationBadge(act.verification_status)}
                           {renderOutcomeBadge(act.seo_outcome, act.seo_outcome_display)}
+                          {act.strategy_reasoning && (
+                            <span
+                              title={act.strategy_reasoning.reasoning}
+                              style={{
+                                fontSize: '10px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                backgroundColor: act.strategy_reasoning.learning_signal === 'positive' ? '#dcfce7' : act.strategy_reasoning.learning_signal === 'negative' ? '#fee2e2' : '#f1f5f9',
+                                color: act.strategy_reasoning.learning_signal === 'positive' ? '#166534' : act.strategy_reasoning.learning_signal === 'negative' ? '#991b1b' : '#475569',
+                                border: `1px solid ${act.strategy_reasoning.learning_signal === 'positive' ? '#bbf7d0' : act.strategy_reasoning.learning_signal === 'negative' ? '#fecaca' : '#e2e8f0'}`,
+                              }}
+                            >
+                              🧠 {act.strategy_reasoning.learning_signal === 'positive' ? 'Boosted' : act.strategy_reasoning.learning_signal === 'negative' ? 'Deprioritized' : 'Adaptive'} ({act.strategy_reasoning.historical_adjustment > 0 ? '+' : ''}{(act.strategy_reasoning.historical_adjustment * 100).toFixed(0)}%)
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -1339,6 +1484,56 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Adaptive Planning Prioritization Card */}
+                  {activeAction.strategy_reasoning && (
+                    <div
+                      id="action-strategy-reasoning-card"
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: activeAction.strategy_reasoning.learning_signal === 'positive' ? '#f0fdf4' : activeAction.strategy_reasoning.learning_signal === 'negative' ? '#fef2f2' : '#f8fafc',
+                        border: `1px solid ${activeAction.strategy_reasoning.learning_signal === 'positive' ? '#bbf7d0' : activeAction.strategy_reasoning.learning_signal === 'negative' ? '#fecaca' : '#e2e8f0'}`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '15px' }}>🧠</span>
+                          <strong style={{ fontSize: '13px', color: '#1e293b' }}>Adaptive Planning Prioritization</strong>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontWeight: 700,
+                              backgroundColor: activeAction.strategy_reasoning.learning_signal === 'positive' ? '#dcfce7' : activeAction.strategy_reasoning.learning_signal === 'negative' ? '#fee2e2' : '#e2e8f0',
+                              color: activeAction.strategy_reasoning.learning_signal === 'positive' ? '#15803d' : activeAction.strategy_reasoning.learning_signal === 'negative' ? '#991b1b' : '#475569',
+                            }}
+                          >
+                            {activeAction.strategy_reasoning.learning_signal.toUpperCase()} SIGNAL
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#334155' }}>
+                          Base: <strong>{Math.round((activeAction.strategy_reasoning.base_priority ?? 0.5) * 100)}%</strong>
+                          {' '}+ Hist Adj: <strong style={{ color: activeAction.strategy_reasoning.historical_adjustment >= 0 ? '#15803d' : '#dc2626' }}>
+                            {activeAction.strategy_reasoning.historical_adjustment >= 0 ? '+' : ''}{Math.round(activeAction.strategy_reasoning.historical_adjustment * 100)}%
+                          </strong>
+                          {' '}={' '}Final Priority: <strong>{Math.round((activeAction.strategy_reasoning.final_priority ?? 0.5) * 100)}%</strong>
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: '1.4' }}>
+                        {activeAction.strategy_reasoning.reasoning}
+                      </p>
+                      <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: '#64748b', flexWrap: 'wrap' }}>
+                        <span>Historical Sample: <strong>{activeAction.strategy_reasoning.historical_sample_size} measured</strong></span>
+                        <span>Smoothed Success Rate: <strong>{Math.round(activeAction.strategy_reasoning.historical_smoothed_rate * 100)}%</strong></span>
+                        <span>Confidence: <strong>{activeAction.strategy_reasoning.confidence_level.toUpperCase()}</strong></span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Tabs */}
                   <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>

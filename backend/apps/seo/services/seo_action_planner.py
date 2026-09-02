@@ -23,6 +23,7 @@ from apps.seo.services.agent_events import (
     AgentEvent, AgentEventType, AgentEventPublisher, get_event_publisher
 )
 from apps.seo.services.seo_intelligence import normalize_url_path_for_matching
+from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
 
 logger = logging.getLogger(__name__)
 
@@ -596,6 +597,82 @@ class SEOActionPlanner:
 
         return proposals
 
+    def apply_adaptive_prioritization(
+        self,
+        proposals: List[Dict[str, Any]],
+        run_id: Optional[int] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Calibrate proposal execution priorities by integrating empirical historical learning.
+        Adjusts priority score while guaranteeing that historical evidence does NOT override
+        safety risk or approval requirements.
+        """
+        strategy_service = SEOAdaptiveStrategyService(project=self.project, publisher=self.publisher)
+        strategy = strategy_service.evaluate_strategy(run_id=run_id)
+
+        prioritized_proposals: List[Dict[str, Any]] = []
+        for p in proposals:
+            impact = p.get('expected_impact', 'medium')
+            conf = float(p.get('confidence', 0.80))
+
+            # Base priority derived from current opportunity strength
+            if impact == 'high':
+                base_priority = 0.75
+            elif impact == 'low':
+                base_priority = 0.45
+            else:
+                base_priority = 0.60
+
+            # Modulate base priority with opportunity confidence
+            base_priority = round(0.60 * base_priority + 0.40 * conf, 2)
+
+            # Apply deterministic Bayesian historical adjustment
+            prio_res = strategy_service.prioritize_action(
+                action_type=p['action_type'],
+                base_priority=base_priority,
+                strategy_data=strategy
+            )
+
+            p['strategy_reasoning'] = prio_res
+            p['base_priority_score'] = prio_res['base_priority']
+            p['historical_adjustment'] = prio_res['historical_adjustment']
+            p['final_priority_score'] = prio_res['final_priority']
+            if 'evidence' in p and isinstance(p['evidence'], dict):
+                p['evidence']['strategy_reasoning'] = prio_res
+
+            # Map to ActionPriority enum
+            final_score = prio_res['final_priority']
+            if final_score >= 0.85:
+                assigned_priority = ActionPriority.CRITICAL
+            elif final_score >= 0.65:
+                assigned_priority = ActionPriority.HIGH
+            elif final_score >= 0.40:
+                assigned_priority = ActionPriority.MEDIUM
+            else:
+                assigned_priority = ActionPriority.LOW
+            p['assigned_priority'] = assigned_priority
+
+            prioritized_proposals.append(p)
+
+        # Sort proposals so historically effective and high-leverage actions appear first
+        prioritized_proposals.sort(key=lambda x: x.get('final_priority_score', 0.5), reverse=True)
+
+        # Emit strategy applied event
+        self._emit_event(
+            AgentEventType.SEO_STRATEGY_APPLIED,
+            payload={
+                "project_id": self.project.id,
+                "proposals_evaluated": len(prioritized_proposals),
+                "strategy_confidence": strategy.get("strategy_confidence", "none"),
+                "preferred_actions": strategy.get("preferred_actions", []),
+                "deprioritized_actions": strategy.get("deprioritized_actions", []),
+                "top_prioritized_types": [p['action_type'] for p in prioritized_proposals[:5]]
+            },
+            run_id=run_id
+        )
+
+        return prioritized_proposals, strategy
+
     def create_action_plan(
         self,
         title: Optional[str] = None,
@@ -664,6 +741,13 @@ class SEOActionPlanner:
                 max_risk_val = val
                 max_risk_level = p_risk
 
+        # Apply adaptive historical strategy to calibrate and order proposals
+        all_proposals, adaptive_strategy = self.apply_adaptive_prioritization(
+            all_proposals,
+            run_id=run_id or (agent_run.id if agent_run else None)
+        )
+        all_proposals = all_proposals[:max_actions]
+
         avg_confidence = round(sum(p.get('confidence', 0.8) for p in all_proposals) / max(1, len(all_proposals)), 2)
 
         plan_title = title or f"SEO Action Plan: {len(all_proposals)} Optimizations ({self.project.name})"
@@ -676,11 +760,20 @@ class SEOActionPlanner:
             "total_proposals": len(all_proposals),
             "evidence_sources": list(set(p.get('evidence', {}).get('source', 'unknown') for p in all_proposals)),
             "generated_at": timezone.now().isoformat(),
+            "adaptive_strategy": {
+                "strategy_confidence": adaptive_strategy.get("strategy_confidence", "none"),
+                "preferred_actions": adaptive_strategy.get("preferred_actions", []),
+                "deprioritized_actions": adaptive_strategy.get("deprioritized_actions", []),
+                "overall_success_rate": adaptive_strategy.get("overall_success_rate", 0.0),
+                "overall_smoothed_rate": adaptive_strategy.get("overall_smoothed_rate", 0.50),
+                "reason": adaptive_strategy.get("reason", "")
+            },
             "proposals_summary": [
                 {
                     "action_type": p['action_type'],
                     "target_url": p['target_url'],
                     "risk_level": p['risk_level'],
+                    "final_priority_score": p.get('final_priority_score', 0.6),
                     "execution_available": p['execution_available']
                 }
                 for p in all_proposals
@@ -706,6 +799,8 @@ class SEOActionPlanner:
 
             created_actions: List[SEOAction] = []
             for p in all_proposals:
+                strat_info = p.get('strategy_reasoning', {})
+                strat_reason = strat_info.get('reasoning', 'Standard baseline prioritization.')
                 instructions = (
                     f"### Action: {p['title']}\n\n"
                     f"**Target URL:** {p['target_url']}\n"
@@ -713,11 +808,17 @@ class SEOActionPlanner:
                     f"**Risk Level:** {p['risk_level'].upper()}\n"
                     f"**Automated Execution Available:** {'Yes' if p['execution_available'] else 'No (Manual/CMS)'}\n"
                     f"**Rationale:** {p['reason']}\n\n"
+                    f"**Adaptive Historical Alignment:** {strat_reason}\n\n"
                     f"**Verification Strategy:** {p['verification_plan'].get('criteria', '')}\n\n"
                     f"1. **Human Review:** Review proposed change details.\n"
                     f"2. **Human Approval:** Approve action in dashboard.\n"
                     f"3. **Execution:** Apply change via safe connector.\n"
                     f"4. **Verification:** Inspect live website state."
+                )
+
+                assigned_prio = p.get(
+                    'assigned_priority',
+                    ActionPriority.HIGH if p.get('expected_impact') == 'high' else ActionPriority.MEDIUM
                 )
 
                 action = SEOAction.objects.create(
@@ -733,7 +834,7 @@ class SEOActionPlanner:
                     current_state=p.get('current_state', {}),
                     proposed_change=p.get('proposed_change', {}),
                     implementation_instructions=instructions,
-                    priority=ActionPriority.HIGH if p.get('expected_impact') == 'high' else ActionPriority.MEDIUM,
+                    priority=assigned_prio,
                     risk_level=p['risk_level'],
                     impact_estimate=p.get('expected_impact', 'medium'),
                     effort_estimate='low' if p['execution_available'] else 'medium',
@@ -772,6 +873,19 @@ class SEOActionPlanner:
                 },
                 run_id=run_id or (agent_run.id if agent_run else None)
             )
+
+        self._emit_event(
+            AgentEventType.SEO_STRATEGY_COMPLETED,
+            payload={
+                "plan_id": action_plan.id,
+                "project_id": self.project.id,
+                "actions_created": len(created_actions),
+                "strategy_confidence": adaptive_strategy.get("strategy_confidence", "none"),
+                "preferred_actions": adaptive_strategy.get("preferred_actions", []),
+                "deprioritized_actions": adaptive_strategy.get("deprioritized_actions", [])
+            },
+            run_id=run_id or (agent_run.id if agent_run else None)
+        )
 
         logger.info(
             f"[SEOActionPlanner] Created SEOActionPlan #{action_plan.id} with {len(created_actions)} actions "

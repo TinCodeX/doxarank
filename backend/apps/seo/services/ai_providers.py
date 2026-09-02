@@ -213,19 +213,24 @@ CORE TOOLS REFERENCE:
 - plan_seo_actions / get_action_plan: Synthesize structured cohesive action plans.
 - verify_seo_action / verify_action_plan: Empirically verify live website DOM and status code changes.
 - get_action_outcomes: Retrieve historical SEO action outcomes, empirical improvement rates, and before/after search performance evidence for this project.
+- get_adaptive_seo_strategy: Retrieve calibrated adaptive SEO strategy, historical action effectiveness, Bayesian-smoothed improvement rates, and planning priority adjustments for this project.
 
 EVIDENCE HIERARCHY & REASONING GUIDELINES:
 1. Grounding hierarchy:
    - Primary: Measured GSC performance metrics (impressions, clicks, CTR, position).
    - Secondary: Live site audit diagnostic findings (AuditIssues, crawl codes).
-   - Tertiary: Historical empirical evidence from past action outcomes (get_action_outcomes).
+   - Tertiary: Historical empirical evidence and adaptive strategy (get_action_outcomes, get_adaptive_seo_strategy).
    - Quaternary: LLM synthesis and strategy formulation.
 2. Explicitly distinguish across 4 distinct reasoning tiers:
    - Observed Facts: Directly measured real-time data (e.g. "Landing page /pricing receives 14,200 impressions with 1.8% CTR at rank #12.4 and has missing H1").
    - Historical Evidence: Previously measured real outcomes on this project (e.g. "Historical title updates on this domain achieved 75% improvement rate across 8 measured actions").
    - Inferences: Deductions drawn from correlating facts and history (e.g. "Low CTR is likely driven by non-descriptive SERP snippet rather than technical indexing blockage").
-   - Recommendations: Proposed steps (e.g. "Propose optimized title tag for human review").
+   - Recommendations: Proposed steps (e.g. "Propose optimized title tag for human review with calibrated priority boost").
 3. CAUSALITY RULE: NEVER claim or guarantee that correlation is guaranteed causation. State historical rates as supportive empirical evidence.
+4. EVIDENCE INTEGRITY RULE: Historical evidence must NEVER be presented as a current observed fact.
+   - BAD: "Changing the title will improve rankings."
+   - GOOD: "Title changes produced positive outcomes in 6 of 8 measured historical actions for this project; therefore this action receives a higher planning priority."
+   Communicate uncertainty whenever historical sample sizes are low or outcomes are mixed.
 
 HUMAN-IN-THE-LOOP APPROVAL BOUNDARY:
 1. The agent must NEVER directly modify a website or execute mutations autonomously.
@@ -1525,6 +1530,57 @@ class MockAIProvider(BaseAIProvider):
                     "#### Recommendations:\n"
                     "- Prioritize action types with established high empirical improvement rates.\n"
                     "- Maintain symmetric before/after measurement windows for all future action deployments."
+                )
+            }
+
+        # ---------------------------------------------------------------------
+        # BRANCH 0e: Adaptive SEO Strategy & Historical Learning Integration
+        # ---------------------------------------------------------------------
+        is_strategy_goal = any(term in goal for term in [
+            'adaptive strategy', 'adaptive', 'strategy', 'prioritize actions',
+            'historical strategy', 'learning strategy', 'prioritization'
+        ])
+        if is_strategy_goal and 'get_adaptive_seo_strategy' in available_tools:
+            if 'get_adaptive_seo_strategy' not in tool_calls:
+                return {
+                    "action": "tool",
+                    "tool_name": "get_adaptive_seo_strategy",
+                    "arguments": {},
+                    "reason": "Retrieve empirical adaptive strategy and historical win rates to prioritize high-leverage SEO actions."
+                }
+
+            strat_data = {}
+            for h in history:
+                if h.get('tool_name') == 'get_adaptive_seo_strategy' and isinstance(h.get('tool_output'), dict):
+                    strat_data = h.get('tool_output', {})
+
+            conf = str(strat_data.get('strategy_confidence', 'none')).upper()
+            sample = strat_data.get('historical_sample_size', 0)
+            preferred = strat_data.get('preferred_actions', [])
+            deprioritized = strat_data.get('deprioritized_actions', [])
+            reason = strat_data.get('reason', '')
+
+            pref_str = ', '.join(preferred) if preferred else 'None (balanced / insufficient data)'
+            depref_str = ', '.join(deprioritized) if deprioritized else 'None'
+
+            return {
+                "action": "finish",
+                "summary": (
+                    f"### Adaptive SEO Strategy Evaluation\n\n"
+                    f"**Strategy Confidence**: `{conf}` | **Historical Sample Size**: {sample} measured actions\n\n"
+                    f"#### Tier 1 — Observed Facts:\n"
+                    f"- Analyzed project historical action records and outcome measurements.\n"
+                    f"- Evaluated {sample} historical actions with calibrated Bayesian smoothing.\n\n"
+                    f"#### Tier 2 — Historical Evidence:\n"
+                    f"- **Historically Preferred Action Types**: `{pref_str}`\n"
+                    f"- **Historically Deprioritized Action Types**: `{depref_str}`\n"
+                    f"- {reason}\n\n"
+                    f"#### Tier 3 — Inferences:\n"
+                    f"- Historical win rates indicate differential efficacy by action type for this specific domain.\n"
+                    f"- Prioritization adjustments calibrate future planning priority without bypassing safety governance.\n\n"
+                    f"#### Tier 4 — Recommendations:\n"
+                    f"- Prioritize action types with established positive empirical lift.\n"
+                    f"- Ensure all high-risk changes (`FIX_CANONICAL`, `REMOVE_REDIRECT_CHAIN`) retain mandatory human sign-off."
                 )
             }
 

@@ -1207,6 +1207,32 @@ class SEOActionViewSet(viewsets.ModelViewSet):
         )
         return Response(summary, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='strategy')
+    def strategy(self, request):
+        """
+        Retrieve project-scoped adaptive SEO strategy, Bayesian-smoothed win rates, and prioritization signals.
+        (GET /api/seo/ai/actions/strategy/?project_id=<id>&action_type=<type>)
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        action_type = request.query_params.get('action_type')
+        target_url = request.query_params.get('target_url')
+
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+        service = SEOAdaptiveStrategyService(project=project)
+        strategy_data = service.evaluate_strategy(
+            action_type_filter=action_type,
+            target_url_filter=target_url
+        )
+        return Response(strategy_data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'], url_path='status-counts')
     def status_counts(self, request):
         """
@@ -1632,3 +1658,32 @@ class GoogleOAuthCallbackView(APIView):
                 {"detail": f"An unexpected error occurred during Google Search Console authorization: {str(exc)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class SEOAdaptiveStrategyView(APIView):
+    """
+    Dedicated endpoint for retrieving project-scoped adaptive SEO strategy.
+    (GET /api/seo/ai/strategy/?project_id=<id>&action_type=<type>)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        action_type = request.query_params.get('action_type')
+        target_url = request.query_params.get('target_url')
+
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+        service = SEOAdaptiveStrategyService(project=project)
+        strategy_data = service.evaluate_strategy(
+            action_type_filter=action_type,
+            target_url_filter=target_url
+        )
+        return Response(strategy_data, status=status.HTTP_200_OK)

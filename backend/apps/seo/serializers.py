@@ -920,6 +920,12 @@ class SEOActionSerializer(serializers.ModelSerializer):
     approved_by_email = serializers.CharField(source='approved_by.email', read_only=True, allow_null=True)
     rejected_by_email = serializers.CharField(source='rejected_by.email', read_only=True, allow_null=True)
     seo_outcome_display = serializers.CharField(source='get_seo_outcome_display', read_only=True)
+    strategy_reasoning = serializers.SerializerMethodField()
+
+    def get_strategy_reasoning(self, obj):
+        if obj.evidence_snapshot and isinstance(obj.evidence_snapshot, dict):
+            return obj.evidence_snapshot.get('strategy_reasoning')
+        return None
 
     class Meta:
         model = SEOAction
@@ -942,6 +948,7 @@ class SEOActionSerializer(serializers.ModelSerializer):
             'description',
             'rationale',
             'evidence_snapshot',
+            'strategy_reasoning',
             'action_type',
             'action_type_display',
             'target_url',

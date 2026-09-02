@@ -81,6 +81,13 @@ class AgentEventType(str, Enum):
     SEO_LEARNING_SIGNAL_GENERATED = "seo.learning.signal.generated"
     SEO_OUTCOME_COMPLETED = "seo.outcome.completed"
 
+    # SEO Adaptive Strategy & Historical Learning lifecycle
+    SEO_STRATEGY_LEARNING_STARTED = "seo.strategy.learning.started"
+    SEO_STRATEGY_EVIDENCE_COLLECTED = "seo.strategy.evidence.collected"
+    SEO_STRATEGY_GENERATED = "seo.strategy.generated"
+    SEO_STRATEGY_APPLIED = "seo.strategy.applied"
+    SEO_STRATEGY_COMPLETED = "seo.strategy.completed"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """

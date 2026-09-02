@@ -455,3 +455,58 @@ Phase 4.3 establishes an immutable, server-side security boundary between autono
 * `seo.action.execution_started`: Emitted when controlled execution begins.
 * `seo.action.completed`: Emitted on successful execution with execution metadata.
 * `seo.action.failed`: Emitted on execution error with sanitized failure reason.
+
+---
+
+## 13. SEO Outcome Learning & Deterministic Measurement (Phase 4.5)
+
+Phase 4.5 introduces the closed feedback loop connecting past executed actions to observed search performance lift:
+
+```text
+EXECUTE ──> VERIFY ──> MEASURE OUTCOME ──> LEARN
+```
+
+### Registered Outcome Learning Tools:
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `get_action_outcomes` | `READ_ONLY` | No | No | Retrieve historical SEO action outcomes, empirical improvement rates, and before/after search performance evidence for a project. |
+
+### Real-Time Outcome Events:
+* `seo.outcome.measured`: Emitted when before/after GSC metrics are deterministically classified (`IMPROVED`, `NO_CHANGE`, `DECLINED`, `INSUFFICIENT_DATA`).
+* `seo.outcome.evaluated`: Emitted with aggregate empirical improvement rates and statistical confidence.
+* `seo.outcome.insufficient_data`: Emitted when before/after query traffic does not meet the minimum statistical threshold.
+
+---
+
+## 14. Adaptive SEO Strategy & Real-Time Events (Phase 4.6)
+
+Phase 4.6 enables the autonomous SEO agent to utilize historical learning to calibrate and prioritize future action recommendations:
+
+```text
+PAST OUTCOMES → LEARNED ACTION-TYPE PERFORMANCE → FUTURE ACTION PRIORITIZATION → NEW EXECUTION → NEW OUTCOME → UPDATED LEARNING
+```
+
+### Core Architecture:
+1. **Mathematical Grounding**:
+   - Deterministic Laplace / Bayesian smoothing prevents small-sample bias:
+     $$\hat{p} = \frac{\text{improved} + 1}{\text{evaluatable} + 2}$$
+   - Bounded priority calibration strictly clamped to $[-0.15, +0.15]$:
+     $$\Delta = (\hat{p} - 0.50) \times 0.30 \times w$$
+   - Historical evidence influences priority ordering without overriding safety controls or removing human approval gates.
+
+2. **Registered Adaptive Strategy Tool**:
+
+| Tool Name | Category | Mutating | Requires Approval | Purpose |
+|---|---|---|---|---|
+| `get_adaptive_seo_strategy` | `READ_ONLY` | No | No | Retrieve project-scoped adaptive SEO strategy, Bayesian-smoothed win rates, confidence tiers, and priority adjustments. |
+
+3. **Real-Time Strategy Lifecycle Events**:
+- `seo.strategy.learning.started`: Emitted when historical outcomes are queried for strategy formulation.
+- `seo.strategy.evidence.collected`: Emitted after historical sample sizes, evaluatable records, and empirical win rates are aggregated.
+- `seo.strategy.generated`: Emitted when Bayesian-smoothed win rates, confidence tiers (`high`, `medium`, `low`, `none`), and action classifications (`preferred`, `deprioritized`, `neutral`) are determined.
+- `seo.strategy.applied`: Emitted when adaptive adjustments are applied to action proposals during plan creation.
+- `seo.strategy.completed`: Emitted upon finalized plan generation with strategy summary and confidence.
+
+4. **Multi-Tenant Security Boundary**:
+Strategy evaluation strictly enforces tenant ownership: `project.owner == request.user`. Cross-project outcome data is never commingled.

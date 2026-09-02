@@ -10705,3 +10705,309 @@ class SEOOutcomeLearningAndAdaptiveAgentTests(TestCase):
         self.client.force_authenticate(user=self.user_b)
         res_unauth = self.client.get(f'/api/seo/ai/actions/outcomes-summary/?project_id={self.project_a.id}')
         self.assertEqual(res_unauth.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class SEOAdaptiveStrategyTests(TestCase):
+    """
+    Phase 4.6 — Adaptive SEO Strategy & Historical Learning Integration Unit and Integration Tests.
+    Verifies:
+    1. Laplace/Bayesian smoothed win rate calculations & prior behavior
+    2. Confidence tiers (none, low, medium, high) and bounded priority adjustments [-0.15, +0.15]
+    3. Empty project defaults (cold start / zero-data)
+    4. Action classification (preferred, deprioritized, neutral)
+    5. Action planner integration: priority calibration without safety/risk compromise
+    6. Agent tool `get_adaptive_seo_strategy` execution and output schema
+    7. Multi-tenant security isolation across API endpoints
+    8. Four-tier reasoning and evidence hierarchy validation
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='strat_a@doxarank.ai',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='strat_b@doxarank.ai',
+            password='Password123!'
+        )
+        self.project_a = Project.objects.create(
+            name="Strategy Alpha Project",
+            website_url="https://strategy-alpha.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Strategy Beta Project",
+            website_url="https://strategy-beta.com",
+            owner=self.user_b
+        )
+
+    def test_laplace_smoothed_rate_calculation(self):
+        """1. Deterministic Laplace smoothing prevents extreme win rates on small samples."""
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        service = SEOAdaptiveStrategyService(project=self.project_a)
+
+        # 0 evaluatable: defaults to prior 0.50
+        self.assertAlmostEqual(service.calculate_smoothed_rate(0, 0), 0.50, places=3)
+
+        # 1 win out of 1: (1+1)/(1+2) = 2/3 = 0.667 (not naive 1.0)
+        self.assertEqual(service.calculate_smoothed_rate(1, 1), 0.667)
+
+        # 0 wins out of 1: (0+1)/(1+2) = 1/3 = 0.333 (not naive 0.0)
+        self.assertEqual(service.calculate_smoothed_rate(0, 1), 0.333)
+
+        # 8 wins out of 10: (8+1)/(10+2) = 9/12 = 0.75
+        self.assertEqual(service.calculate_smoothed_rate(8, 10), 0.75)
+
+    def test_confidence_tiers_and_bounded_adjustments(self):
+        """2. Confidence tiers and bounded adjustments [-0.15, +0.15] behave mathematically."""
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        service = SEOAdaptiveStrategyService(project=self.project_a)
+
+        # Sample size 0 -> confidence none, adjustment 0.0
+        self.assertEqual(service.determine_confidence_level(0, 0.0), 'none')
+        self.assertAlmostEqual(service.calculate_priority_adjustment(0.50, 0, 0.0), 0.0, places=4)
+
+        # Sample size 1 -> confidence low
+        self.assertEqual(service.determine_confidence_level(1, 0.8), 'low')
+
+        # Sample size 3 -> confidence medium
+        self.assertEqual(service.determine_confidence_level(3, 0.75), 'medium')
+
+        # Sample size 6 with high confidence -> confidence high
+        self.assertEqual(service.determine_confidence_level(6, 0.85), 'high')
+
+        # Extreme positive win rate bounded at +0.15
+        adj_high = service.calculate_priority_adjustment(smoothed_rate=0.99, evaluatable_count=20, avg_confidence=1.0)
+        self.assertLessEqual(adj_high, 0.15)
+        self.assertGreater(adj_high, 0.0)
+
+        # Extreme negative win rate bounded at -0.15
+        adj_low = service.calculate_priority_adjustment(smoothed_rate=0.01, evaluatable_count=20, avg_confidence=1.0)
+        self.assertGreaterEqual(adj_low, -0.15)
+        self.assertLess(adj_low, 0.0)
+
+    def test_cold_start_zero_data_defaults(self):
+        """3. Cold start on empty project returns neutral strategy without errors."""
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        service = SEOAdaptiveStrategyService(project=self.project_a)
+        strategy = service.evaluate_strategy()
+
+        self.assertEqual(strategy['project_id'], self.project_a.id)
+        self.assertEqual(strategy['strategy_confidence'], 'none')
+        self.assertEqual(strategy['historical_sample_size'], 0)
+        self.assertEqual(strategy['evaluatable_sample_size'], 0)
+        self.assertEqual(strategy['preferred_actions'], [])
+        self.assertEqual(strategy['deprioritized_actions'], [])
+        self.assertIn('No conclusive historical outcome measurements', strategy['reason'])
+        self.assertIn('tier_1_observed_facts', strategy['evidence_hierarchy'])
+
+    def test_action_classification_with_historical_signals(self):
+        """4. Historical wins classify actions as preferred; losses classify as deprioritized."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        # Create 6 positive title optimizations
+        for i in range(6):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                title=f"Title Action {i}",
+                target_url=f"https://strategy-alpha.com/page-{i}",
+                status=ActionStatus.COMPLETED,
+                verification_status=VerificationStatus.VERIFIED,
+                seo_outcome=SEOOutcome.IMPROVED,
+                outcome_confidence=0.85,
+                completed_at=timezone.now(),
+                outcome_measured_at=timezone.now()
+            )
+
+        # Create 5 declining heading optimizations
+        for i in range(5):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.FIX_MISSING_H1,
+                title=f"Heading Action {i}",
+                target_url=f"https://strategy-alpha.com/blog-{i}",
+                status=ActionStatus.COMPLETED,
+                verification_status=VerificationStatus.VERIFIED,
+                seo_outcome=SEOOutcome.DECLINED,
+                outcome_confidence=0.80,
+                completed_at=timezone.now(),
+                outcome_measured_at=timezone.now()
+            )
+
+        # Create 1 insufficient data action (should be excluded from evaluatable denominator)
+        SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Insufficient Action",
+            target_url="https://strategy-alpha.com/new-page",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            seo_outcome=SEOOutcome.INSUFFICIENT_DATA,
+            completed_at=timezone.now(),
+            outcome_measured_at=timezone.now()
+        )
+
+        service = SEOAdaptiveStrategyService(project=self.project_a)
+        strategy = service.evaluate_strategy()
+
+        self.assertEqual(strategy['historical_sample_size'], 12)
+        self.assertEqual(strategy['evaluatable_sample_size'], 11)
+        self.assertEqual(strategy['strategy_confidence'], 'high')
+        self.assertIn(ActionType.OPTIMIZE_TITLE, strategy['preferred_actions'])
+        self.assertIn(ActionType.FIX_MISSING_H1, strategy['deprioritized_actions'])
+
+        # Check action prioritizations
+        title_prio = strategy['action_prioritizations'][ActionType.OPTIMIZE_TITLE]
+        self.assertGreater(title_prio['historical_adjustment'], 0.0)
+        self.assertEqual(title_prio['learning_signal'], 'positive')
+
+        h1_prio = strategy['action_prioritizations'][ActionType.FIX_MISSING_H1]
+        self.assertLess(h1_prio['historical_adjustment'], 0.0)
+        self.assertEqual(h1_prio['learning_signal'], 'negative')
+
+    def test_planner_adaptive_prioritization_and_safety_invariants(self):
+        """5. Planner dynamically reorders actions while strictly enforcing human approval & risk invariants."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome, ActionRiskLevel
+        from apps.seo.services.seo_action_planner import SEOActionPlanner
+
+        # Add positive history for OPTIMIZE_TITLE
+        for i in range(5):
+            SEOAction.objects.create(
+                project=self.project_a,
+                action_type=ActionType.OPTIMIZE_TITLE,
+                title=f"Historic Title {i}",
+                target_url=f"https://strategy-alpha.com/p-{i}",
+                status=ActionStatus.COMPLETED,
+                verification_status=VerificationStatus.VERIFIED,
+                seo_outcome=SEOOutcome.IMPROVED,
+                outcome_confidence=0.85,
+                completed_at=timezone.now(),
+                outcome_measured_at=timezone.now()
+            )
+
+        planner = SEOActionPlanner(project=self.project_a)
+
+        proposals = [
+            {
+                "action_type": ActionType.FIX_CANONICAL,
+                "title": "Fix Broken Canonical Tag",
+                "description": "Ensure self-referential canonical tag on page.",
+                "target_url": "https://strategy-alpha.com/products",
+                "risk_level": ActionRiskLevel.HIGH,
+                "expected_impact": "high",
+                "opportunity_score": 50,
+                "execution_available": True,
+                "verification_plan": {"method": "dom_check"}
+            },
+            {
+                "action_type": ActionType.OPTIMIZE_TITLE,
+                "title": "Optimize Low-CTR Title Tag",
+                "description": "Align title tag with target query intent.",
+                "target_url": "https://strategy-alpha.com/features",
+                "risk_level": ActionRiskLevel.LOW,
+                "expected_impact": "medium",
+                "opportunity_score": 55,
+                "execution_available": True,
+                "verification_plan": {"method": "dom_check"}
+            }
+        ]
+
+        prioritized, strat = planner.apply_adaptive_prioritization(proposals)
+        self.assertEqual(len(prioritized), 2)
+
+        # Title action received positive adjustment
+        title_prop = next(p for p in prioritized if p['action_type'] == ActionType.OPTIMIZE_TITLE)
+        self.assertGreater(title_prop['historical_adjustment'], 0.0)
+        self.assertGreater(title_prop['final_priority_score'], title_prop['base_priority_score'])
+
+        # SAFETY INVARIANTS: FIX_CANONICAL must still have HIGH risk
+        canonical_prop = next(p for p in prioritized if p['action_type'] == ActionType.FIX_CANONICAL)
+        self.assertEqual(canonical_prop['risk_level'], ActionRiskLevel.HIGH)
+
+    def test_get_adaptive_seo_strategy_agent_tool(self):
+        """6. Agent tool get_adaptive_seo_strategy executes and returns calibrated signals."""
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        registry = get_tool_registry()
+        tool = registry.get_tool("get_adaptive_seo_strategy")
+        self.assertIsNotNone(tool)
+        self.assertFalse(tool.requires_approval)
+        self.assertFalse(tool.is_mutating)
+
+        result = registry.execute("get_adaptive_seo_strategy", project=self.project_a, arguments={})
+        self.assertTrue(result['success'])
+        self.assertIn("strategy_confidence", result['data'])
+        self.assertIn("evidence_hierarchy", result['data'])
+        self.assertIn("preferred_actions", result['data'])
+        self.assertIn("deprioritized_actions", result['data'])
+
+    def test_api_endpoints_and_cross_tenant_isolation(self):
+        """7. REST API endpoints operate with authentication and enforce multi-tenant isolation."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus, VerificationStatus, SEOOutcome
+
+        # Seed data for Project A
+        SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            title="Project A Title Action",
+            target_url="https://strategy-alpha.com/features",
+            status=ActionStatus.COMPLETED,
+            verification_status=VerificationStatus.VERIFIED,
+            seo_outcome=SEOOutcome.IMPROVED,
+            outcome_confidence=0.85,
+            completed_at=timezone.now(),
+            outcome_measured_at=timezone.now()
+        )
+
+        # 1. User A retrieves Project A strategy via /api/seo/ai/strategy/
+        self.client.force_authenticate(user=self.user_a)
+        res_a1 = self.client.get(f'/api/seo/ai/strategy/?project_id={self.project_a.id}')
+        self.assertEqual(res_a1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_a1.data['project_id'], self.project_a.id)
+        self.assertEqual(res_a1.data['historical_sample_size'], 1)
+
+        # 2. User A retrieves Project A strategy via /api/seo/ai/actions/strategy/
+        res_a2 = self.client.get(f'/api/seo/ai/actions/strategy/?project_id={self.project_a.id}')
+        self.assertEqual(res_a2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_a2.data['project_id'], self.project_a.id)
+
+        # 3. Missing project_id yields 400 Bad Request
+        res_missing = self.client.get('/api/seo/ai/strategy/')
+        self.assertEqual(res_missing.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 4. Multi-tenant isolation: User B cannot access Project A strategy
+        self.client.force_authenticate(user=self.user_b)
+        res_unauth1 = self.client.get(f'/api/seo/ai/strategy/?project_id={self.project_a.id}')
+        self.assertEqual(res_unauth1.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_unauth2 = self.client.get(f'/api/seo/ai/actions/strategy/?project_id={self.project_a.id}')
+        self.assertEqual(res_unauth2.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 5. User B receives independent, clean strategy for Project B (zero leakage from Project A)
+        res_b = self.client.get(f'/api/seo/ai/strategy/?project_id={self.project_b.id}')
+        self.assertEqual(res_b.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_b.data['historical_sample_size'], 0)
+        self.assertEqual(res_b.data['strategy_confidence'], 'none')
+
+    def test_four_tier_reasoning_and_evidence_integrity(self):
+        """8. Four-tier reasoning hierarchy cleanly separates observed facts from empirical inferences."""
+        from apps.seo.services.seo_adaptive_strategy import SEOAdaptiveStrategyService
+
+        service = SEOAdaptiveStrategyService(project=self.project_a)
+        strat = service.evaluate_strategy()
+
+        evidence = strat.get('evidence_hierarchy', {})
+        self.assertIn('tier_1_observed_facts', evidence)
+        self.assertIn('tier_2_historical_evidence', evidence)
+        self.assertIn('tier_3_inferences', evidence)
+        self.assertIn('tier_4_recommendations', evidence)
+
+        # Inferences communicate empirical uncertainty, not guaranteed causal fact
+        self.assertIn('Empirical historical win/loss rates', evidence['tier_3_inferences'])
