@@ -363,6 +363,100 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         </div>
       )}
 
+      {/* Specialized SEO Agent Architecture (Phase 4.7) */}
+      <div
+        id="specialized-agent-orchestrator-banner"
+        style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          backgroundColor: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          marginBottom: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>🤖</span>
+            <strong style={{ fontSize: '14px', color: '#0f172a' }}>Specialized SEO Agent Team (Phase 4.7)</strong>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '12px',
+                backgroundColor: '#dbeafe',
+                color: '#1d4ed8'
+              }}
+            >
+              5 SPECIALIZED AGENTS + SUPERVISOR
+            </span>
+          </div>
+          <span style={{ fontSize: '12px', color: '#64748b' }}>
+            Deterministic routing, explicit handoffs, and strictly governed tool permissions
+          </span>
+        </div>
+
+        {/* Specialized Agents Badges */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🔍 Research Agent</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>GSC, Rankings, Audit (11 Read-Only Tools)</div>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🩺 Investigation Agent</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Root Cause & Certainty (10 Tools)</div>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🧠 Strategy Agent</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Bayesian Lift & 4-Tier Reasoning (3 Tools)</div>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>⚡ Action Planning Agent</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Human-Gated Proposals (5 Tools)</div>
+          </div>
+          <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🎯 Verification & Outcome</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Live Proof & GSC Lift (3 Tools)</div>
+          </div>
+        </div>
+
+        {/* Quick Multi-Agent Workflow Triggers */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Routing Pipelines:</span>
+          <button
+            type="button"
+            onClick={() => setGoal('Execute full autonomous cycle: Research performance data, investigate anomalies, evaluate historical strategy, and synthesize an action plan.')}
+            style={{ ...suggestionPillStyle, backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}
+          >
+            🔄 Full Autonomous Cycle
+          </button>
+          <button
+            type="button"
+            onClick={() => setGoal('Investigate why page rankings and organic impressions declined over the past 28 days.')}
+            style={{ ...suggestionPillStyle, backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' }}
+          >
+            📉 Investigate Ranking Drop
+          </button>
+          <button
+            type="button"
+            onClick={() => setGoal('Evaluate adaptive strategy and domain win rates to prioritize highest-impact SEO interventions.')}
+            style={{ ...suggestionPillStyle, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}
+          >
+            🧠 Prioritize Strategy
+          </button>
+          <button
+            type="button"
+            onClick={() => setGoal('Verify live website DOM changes and measure search outcome lift for completed actions.')}
+            style={{ ...suggestionPillStyle, backgroundColor: '#faf5ff', borderColor: '#e9d5ff', color: '#6b21a8' }}
+          >
+            🎯 Verify & Measure
+          </button>
+        </div>
+      </div>
+
       {/* Goal Input & Trigger Box */}
       <div style={goalCardStyle}>
         <label htmlFor="agent-goal-input" style={goalLabelStyle}>

@@ -510,3 +510,24 @@ PAST OUTCOMES → LEARNED ACTION-TYPE PERFORMANCE → FUTURE ACTION PRIORITIZATI
 
 4. **Multi-Tenant Security Boundary**:
 Strategy evaluation strictly enforces tenant ownership: `project.owner == request.user`. Cross-project outcome data is never commingled.
+
+---
+
+## 15. Specialized SEO Agent Orchestration & Supervision Lifecycle Events (Phase 4.7)
+
+Phase 4.7 introduces explicit multi-agent coordination telemetry tracking task routing, agent lifecycles, and inter-agent handoffs:
+
+```text
+Supervisor ──(routing)──> ResearchAgent ──(handoff)──> InvestigationAgent ──(handoff)──> StrategyAgent ──(handoff)──> ActionPlanningAgent
+```
+
+### Real-Time Orchestration Events:
+- `seo.agent.routing.started`: Emitted when the supervisor begins evaluating user goal keywords and task intent.
+- `seo.agent.routing.completed`: Emitted with the selected workflow pipeline (e.g. `["seo_researcher", "seo_investigator", "seo_strategist"]`) and correlation ID.
+- `seo.agent.started`: Emitted when a specialized agent begins its bounded execution step.
+- `seo.agent.completed`: Emitted upon successful agent execution with duration, findings count, and confidence score.
+- `seo.agent.failed`: Emitted on agent failure with sanitized error reason.
+- `seo.agent.handoff`: Emitted at explicit inter-agent transition boundaries, recording `source_agent`, `target_agent`, `step_index`, and `correlation_id`.
+
+### Governance & Privacy:
+- All event payloads are sanitized via `sanitize_event_payload` to guarantee that credentials, tokens, and internal chain-of-thought tokens are never leaked into the event stream.

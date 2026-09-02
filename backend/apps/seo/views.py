@@ -1687,3 +1687,81 @@ class SEOAdaptiveStrategyView(APIView):
             target_url_filter=target_url
         )
         return Response(strategy_data, status=status.HTTP_200_OK)
+
+
+class SEOAgentOrchestrationView(APIView):
+    """
+    Endpoint for orchestrating specialized SEO agent workflows.
+    POST /api/seo/ai/orchestrate/
+    GET  /api/seo/ai/orchestrate/agents/ or GET /api/seo/ai/orchestrate/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """List all available specialized agents and their tool allowlists."""
+        project_id = request.query_params.get('project_id')
+        project = None
+        if project_id:
+            try:
+                project = Project.objects.get(id=project_id, owner=request.user)
+            except Project.DoesNotExist:
+                return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.agents import (
+            SEOSupervisorAgent, SEOResearchAgent, SEOInvestigationAgent,
+            SEOStrategyAgent, SEOActionPlanningAgent, SEOVerificationAgent
+        )
+        supervisor = SEOSupervisorAgent(project=project, user=request.user) if project else None
+        if supervisor:
+            agents_info = supervisor.list_specialized_agents()
+        else:
+            agents_info = [
+                {"name": SEOResearchAgent.name, "purpose": SEOResearchAgent.purpose, "allowed_tools": SEOResearchAgent.allowed_tools, "tools_count": len(SEOResearchAgent.allowed_tools)},
+                {"name": SEOInvestigationAgent.name, "purpose": SEOInvestigationAgent.purpose, "allowed_tools": SEOInvestigationAgent.allowed_tools, "tools_count": len(SEOInvestigationAgent.allowed_tools)},
+                {"name": SEOStrategyAgent.name, "purpose": SEOStrategyAgent.purpose, "allowed_tools": SEOStrategyAgent.allowed_tools, "tools_count": len(SEOStrategyAgent.allowed_tools)},
+                {"name": SEOActionPlanningAgent.name, "purpose": SEOActionPlanningAgent.purpose, "allowed_tools": SEOActionPlanningAgent.allowed_tools, "tools_count": len(SEOActionPlanningAgent.allowed_tools)},
+                {"name": SEOVerificationAgent.name, "purpose": SEOVerificationAgent.purpose, "allowed_tools": SEOVerificationAgent.allowed_tools, "tools_count": len(SEOVerificationAgent.allowed_tools)},
+            ]
+
+        return Response({
+            "agents": agents_info,
+            "workflows": [
+                {"workflow": "research", "description": "Gather multi-source GSC, ranking, and audit evidence."},
+                {"workflow": "investigate", "description": "Research + root cause diagnosis + strategic prioritization."},
+                {"workflow": "strategy", "description": "Evaluate domain historical win rates and priority lift."},
+                {"workflow": "plan", "description": "End-to-end planning with human approval governance."},
+                {"workflow": "verify", "description": "Empirical live verification and GSC outcome measurement."},
+                {"workflow": "full_cycle", "description": "Comprehensive autonomous cycle: Research -> Investigation -> Strategy -> Action Planning."}
+            ]
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """
+        Execute an orchestrated multi-agent task.
+        Payload: { "project_id": <int>, "task": <str>, "target_url": <str, opt>, "target_query": <str, opt> }
+        """
+        project_id = request.data.get('project_id')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        task = request.data.get('task')
+        if not task or not str(task).strip():
+            return Response({"detail": "task is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_url = request.data.get('target_url')
+        target_query = request.data.get('target_query')
+
+        from apps.seo.services.agents import SEOSupervisorAgent
+        supervisor = SEOSupervisorAgent(project=project, user=request.user)
+        context = supervisor.orchestrate(
+            task=str(task).strip(),
+            target_url=target_url,
+            target_query=target_query
+        )
+
+        return Response(context.to_dict(), status=status.HTTP_200_OK)

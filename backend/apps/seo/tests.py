@@ -11011,3 +11011,218 @@ class SEOAdaptiveStrategyTests(TestCase):
 
         # Inferences communicate empirical uncertainty, not guaranteed causal fact
         self.assertIn('Empirical historical win/loss rates', evidence['tier_3_inferences'])
+
+
+class SEOAgentOrchestrationTests(TestCase):
+    """
+    Phase 4.7 Integration & Unit Tests:
+    Specialized SEO Agent Orchestration Layer, deterministic routing, explicit handoffs,
+    strict tool permissions, shared context propagation, safety invariants, and multi-tenant security.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='user_a@orchestration.com',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='user_b@orchestration.com',
+            password='Password123!'
+        )
+
+        self.project_a = Project.objects.create(
+            name="Project Alpha Orchestrated",
+            website_url="https://alpha-orchestrate.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Project Beta Orchestrated",
+            website_url="https://beta-orchestrate.com",
+            owner=self.user_b
+        )
+
+        self.client = APIClient()
+
+    def test_agent_result_contract_validation(self):
+        """1. AgentResult enforces typed universal contract, serialization, and confidence bounds."""
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        res = AgentResult(
+            agent="seo_investigator",
+            status="completed",
+            confidence=0.875,
+            evidence={"metric": 42},
+            findings=["Discovered critical heading anomaly."],
+            recommendations=[{"action": "fix_heading"}],
+            next_step="strategy",
+            errors=[],
+            duration_ms=120,
+            metadata={"source": "unit_test"}
+        )
+
+        d = res.to_dict()
+        self.assertEqual(d["agent"], "seo_investigator")
+        self.assertEqual(d["status"], "completed")
+        self.assertEqual(d["confidence"], 0.875)
+        self.assertEqual(d["next_step"], "strategy")
+        self.assertEqual(len(d["findings"]), 1)
+        self.assertEqual(d["duration_ms"], 120)
+
+    def test_tool_permission_enforcement(self):
+        """2. Specialized agents cannot execute tools outside their explicit allowlist."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+
+        agent = SEOResearchAgent(project=self.project_a)
+
+        # 1. Authorized tool call succeeds without PermissionError
+        result = agent.execute_tool("get_gsc_performance", {"days": 28})
+        self.assertIsInstance(result, dict)
+
+        # 2. Unauthorized mutating or planning tool call is strictly blocked
+        with self.assertRaises(PermissionError) as ctx:
+            agent.execute_tool("plan_seo_actions", {})
+        self.assertIn("is NOT authorized to execute tool 'plan_seo_actions'", str(ctx.exception))
+
+        with self.assertRaises(PermissionError) as ctx:
+            agent.execute_tool("propose_seo_action", {})
+        self.assertIn("is NOT authorized to execute tool 'propose_seo_action'", str(ctx.exception))
+
+    def test_deterministic_routing(self):
+        """3. Supervisor deterministically routes diverse user goals to appropriate agent pipelines."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+
+        supervisor = SEOSupervisorAgent(project=self.project_a)
+
+        # Investigation intent
+        wf, pipeline = supervisor.determine_workflow("Investigate why rankings dropped for /features")
+        self.assertEqual(wf, "investigate")
+        self.assertEqual(pipeline, ["seo_researcher", "seo_investigator", "seo_strategist"])
+
+        # Planning intent
+        wf, pipeline = supervisor.determine_workflow("Create an action plan to optimize product pages")
+        self.assertEqual(wf, "plan")
+        self.assertEqual(pipeline, ["seo_researcher", "seo_investigator", "seo_strategist", "seo_action_planner"])
+
+        # Strategy intent
+        wf, pipeline = supervisor.determine_workflow("Prioritize adaptive strategy based on historical outcomes")
+        self.assertEqual(wf, "strategy")
+        self.assertEqual(pipeline, ["seo_researcher", "seo_strategist"])
+
+        # Verification intent
+        wf, pipeline = supervisor.determine_workflow("Verify live website changes and measure GSC outcome lift")
+        self.assertEqual(wf, "verify")
+        self.assertEqual(pipeline, ["seo_verifier"])
+
+        # Default full cycle
+        wf, pipeline = supervisor.determine_workflow("Comprehensive optimization")
+        self.assertEqual(wf, "full_cycle")
+        self.assertEqual(pipeline, ["seo_researcher", "seo_investigator", "seo_strategist", "seo_action_planner"])
+
+    def test_sequential_pipeline_and_shared_context_handoff(self):
+        """4. Sequential agent handoff pipeline accumulates domain evidence in SharedContext."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = supervisor.orchestrate(
+            task="Investigate ranking drop on /about",
+            target_url="https://alpha-orchestrate.com/about"
+        )
+
+        self.assertEqual(context.status, "completed")
+        self.assertEqual(context.project_id, self.project_a.id)
+        self.assertEqual(context.task_type, "investigate")
+
+        # Verify evidence accumulated across handoffs
+        self.assertIn("audit_summary", context.evidence)
+        self.assertGreater(len(context.investigation_findings), 0)
+        self.assertIn("strategy_confidence", context.strategy_signals)
+
+        # Verify auditable agent execution history
+        agents_executed = [item["agent"] for item in context.agent_results_history]
+        self.assertEqual(agents_executed, ["seo_researcher", "seo_investigator", "seo_strategist"])
+
+    def test_action_planning_agent_preserves_human_approval_and_safety(self):
+        """5. ActionPlanningAgent strictly preserves human-in-the-loop approval gate."""
+        from apps.seo.services.agents.seo_action_agent import SEOActionPlanningAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.models import ActionStatus
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            task_goal="Create title action plan"
+        )
+
+        agent = SEOActionPlanningAgent(project=self.project_a, user=self.user_a)
+        result = agent.run(context)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.next_step, "human_approval")
+        self.assertIsNotNone(context.created_plan_id)
+
+        # Verify all created actions are in PROPOSED status and require human approval
+        for act in context.action_proposals:
+            self.assertTrue(act["requires_human_approval"])
+            self.assertEqual(act["status"], ActionStatus.PROPOSED)
+
+    def test_api_endpoints_and_multi_tenant_isolation(self):
+        """6. REST API routes execute with authentication and enforce multi-tenant isolation."""
+        # 1. User A lists specialized agents
+        self.client.force_authenticate(user=self.user_a)
+        res_agents = self.client.get(f'/api/seo/ai/orchestrate/agents/?project_id={self.project_a.id}')
+        self.assertEqual(res_agents.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_agents.data["agents"]), 5)
+        self.assertEqual(len(res_agents.data["workflows"]), 6)
+
+        # 2. User A successfully triggers orchestrated workflow
+        res_post = self.client.post('/api/seo/ai/orchestrate/', {
+            "project_id": self.project_a.id,
+            "task": "Investigate ranking drop on /features",
+            "target_url": "https://alpha-orchestrate.com/features"
+        }, format='json')
+        self.assertEqual(res_post.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_post.data["status"], "completed")
+        self.assertEqual(res_post.data["project_id"], self.project_a.id)
+
+        # 3. User B cannot orchestrate Project A (multi-tenant boundary)
+        self.client.force_authenticate(user=self.user_b)
+        res_forbidden = self.client.post('/api/seo/ai/orchestrate/', {
+            "project_id": self.project_a.id,
+            "task": "Investigate ranking drop on /features"
+        }, format='json')
+        self.assertEqual(res_forbidden.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 4. Missing project_id yields 400 Bad Request
+        res_bad = self.client.post('/api/seo/ai/orchestrate/', {"task": "test"}, format='json')
+        self.assertEqual(res_bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_failure_handling_and_safe_pipeline_halting(self):
+        """7. Supervisor halts pipeline gracefully when a specialized agent reports failure."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from unittest.mock import patch
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Mock failure in the investigation agent
+        with patch.object(
+            supervisor._agents["seo_investigator"],
+            "_execute",
+            side_effect=RuntimeError("Simulated database timeout during diagnosis")
+        ):
+            context = supervisor.orchestrate(
+                task="Investigate ranking drop on /test-fail"
+            )
+
+            # Pipeline should halt safely with failed status
+            self.assertEqual(context.status, "failed")
+            self.assertGreater(len(context.errors), 0)
+            self.assertIn("Simulated database timeout", context.errors[0])
+
+            # Research agent succeeded, investigator failed, strategist skipped
+            executed = [item["agent"] for item in context.agent_results_history]
+            self.assertEqual(executed, ["seo_researcher", "seo_investigator"])
+            self.assertEqual(context.agent_results_history[0]["status"], "completed")
+            self.assertEqual(context.agent_results_history[1]["status"], "failed")

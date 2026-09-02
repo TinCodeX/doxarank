@@ -8,7 +8,7 @@ from .views import (
     SEOContentBriefViewSet, SEOContentDraftViewSet,
     SEOActionViewSet, SEOActionPlanViewSet, AgentRunViewSet,
     GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView,
-    SEOAdaptiveStrategyView
+    SEOAdaptiveStrategyView, SEOAgentOrchestrationView
 )
 
 app_name = 'seo'
@@ -30,6 +30,8 @@ router.register('ai/agent/runs', AgentRunViewSet, basename='agent-run')
 
 
 urlpatterns = [
+    path('ai/orchestrate/agents/', SEOAgentOrchestrationView.as_view(), name='seo-agent-orchestrate-agents'),
+    path('ai/orchestrate/', SEOAgentOrchestrationView.as_view(), name='seo-agent-orchestrate'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),
     path('integrations/google/authorization-url/', GoogleOAuthAuthorizationUrlView.as_view(), name='google-oauth-authorization-url'),
     path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),

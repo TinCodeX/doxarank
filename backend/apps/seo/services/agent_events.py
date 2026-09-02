@@ -88,6 +88,15 @@ class AgentEventType(str, Enum):
     SEO_STRATEGY_APPLIED = "seo.strategy.applied"
     SEO_STRATEGY_COMPLETED = "seo.strategy.completed"
 
+    # Specialized SEO Agent Orchestration & Supervision lifecycle (Phase 4.7)
+    SEO_AGENT_STARTED = "seo.agent.started"
+    SEO_AGENT_COMPLETED = "seo.agent.completed"
+    SEO_AGENT_FAILED = "seo.agent.failed"
+    SEO_AGENT_HANDOFF = "seo.agent.handoff"
+    SEO_AGENT_ROUTING_STARTED = "seo.agent.routing.started"
+    SEO_AGENT_ROUTING_COMPLETED = "seo.agent.routing.completed"
+
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """
