@@ -38,12 +38,14 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
     def _execute(self, context: SharedContext) -> AgentResult:
         findings: List[str] = []
         proposals_summary: List[Dict[str, Any]] = []
+        observed_facts: List[Dict[str, Any]] = []
+        inferences: List[Dict[str, Any]] = []
+        uncertainties: List[str] = []
 
         planner = SEOActionPlanner(project=self.project, publisher=self.publisher)
 
         # 1. Synthesize plan from investigations in context or site baseline
         investigation_objs = []
-        # If there are investigations in context, retrieve or construct them
         if context.investigation_findings:
             try:
                 from apps.seo.services.seo_investigation import SEOInvestigationResult
@@ -66,13 +68,20 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
         context.action_plan_id = plan.id
         actions = plan.actions.all()
 
-        findings.append(
+        plan_fact = (
             f"Created SEOActionPlan #{plan.id} ('{plan.title}') containing {actions.count()} actions. "
             f"Risk Level: {plan.risk_level.upper()}, Confidence: {round(plan.confidence_score*100)}%."
         )
+        findings.append(plan_fact)
+        observed_facts.append({
+            "fact": plan_fact,
+            "source": "plan_seo_actions",
+            "confidence": 1.0,
+            "raw_data": {"plan_id": plan.id, "actions_count": actions.count(), "risk_level": plan.risk_level}
+        })
 
         for act in actions:
-            # SAFETY INVARIANT: Verify server-side that approval is required
+            # SAFETY INVARIANT: Verify server-side that approval is strictly required
             assert act.requires_human_approval is True, f"Security Violation: Action #{act.id} missing human approval gate!"
 
             act_summary = {
@@ -91,6 +100,14 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
                 f"({act.priority.upper()} priority, {act.risk_level.upper()} risk) -> PENDING HUMAN APPROVAL."
             )
 
+        inferences.append({
+            "inference": f"Execution of Plan #{plan.id} ({actions.count()} actions) is projected to resolve diagnosed on-page issues under human review.",
+            "based_on": ["plan_seo_actions"],
+            "confidence": plan.confidence_score
+        })
+
+        uncertainties.append("Production impact is pending human review, staging dry-run validation, and live CMS deployment.")
+
         context.action_proposals.extend(proposals_summary)
 
         return AgentResult(
@@ -106,9 +123,14 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
             },
             findings=findings,
             recommendations=proposals_summary,
+            observed_facts=observed_facts,
+            inferences=inferences,
+            uncertainties=uncertainties,
+            assumptions=["Actions must remain in PENDING_APPROVAL status until manual human approval."],
             next_step="human_approval",
             metadata={
                 "plan_id": plan.id,
-                "requires_human_approval": True
+                "requires_human_approval": True,
+                "approval_state": "pending_human_approval"
             }
         )

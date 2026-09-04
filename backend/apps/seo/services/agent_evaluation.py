@@ -130,14 +130,44 @@ class SEOAgentEvaluationService:
     @classmethod
     def evaluate_shared_context(cls, context: SharedContext) -> Dict[str, Any]:
         """
-        Evaluates a multi-agent orchestration execution represented by SharedContext.
+        Evaluates a multi-agent orchestration execution represented by SharedContext,
+        computing observable behavioral and collaboration metrics (Phase 5.1).
         """
         total_agents = len(context.agent_results_history)
-        failed_agents = sum(1 for h in context.agent_results_history if h.get("status") == "failed")
+        failed_agent_names = [h.get("agent") for h in context.agent_results_history if h.get("status") == "failed"]
+        failed_agents = len(failed_agent_names)
         task_success = context.status == "completed"
 
         findings_count = sum(len(h.get("findings", [])) for h in context.agent_results_history)
         recs_count = sum(len(h.get("recommendations", [])) for h in context.agent_results_history)
+
+        # Multi-Agent Collaboration Metrics (Phase 5.1)
+        unique_agents = list(dict.fromkeys(h.get("agent") for h in context.agent_results_history if h.get("agent")))
+        total_handoffs = len(context.handoff_history)
+        successful_handoffs = max(0, total_handoffs - (1 if failed_agents > 0 else 0))
+        rejected_handoffs = sum(1 for err in context.errors if "handoff" in str(err).lower() or "rejected" in str(err).lower())
+        redundant_handoffs = sum(
+            1 for h in context.handoff_history if h.get("source_agent") == h.get("target_agent")
+        )
+
+        # Evidence Provenance Quality
+        observed_facts = getattr(context, "observed_facts", [])
+        facts_with_provenance = sum(
+            1 for f in observed_facts if isinstance(f, dict) and bool(f.get("source"))
+        )
+        provenance_score = round(facts_with_provenance / max(len(observed_facts), 1), 3) if observed_facts else 1.0
+
+        collaboration_metrics = {
+            "agents_involved": len(unique_agents),
+            "agents_list": unique_agents,
+            "total_handoffs": total_handoffs,
+            "successful_handoffs": successful_handoffs,
+            "rejected_handoffs": rejected_handoffs,
+            "failed_agents": failed_agent_names,
+            "collaboration_completed": task_success,
+            "redundant_handoffs": redundant_handoffs,
+            "evidence_provenance_score": provenance_score
+        }
 
         score = 0.0
         if task_success:
@@ -161,5 +191,6 @@ class SEOAgentEvaluationService:
             "recommendations_count": recs_count,
             "action_plan_id": context.action_plan_id,
             "evidence_keys_collected": list(context.evidence.keys()),
+            "collaboration_metrics": collaboration_metrics,
             "overall_score": round(score, 1)
         }

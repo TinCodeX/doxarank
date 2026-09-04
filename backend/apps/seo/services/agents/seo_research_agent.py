@@ -42,6 +42,9 @@ class SEOResearchAgent(BaseSpecializedAgent):
     def _execute(self, context: SharedContext) -> AgentResult:
         findings: List[str] = []
         evidence_collected: Dict[str, Any] = {}
+        observed_facts: List[Dict[str, Any]] = []
+        inferences: List[Dict[str, Any]] = []
+        uncertainties: List[str] = []
 
         # 1. Gather GSC Performance Data
         try:
@@ -56,12 +59,34 @@ class SEOResearchAgent(BaseSpecializedAgent):
                 imps = data.get("total_impressions", 0)
                 ctr = data.get("average_ctr", 0.0)
                 pos = data.get("average_position", 0.0)
-                findings.append(
+                fact_str = (
                     f"Google Search Console: {clicks:,} clicks, {imps:,} impressions, "
                     f"{round(ctr*100, 2)}% CTR, position #{round(pos, 1)} over past 28 days."
                 )
+                findings.append(fact_str)
+                observed_facts.append({
+                    "fact": fact_str,
+                    "source": "get_gsc_performance",
+                    "confidence": 1.0,
+                    "raw_data": {"clicks": clicks, "impressions": imps, "ctr": ctr, "position": pos}
+                })
+
+                # Derive diagnostic inference from observed search metrics
+                if ctr < 0.03 and imps > 500:
+                    inferences.append({
+                        "inference": "Low organic CTR relative to high impressions indicates potential SERP title/snippet misalignment.",
+                        "based_on": ["get_gsc_performance"],
+                        "confidence": 0.78
+                    })
+                elif pos > 10.0 and pos <= 20.0:
+                    inferences.append({
+                        "inference": "Target URL ranks on Page 2 (striking distance), representing a high-potential optimization target.",
+                        "based_on": ["get_gsc_performance"],
+                        "confidence": 0.82
+                    })
         except Exception as exc:
             logger.warning(f"[{self.name}] GSC performance collection failed: {exc}")
+            uncertainties.append("Google Search Console performance metrics could not be retrieved.")
 
         # 2. Gather Top Queries / Pages if specific target provided
         if context.target_url:
@@ -72,9 +97,17 @@ class SEOResearchAgent(BaseSpecializedAgent):
                 )
                 if queries_res.get("success") and queries_res.get("data"):
                     evidence_collected["top_queries"] = queries_res["data"]
-                    findings.append(f"Retrieved {len(queries_res['data'])} active search queries for {context.target_url}.")
+                    fact_str = f"Retrieved {len(queries_res['data'])} active search queries for {context.target_url}."
+                    findings.append(fact_str)
+                    observed_facts.append({
+                        "fact": fact_str,
+                        "source": "get_gsc_queries",
+                        "confidence": 1.0,
+                        "raw_data": {"queries_count": len(queries_res['data'])}
+                    })
             except Exception as exc:
                 logger.warning(f"[{self.name}] Top queries collection failed: {exc}")
+                uncertainties.append(f"Top queries for {context.target_url} could not be retrieved.")
 
             # 2b. External MCP Diagnostics (check URL status & metadata)
             try:
@@ -87,9 +120,17 @@ class SEOResearchAgent(BaseSpecializedAgent):
                     inner = st_data.get("data", st_data)
                     evidence_collected["mcp_url_status"] = inner
                     code = inner.get("status_code", "N/A")
-                    findings.append(f"MCP External Diagnostics: URL status HTTP {code} (latency {inner.get('latency_ms', 0)}ms).")
+                    fact_str = f"MCP External Diagnostics: URL status HTTP {code} (latency {inner.get('latency_ms', 0)}ms)."
+                    findings.append(fact_str)
+                    observed_facts.append({
+                        "fact": fact_str,
+                        "source": "mcp__seo_local__check_url_status",
+                        "confidence": 1.0,
+                        "raw_data": inner
+                    })
             except Exception as exc:
                 logger.warning(f"[{self.name}] MCP status check skipped: {exc}")
+                uncertainties.append("MCP external live diagnostic probe skipped or unavailable.")
 
         # 3. Gather Site Audit Diagnostics
         try:
@@ -99,12 +140,27 @@ class SEOResearchAgent(BaseSpecializedAgent):
                 evidence_collected["audit_summary"] = audit_data
                 crit_issues = audit_data.get("critical_issues_count", 0)
                 warn_issues = audit_data.get("warning_issues_count", 0)
-                findings.append(
+                fact_str = (
                     f"Site Audit: Health score {audit_data.get('health_score', 'N/A')}/100 "
                     f"with {crit_issues} critical and {warn_issues} warning issues."
                 )
+                findings.append(fact_str)
+                observed_facts.append({
+                    "fact": fact_str,
+                    "source": "get_site_audit_summary",
+                    "confidence": 1.0,
+                    "raw_data": {"health_score": audit_data.get("health_score"), "critical": crit_issues, "warnings": warn_issues}
+                })
+
+                if crit_issues > 0:
+                    inferences.append({
+                        "inference": f"Presence of {crit_issues} critical audit issues may depress organic indexation or rankings.",
+                        "based_on": ["get_site_audit_summary"],
+                        "confidence": 0.85
+                    })
         except Exception as exc:
             logger.warning(f"[{self.name}] Audit summary collection failed: {exc}")
+            uncertainties.append("Technical site audit summary could not be retrieved.")
 
         # 4. Gather Historical Action Outcomes & Strategy Baseline
         try:
@@ -114,11 +170,19 @@ class SEOResearchAgent(BaseSpecializedAgent):
                 evidence_collected["historical_strategy"] = strat_data
                 sample_size = strat_data.get("historical_sample_size", 0)
                 conf = strat_data.get("strategy_confidence", "none")
-                findings.append(
-                    f"Historical Outcomes: {sample_size} past actions measured ({conf.upper()} domain confidence)."
-                )
+                fact_str = f"Historical Outcomes: {sample_size} past actions measured ({conf.upper()} domain confidence)."
+                findings.append(fact_str)
+                observed_facts.append({
+                    "fact": fact_str,
+                    "source": "get_adaptive_seo_strategy",
+                    "confidence": 1.0,
+                    "raw_data": {"sample_size": sample_size, "confidence": conf}
+                })
         except Exception as exc:
             logger.warning(f"[{self.name}] Historical strategy collection failed: {exc}")
+
+        # Note empirical uncertainty if direct user intent data is absent
+        uncertainties.append("No direct user-intent or session engagement data is available from Search Console.")
 
         # Merge evidence into shared context
         context.evidence.update(evidence_collected)
@@ -132,6 +196,10 @@ class SEOResearchAgent(BaseSpecializedAgent):
             evidence=evidence_collected,
             findings=findings,
             recommendations=[],
+            observed_facts=observed_facts,
+            inferences=inferences,
+            uncertainties=uncertainties,
+            assumptions=["Search Console data represents the prior 28-day window."],
             next_step="investigation",
             metadata={"evidence_sources": list(evidence_collected.keys())}
         )

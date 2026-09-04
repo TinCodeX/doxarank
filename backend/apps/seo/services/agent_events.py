@@ -104,6 +104,15 @@ class AgentEventType(str, Enum):
     MCP_TOOL_INVOCATION_COMPLETED = "mcp.tool.invocation.completed"
     MCP_TOOL_INVOCATION_FAILED = "mcp.tool.invocation.failed"
 
+    # Multi-Agent Collaboration & Structured Handoffs lifecycle (Phase 5.1)
+    SEO_AGENT_HANDOFF_STARTED = "seo.agent.handoff.started"
+    SEO_AGENT_HANDOFF_COMPLETED = "seo.agent.handoff.completed"
+    SEO_AGENT_HANDOFF_REJECTED = "seo.agent.handoff.rejected"
+    SEO_AGENT_COLLABORATION_STARTED = "seo.agent.collaboration.started"
+    SEO_AGENT_COLLABORATION_COMPLETED = "seo.agent.collaboration.completed"
+    SEO_AGENT_COLLABORATION_FAILED = "seo.agent.collaboration.failed"
+
+
 
 
 

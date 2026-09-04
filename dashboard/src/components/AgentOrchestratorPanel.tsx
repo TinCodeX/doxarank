@@ -8,7 +8,11 @@ import {
   createAgentRun,
   resumeAgentRun,
 } from '../api/agentRuns';
+import { orchestrateTask } from '../api/seoOrchestrator';
+import type { OrchestrationResponse } from '../api/seoOrchestrator';
+
 import { useAgentEvents } from '../hooks/useAgentEvents';
+
 
 interface AgentOrchestratorPanelProps {
   project: Project;
@@ -37,6 +41,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedStepId, setExpandedStepId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'steps' | 'events'>('steps');
+  const [orchestrationResult, setOrchestrationResult] = useState<OrchestrationResponse | null>(null);
+  const [isOrchestrating, setIsOrchestrating] = useState<boolean>(false);
+
 
   const pollingRef = useRef<number | null>(null);
 
@@ -178,6 +185,28 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       setIsStartingRun(false);
     }
   };
+
+  const handleRunCollaboration = async () => {
+    if (!goal.trim()) {
+      setErrorMessage('Please specify an SEO goal for the multi-agent team.');
+      return;
+    }
+
+    setIsOrchestrating(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await orchestrateTask(project.id, goal.trim());
+      setOrchestrationResult(res);
+      setSuccessMessage(`Multi-agent collaboration pipeline completed (${res.status})!`);
+    } catch (err: any) {
+      setErrorMessage(err?.data?.detail || err?.message || 'Multi-agent collaboration failed.');
+    } finally {
+      setIsOrchestrating(false);
+    }
+  };
+
 
   const handleResumeRun = async (decision: 'approved' | 'rejected') => {
     if (!activeRun) return;
@@ -547,15 +576,38 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           ))}
         </div>
 
-        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            id="run-collaboration-btn"
+            type="button"
+            onClick={handleRunCollaboration}
+            disabled={isOrchestrating || isStartingRun || !goal.trim()}
+            style={{
+              padding: '10px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
+              backgroundColor: '#4338ca',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: isOrchestrating || !goal.trim() ? 'not-allowed' : 'pointer',
+              opacity: isOrchestrating || !goal.trim() ? 0.6 : 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.1)'}
+          </button>
+
           <button
             id="run-agent-btn"
             onClick={handleStartRun}
-            disabled={isStartingRun || !goal.trim()}
+            disabled={isStartingRun || isOrchestrating || !goal.trim()}
             style={{
               ...primaryRunBtnStyle,
-              opacity: isStartingRun || !goal.trim() ? 0.6 : 1,
-              cursor: isStartingRun || !goal.trim() ? 'not-allowed' : 'pointer',
+              opacity: isStartingRun || isOrchestrating || !goal.trim() ? 0.6 : 1,
+              cursor: isStartingRun || isOrchestrating || !goal.trim() ? 'not-allowed' : 'pointer',
             }}
           >
             {isStartingRun ? '⚡ Launching Agent Loop...' : '🚀 Run Autonomous Agent'}
@@ -563,9 +615,188 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         </div>
       </div>
 
+      {/* Structured Multi-Agent Collaboration Results Card (Phase 5.1) */}
+      {orchestrationResult && (
+        <div
+          id="multi-agent-collaboration-card"
+          style={{
+            backgroundColor: '#ffffff',
+            border: '1px solid #c7d2fe',
+            borderRadius: '12px',
+            padding: '20px',
+            marginBottom: '20px',
+            boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', borderBottom: '1px solid #e0e7ff', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '20px' }}>🤝</span>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>
+                  Multi-Agent Collaboration: {orchestrationResult.task_type.toUpperCase()}
+                </h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6366f1' }}>
+                  Correlation ID: <code style={{ fontSize: '11px', backgroundColor: '#eef2ff', padding: '2px 6px', borderRadius: '4px' }}>{orchestrationResult.correlation_id}</code>
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '16px',
+                  backgroundColor: orchestrationResult.status === 'completed' ? '#dcfce7' : orchestrationResult.status === 'degraded' ? '#fef3c7' : '#fee2e2',
+                  color: orchestrationResult.status === 'completed' ? '#15803d' : orchestrationResult.status === 'degraded' ? '#b45309' : '#b91c1c',
+                }}
+              >
+                {orchestrationResult.status === 'completed' ? '✓ Completed' : orchestrationResult.status === 'degraded' ? '⚠️ Degraded (Evidence Preserved)' : '✕ Failed'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOrchestrationResult(null)}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  color: '#64748b',
+                  backgroundColor: 'transparent',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          </div>
+
+          {/* Participating Agents Row */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>
+              Participating Specialized Agents:
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {orchestrationResult.agent_results_history.map((res, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    backgroundColor: res.status === 'completed' ? '#f0fdf4' : '#fef2f2',
+                    border: `1px solid ${res.status === 'completed' ? '#bbf7d0' : '#fecaca'}`,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>{res.status === 'completed' ? '✓' : '✕'}</span>
+                  <strong>{res.agent}</strong>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>({res.duration_ms}ms)</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Handoff Sequence */}
+          {orchestrationResult.handoff_history && orchestrationResult.handoff_history.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>
+                Structured Handoff Sequence:
+              </div>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {orchestrationResult.handoff_history.map((h, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#eef2ff', color: '#4338ca', fontWeight: 600 }}>
+                      {h.source_agent} ➔ {h.target_agent}
+                    </span>
+                    {idx < (orchestrationResult.handoff_history?.length || 0) - 1 && (
+                      <span style={{ color: '#94a3b8' }}>•</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Evidence Preservation: Observed Facts vs Inferences */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px' }}>
+            {/* Column 1: Observed Facts */}
+            <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '14px' }}>🔬</span>
+                <strong style={{ fontSize: '13px', color: '#0f172a' }}>Observed Facts (Empirical)</strong>
+                <span style={{ fontSize: '10px', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                  PROVENANCE PRESERVED
+                </span>
+              </div>
+              {orchestrationResult.observed_facts && orchestrationResult.observed_facts.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {orchestrationResult.observed_facts.map((fact, idx) => (
+                    <li key={idx}>
+                      {typeof fact === 'string' ? fact : fact.fact || JSON.stringify(fact)}
+                      {typeof fact === 'object' && fact.source && (
+                        <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#475569', fontFamily: 'monospace' }}>
+                          [{fact.source}]
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>No explicit observed facts recorded.</p>
+              )}
+            </div>
+
+            {/* Column 2: Inferences & Uncertainties */}
+            <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '14px' }}>💡</span>
+                <strong style={{ fontSize: '13px', color: '#0f172a' }}>Derived Inferences & Hypotheses</strong>
+                <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                  NOT EMPIRICAL FACTS
+                </span>
+              </div>
+              {orchestrationResult.inferences && orchestrationResult.inferences.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {orchestrationResult.inferences.map((inf, idx) => (
+                    <li key={idx}>
+                      {typeof inf === 'string' ? inf : inf.inference || JSON.stringify(inf)}
+                      {typeof inf === 'object' && inf.confidence && (
+                        <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#fef3c7', color: '#92400e' }}>
+                          ({Math.round(inf.confidence * 100)}% conf)
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>No inferences generated.</p>
+              )}
+
+              {/* Uncertainties */}
+              {orchestrationResult.uncertainties && orchestrationResult.uncertainties.length > 0 && (
+                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', marginBottom: '4px' }}>
+                    ❓ Declared Knowledge Boundaries / Uncertainties:
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: '#64748b' }}>
+                    {orchestrationResult.uncertainties.map((unc, idx) => (
+                      <li key={idx}>{unc}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Active Run Execution Lifecycle View */}
       {isLoadingRuns ? (
         <div style={emptyRunsCardStyle}>
+
           <p style={{ color: '#64748b', fontSize: '14px' }}>Loading agent execution runs...</p>
         </div>
       ) : activeRun ? (

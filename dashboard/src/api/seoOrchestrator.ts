@@ -34,6 +34,39 @@ export interface OrchestratedAgentResult {
   metadata: Record<string, any>;
 }
 
+export interface AgentHandoffItem {
+  project_id?: number;
+  source_agent: string;
+  target_agent: string;
+  user_goal: string;
+  task_type: string;
+  correlation_id: string;
+  relevant_evidence?: Record<string, any>;
+  observed_facts?: Array<Record<string, any>>;
+  inferences?: Array<Record<string, any>>;
+  uncertainties?: string[];
+  assumptions?: string[];
+  allowed_tools?: string[];
+  approval_state?: string;
+  timestamp?: string;
+}
+
+export interface CollaborationStateInfo {
+  project_id: number;
+  task_goal: string;
+  task_type: string;
+  correlation_id: string;
+  status: string;
+  current_agent?: string | null;
+  completed_agents: string[];
+  pending_agents: string[];
+  failed_agents: string[];
+  handoff_history: AgentHandoffItem[];
+  current_evidence: Record<string, any>;
+  unresolved_questions: string[];
+  errors: string[];
+}
+
 export interface OrchestrationResponse {
   project_id: number;
   project_name: string;
@@ -49,13 +82,21 @@ export interface OrchestrationResponse {
   strategy_signals: Record<string, any>;
   action_proposals: Array<Record<string, any>>;
   created_plan_id?: number | null;
+  action_plan_id?: number | null;
   verification_results: Record<string, any>;
   outcome_measurements: Record<string, any>;
   agent_results_history: OrchestratedAgentResult[];
+  observed_facts?: Array<Record<string, any>>;
+  inferences?: Array<Record<string, any>>;
+  uncertainties?: string[];
+  assumptions?: string[];
+  handoff_history?: AgentHandoffItem[];
+  collaboration_state?: CollaborationStateInfo;
   current_agent?: string | null;
   status: string;
   errors: string[];
 }
+
 
 /**
  * List all available specialized agents, their descriptions, and permitted tools.

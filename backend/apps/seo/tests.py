@@ -11898,3 +11898,451 @@ class SEOAgentEvaluationTests(TestCase):
         self.assertEqual(res.data["run_id"], run.id)
         self.assertIn("overall_score", res.data)
         self.assertIn("safety_compliance_pct", res.data)
+
+
+class SEOAgentCollaborationTests(TestCase):
+    """
+    Milestone 5.1 Integration & Unit Tests:
+    Advanced Multi-Agent Collaboration, Structured Agent Handoffs,
+    Evidence Provenance Preservation, Collaboration State,
+    Handoff Validation, Failure Isolation, and Collaboration Evaluation.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='collab_a@doxarank.com',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='collab_b@doxarank.com',
+            password='Password123!'
+        )
+
+        self.project_a = Project.objects.create(
+            name="Project Collaboration Alpha",
+            website_url="https://alpha-collab.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Project Collaboration Beta",
+            website_url="https://beta-collab.com",
+            owner=self.user_b
+        )
+
+        self.client = APIClient()
+
+    def test_valid_research_to_investigation_handoff(self):
+        """1. Valid Research -> Investigation handoff preserves scoped evidence and provenance."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        from apps.seo.services.agents.seo_investigation_agent import SEOInvestigationAgent
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            task_type="investigate",
+            task_goal="Investigate ranking drop on /pricing",
+            target_url="https://alpha-collab.com/pricing"
+        )
+
+        # 1. Research Agent executes and populates empirical evidence
+        researcher = SEOResearchAgent(project=self.project_a, user=self.user_a)
+        res_result = researcher.run(context)
+        self.assertEqual(res_result.status, "completed")
+        self.assertGreater(len(res_result.observed_facts), 0)
+
+        # 2. Supervisor builds structured handoff to Investigation Agent
+        handoff = supervisor.build_handoff_context(
+            source_agent=researcher.name,
+            target_agent_name="seo_investigator",
+            context=context,
+            correlation_id=context.correlation_id
+        )
+
+        self.assertEqual(handoff.source_agent, "seo_researcher")
+        self.assertEqual(handoff.target_agent, "seo_investigator")
+        self.assertEqual(handoff.project_id, self.project_a.id)
+        self.assertIn("audit_summary", handoff.relevant_evidence)
+
+        # Verify evidence provenance is present
+        for fact in handoff.observed_facts:
+            self.assertIn("source", fact)
+            self.assertTrue(bool(fact["source"]))
+
+        # 3. Investigation Agent accepts handoff and runs successfully
+        investigator = SEOInvestigationAgent(project=self.project_a, user=self.user_a)
+        inv_result = investigator.run(context, handoff=handoff)
+        self.assertEqual(inv_result.status, "completed")
+        self.assertEqual(inv_result.next_step, "strategy")
+        self.assertGreater(len(context.handoff_history), 0)
+
+    def test_valid_investigation_to_strategy_handoff(self):
+        """2. Valid Investigation -> Strategy handoff preserves distinctions between observed facts and inferences."""
+        from apps.seo.services.agents.seo_strategy_agent import SEOStrategyAgent
+        from apps.seo.services.agents.agent_handoff import AgentHandoffContext, AgentHandoffValidator
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            task_type="strategy",
+            task_goal="Prioritize opportunity strategy",
+            target_url="https://alpha-collab.com/features"
+        )
+
+        # Construct handoff with both observed facts and diagnostic inferences
+        handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_investigator",
+            target_agent="seo_strategist",
+            user_goal="Prioritize opportunity strategy",
+            task_type="strategy",
+            correlation_id=context.correlation_id,
+            relevant_evidence={"investigation_findings": [{"target_url": "https://alpha-collab.com/features"}]},
+            observed_facts=[
+                {"fact": "HTTP status 200 returned for /features", "source": "mcp__seo_local__check_url_status", "confidence": 1.0},
+                {"fact": "Site health score is 74/100", "source": "get_site_audit_summary", "confidence": 1.0}
+            ],
+            inferences=[
+                {"inference": "Root cause identified as missing_primary_heading", "based_on": ["get_audit_issues"], "confidence": 0.88}
+            ],
+            uncertainties=["Competitive SERP feature shifts cannot be determined."],
+            allowed_tools=list(SEOStrategyAgent.allowed_tools)
+        )
+
+        AgentHandoffValidator.validate(handoff, expected_project_id=self.project_a.id)
+
+        strategist = SEOStrategyAgent(project=self.project_a, user=self.user_a)
+        result = strategist.run(context, handoff=handoff)
+
+        self.assertEqual(result.status, "completed")
+        # Ensure observed facts and inferences remain distinct
+        self.assertGreater(len(result.observed_facts), 0)
+        self.assertGreater(len(result.inferences), 0)
+        # Check that inferences are not erroneously dumped into observed_facts
+        for fact in result.observed_facts:
+            self.assertIn("source", fact)
+
+    def test_strategy_to_action_planning_handoff(self):
+        """3. Strategy -> Action Planning handoff preserves recommendations and human approval requirement."""
+        from apps.seo.services.agents.seo_action_agent import SEOActionPlanningAgent
+        from apps.seo.services.agents.agent_handoff import AgentHandoffContext, AgentHandoffValidator
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            task_type="plan",
+            task_goal="Create action plan for /products"
+        )
+
+        handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_strategist",
+            target_agent="seo_action_planner",
+            user_goal=context.task_goal,
+            task_type="plan",
+            correlation_id=context.correlation_id,
+            relevant_evidence={"strategy_signals": {"overall_smoothed_rate": 0.72}},
+            observed_facts=[{"fact": "Historical win rate 72%", "source": "get_adaptive_seo_strategy", "confidence": 1.0}],
+            allowed_tools=list(SEOActionPlanningAgent.allowed_tools),
+            approval_state="pending_human_approval",
+            risk_information={"requires_human_approval": True}
+        )
+
+        AgentHandoffValidator.validate(handoff, expected_project_id=self.project_a.id)
+
+        planner = SEOActionPlanningAgent(project=self.project_a, user=self.user_a)
+        result = planner.run(context, handoff=handoff)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.next_step, "human_approval")
+        # Invariant: Human approval cannot be bypassed
+        self.assertTrue(result.metadata.get("requires_human_approval"))
+        for act in context.action_proposals:
+            self.assertTrue(act["requires_human_approval"])
+
+    def test_action_to_verification_handoff(self):
+        """4. Action -> Verification handoff passes created plan and verifies live state."""
+        from apps.seo.models import SEOActionPlan, SEOAction, ActionType, ActionStatus, ActionRiskLevel, ActionPlanStatus
+        from apps.seo.services.agents.seo_verification_agent import SEOVerificationAgent
+        from apps.seo.services.agents.agent_handoff import AgentHandoffContext, AgentHandoffValidator
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        plan = SEOActionPlan.objects.create(
+            project=self.project_a,
+            title="Verification Test Plan",
+            created_by=self.user_a,
+            status=ActionPlanStatus.COMPLETED
+        )
+        SEOAction.objects.create(
+            plan=plan,
+            project=self.project_a,
+            title="Add primary H1 tag",
+            action_type=ActionType.FIX_MISSING_H1,
+            target_url=self.project_a.website_url,
+            status=ActionStatus.COMPLETED,
+            risk_level=ActionRiskLevel.LOW,
+            requires_human_approval=True
+        )
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            user_id=self.user_a.id,
+            task_type="verify",
+            task_goal="Verify action plan execution",
+            created_plan_id=plan.id
+        )
+
+        handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_action_planner",
+            target_agent="seo_verifier",
+            user_goal=context.task_goal,
+            task_type="verify",
+            correlation_id=context.correlation_id,
+            relevant_evidence={"created_plan_id": plan.id},
+            allowed_tools=list(SEOVerificationAgent.allowed_tools)
+        )
+
+        AgentHandoffValidator.validate(handoff, expected_project_id=self.project_a.id)
+
+        verifier = SEOVerificationAgent(project=self.project_a, user=self.user_a)
+        result = verifier.run(context, handoff=handoff)
+
+        self.assertEqual(result.status, "completed")
+        self.assertIn("plan_verification", result.evidence["verifications"])
+
+    def test_malformed_handoff_rejection(self):
+        """5. Malformed handoff missing required fields or unknown agents is rejected."""
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        # 1. Unknown target agent
+        bad_handoff_1 = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_researcher",
+            target_agent="unauthorized_ai_bot",
+            user_goal="Test",
+            task_type="general",
+            correlation_id="test-corr-1"
+        )
+        with self.assertRaises(AgentHandoffValidationError) as ctx1:
+            AgentHandoffValidator.validate(bad_handoff_1, expected_project_id=self.project_a.id)
+        self.assertIn("Unrecognized target agent", str(ctx1.exception))
+
+        # 2. Missing correlation_id
+        bad_handoff_2 = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_researcher",
+            target_agent="seo_investigator",
+            user_goal="Test",
+            task_type="general",
+            correlation_id=""
+        )
+        with self.assertRaises(AgentHandoffValidationError) as ctx2:
+            AgentHandoffValidator.validate(bad_handoff_2, expected_project_id=self.project_a.id)
+        self.assertIn("Missing or empty correlation_id", str(ctx2.exception))
+
+    def test_invalid_tenant_project_handoff_rejection(self):
+        """6. Cross-tenant handoff targeting another project is strictly rejected."""
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        # Handoff claiming Project B while executing in Project A context
+        cross_tenant_handoff = AgentHandoffContext(
+            project_id=self.project_b.id,
+            source_agent="seo_researcher",
+            target_agent="seo_investigator",
+            user_goal="Cross tenant hijack attempt",
+            task_type="general",
+            correlation_id="test-cross-tenant"
+        )
+
+        with self.assertRaises(AgentHandoffValidationError) as ctx:
+            AgentHandoffValidator.validate(cross_tenant_handoff, expected_project_id=self.project_a.id)
+        self.assertIn("Tenant Security Violation", str(ctx.exception))
+
+    def test_invalid_tool_permission_handoff_rejection(self):
+        """7. Privilege escalation via handoff allowed_tools is rejected."""
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        # Attempting to give mutating permissions to read-only researcher
+        escalated_handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_supervisor",
+            target_agent="seo_researcher",
+            user_goal="Escalation test",
+            task_type="research",
+            correlation_id="test-escalation",
+            allowed_tools=["execute_mutation", "plan_seo_actions"]
+        )
+
+        with self.assertRaises(AgentHandoffValidationError) as ctx:
+            AgentHandoffValidator.validate(escalated_handoff, expected_project_id=self.project_a.id)
+        self.assertIn("Privilege Escalation Violation", str(ctx.exception))
+
+    def test_approval_state_escalation_attempt_rejection(self):
+        """8. Agent attempting to unilaterally auto-approve an action plan via handoff is rejected."""
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        # Action planner claiming action was 'approved' without user interaction
+        rogue_approval_handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_action_planner",
+            target_agent="seo_verifier",
+            user_goal="Attempt auto approval",
+            task_type="verify",
+            correlation_id="test-auto-approve",
+            approval_state="approved"
+        )
+
+        with self.assertRaises(AgentHandoffValidationError) as ctx:
+            AgentHandoffValidator.validate(rogue_approval_handoff, expected_project_id=self.project_a.id)
+        self.assertIn("Security Boundary Violation", str(ctx.exception))
+
+    def test_failed_agent_isolation(self):
+        """9. Downstream agent failure preserves completed evidence from preceding agents."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from unittest.mock import patch
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Force investigator to raise an exception
+        with patch.object(
+            supervisor._agents["seo_investigator"],
+            "_execute",
+            side_effect=RuntimeError("Diagnostic engine socket timeout")
+        ):
+            context = supervisor.orchestrate(task="Investigate ranking drop on /blog")
+
+            # Orchestration halts safely
+            self.assertEqual(context.status, "failed")
+            self.assertEqual(context.collaboration_state.status, "degraded")
+            self.assertIn("seo_investigator", context.collaboration_state.failed_agents)
+            self.assertIn("seo_researcher", context.collaboration_state.completed_agents)
+
+            # Preceding research evidence is preserved
+            self.assertIn("audit_summary", context.evidence)
+            self.assertEqual(context.agent_results_history[0]["agent"], "seo_researcher")
+            self.assertEqual(context.agent_results_history[0]["status"], "completed")
+            self.assertEqual(context.agent_results_history[1]["agent"], "seo_investigator")
+            self.assertEqual(context.agent_results_history[1]["status"], "failed")
+
+    def test_evidence_provenance_preservation(self):
+        """10. Observed facts without declared source provenance are rejected by validator."""
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        unprovenanced_handoff = AgentHandoffContext(
+            project_id=self.project_a.id,
+            source_agent="seo_researcher",
+            target_agent="seo_investigator",
+            user_goal="Provenance test",
+            task_type="investigate",
+            correlation_id="test-prov",
+            observed_facts=[
+                {"fact": "Unverified assertion without provenance source", "confidence": 1.0}
+            ]
+        )
+
+        with self.assertRaises(AgentHandoffValidationError) as ctx:
+            AgentHandoffValidator.validate(unprovenanced_handoff, expected_project_id=self.project_a.id)
+        self.assertIn("Evidence Provenance Error", str(ctx.exception))
+
+    def test_handoff_lifecycle_events(self):
+        """11. Handoff lifecycle telemetry events are published with sanitized payloads."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_events import AgentEventType
+
+        events_captured = []
+        class MockPublisher:
+            def publish(self, event):
+                events_captured.append(event)
+
+        supervisor = SEOSupervisorAgent(
+            project=self.project_a,
+            user=self.user_a,
+            publisher=MockPublisher()
+        )
+        context = supervisor.orchestrate(task="Investigate ranking decline on /home")
+
+        event_types = [e.event_type for e in events_captured]
+        self.assertIn(AgentEventType.SEO_AGENT_COLLABORATION_STARTED, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_HANDOFF_STARTED, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_HANDOFF, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_HANDOFF_COMPLETED, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_COLLABORATION_COMPLETED, event_types)
+
+        # Verify no secret keywords leaked into payload
+        for evt in events_captured:
+            payload_str = str(evt.payload).lower()
+            self.assertNotIn("secret_key", payload_str)
+            self.assertNotIn("bearer_token", payload_str)
+
+    def test_evaluation_collaboration_metrics(self):
+        """12. SEOAgentEvaluationService computes accurate collaboration metrics."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = supervisor.orchestrate(task="Investigate drop and prioritize strategy")
+
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(context)
+
+        self.assertIn("collaboration_metrics", eval_res)
+        collab = eval_res["collaboration_metrics"]
+        self.assertGreaterEqual(collab["agents_involved"], 2)
+        self.assertGreaterEqual(collab["total_handoffs"], 1)
+        self.assertGreaterEqual(collab["successful_handoffs"], 1)
+        self.assertEqual(collab["rejected_handoffs"], 0)
+        self.assertTrue(collab["collaboration_completed"])
+        self.assertGreaterEqual(collab["evidence_provenance_score"], 0.8)
+
+    def test_complete_multi_agent_collaboration_workflow(self):
+        """13. Full cycle multi-agent collaboration runs sequentially under strict governance."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.models import ActionStatus
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = supervisor.orchestrate(task="Comprehensive multi-agent SEO optimization")
+
+        self.assertEqual(context.status, "completed")
+        self.assertEqual(context.collaboration_state.status, "completed")
+
+        # Verify all four full_cycle specialized agents participated
+        expected_agents = ["seo_researcher", "seo_investigator", "seo_strategist", "seo_action_planner"]
+        self.assertEqual(context.collaboration_state.completed_agents, expected_agents)
+        self.assertEqual(len(context.collaboration_state.failed_agents), 0)
+
+        # Verify handoff history sequence
+        handoffs = context.collaboration_state.handoff_history
+        self.assertEqual(len(handoffs), 4)
+        self.assertEqual(handoffs[0]["target_agent"], "seo_researcher")
+        self.assertEqual(handoffs[1]["target_agent"], "seo_investigator")
+        self.assertEqual(handoffs[2]["target_agent"], "seo_strategist")
+        self.assertEqual(handoffs[3]["target_agent"], "seo_action_planner")
+
+        # Verify human approval hard boundary
+        self.assertIsNotNone(context.created_plan_id)
+        for act in context.action_proposals:
+            self.assertTrue(act["requires_human_approval"])
+            self.assertEqual(act["status"], ActionStatus.PROPOSED)

@@ -33,6 +33,10 @@ class AgentResult:
     evidence: Dict[str, Any] = field(default_factory=dict)
     findings: List[str] = field(default_factory=list)
     recommendations: List[Dict[str, Any]] = field(default_factory=list)
+    observed_facts: List[Dict[str, Any]] = field(default_factory=list)
+    inferences: List[Dict[str, Any]] = field(default_factory=list)
+    uncertainties: List[str] = field(default_factory=list)
+    assumptions: List[str] = field(default_factory=list)
     next_step: Optional[str] = None
     errors: List[str] = field(default_factory=list)
     duration_ms: int = 0
@@ -46,6 +50,10 @@ class AgentResult:
             "evidence": self.evidence,
             "findings": self.findings,
             "recommendations": self.recommendations,
+            "observed_facts": self.observed_facts,
+            "inferences": self.inferences,
+            "uncertainties": self.uncertainties,
+            "assumptions": self.assumptions,
             "next_step": self.next_step,
             "errors": self.errors,
             "duration_ms": self.duration_ms,
@@ -75,14 +83,34 @@ class SharedContext:
     strategy_signals: Dict[str, Any] = field(default_factory=dict)
     action_proposals: List[Dict[str, Any]] = field(default_factory=list)
     created_plan_id: Optional[int] = None
+    action_plan_id: Optional[int] = None
     verification_results: Dict[str, Any] = field(default_factory=dict)
     outcome_measurements: Dict[str, Any] = field(default_factory=dict)
+
+    # Phase 5.1 Structured Collaboration & Evidence Preservation
+    observed_facts: List[Dict[str, Any]] = field(default_factory=list)
+    inferences: List[Dict[str, Any]] = field(default_factory=list)
+    uncertainties: List[str] = field(default_factory=list)
+    assumptions: List[str] = field(default_factory=list)
+    handoff_history: List[Dict[str, Any]] = field(default_factory=list)
+    collaboration_state: Optional[Any] = None
 
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
     current_agent: Optional[str] = None
-    status: str = "initialized"  # "initialized" | "running" | "completed" | "failed"
+    status: str = "initialized"  # "initialized" | "running" | "completed" | "degraded" | "failed"
     errors: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.collaboration_state is None:
+            from apps.seo.services.agents.agent_handoff import CollaborationState
+            self.collaboration_state = CollaborationState(
+                project_id=self.project_id,
+                task_goal=self.task_goal,
+                task_type=self.task_type,
+                correlation_id=self.correlation_id,
+                status=self.status
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -100,13 +128,21 @@ class SharedContext:
             "strategy_signals": self.strategy_signals,
             "action_proposals": self.action_proposals,
             "created_plan_id": self.created_plan_id,
+            "action_plan_id": self.action_plan_id or self.created_plan_id,
             "verification_results": self.verification_results,
             "outcome_measurements": self.outcome_measurements,
+            "observed_facts": self.observed_facts,
+            "inferences": self.inferences,
+            "uncertainties": self.uncertainties,
+            "assumptions": self.assumptions,
+            "handoff_history": self.handoff_history,
+            "collaboration_state": self.collaboration_state.to_dict() if hasattr(self.collaboration_state, "to_dict") else self.collaboration_state,
             "agent_results_history": self.agent_results_history,
             "current_agent": self.current_agent,
             "status": self.status,
             "errors": self.errors
         }
+
 
 
 class BaseSpecializedAgent(ABC):
@@ -183,31 +219,116 @@ class BaseSpecializedAgent(ABC):
             logger.warning(f"[{self.name}] Event publication failed ({event_type}): {exc}")
         return event
 
-    def run(self, context: SharedContext) -> AgentResult:
+    def run(
+        self,
+        context: Union[SharedContext, Any],
+        handoff: Optional[Any] = None
+    ) -> AgentResult:
         """
         Public template method executing the specialized agent with lifecycle events,
-        timing, and error handling.
+        structured handoff validation, timing, and error handling.
         """
+        from apps.seo.services.agents.agent_handoff import (
+            AgentHandoffContext, AgentHandoffValidator, AgentHandoffValidationError
+        )
+
+        # 1. Adapt input parameters (support both SharedContext and direct AgentHandoffContext)
+        active_handoff: Optional[AgentHandoffContext] = None
+        shared_ctx: SharedContext
+
+        if isinstance(context, AgentHandoffContext):
+            active_handoff = context
+            shared_ctx = SharedContext(
+                project_id=active_handoff.project_id,
+                project_name=self.project.name,
+                website_url=self.project.website_url,
+                user_id=getattr(self.user, 'id', None),
+                task_type=active_handoff.task_type,
+                task_goal=active_handoff.user_goal,
+                correlation_id=active_handoff.correlation_id,
+                evidence=dict(active_handoff.relevant_evidence),
+                observed_facts=list(active_handoff.observed_facts),
+                inferences=list(active_handoff.inferences),
+                uncertainties=list(active_handoff.uncertainties),
+                assumptions=list(active_handoff.assumptions),
+                status="running"
+            )
+        else:
+            shared_ctx = context
+            if handoff and isinstance(handoff, AgentHandoffContext):
+                active_handoff = handoff
+
+        # 2. Handoff validation: strictly validate before accepting
+        if active_handoff:
+            try:
+                AgentHandoffValidator.validate(active_handoff, expected_project_id=self.project.id)
+            except AgentHandoffValidationError as val_err:
+                self._emit_event(
+                    AgentEventType.SEO_AGENT_HANDOFF_REJECTED,
+                    payload={
+                        "source_agent": active_handoff.source_agent,
+                        "target_agent": active_handoff.target_agent,
+                        "error": str(val_err)
+                    },
+                    correlation_id=active_handoff.correlation_id
+                )
+                logger.error(f"[{self.name}] Handoff rejected: {val_err}")
+                raise val_err
+
+            # Ingest scoped evidence & provenance from validated handoff
+            handoff_dict = active_handoff.to_dict()
+            if not any(h.get("target_agent") == active_handoff.target_agent and h.get("source_agent") == active_handoff.source_agent for h in shared_ctx.handoff_history):
+                shared_ctx.handoff_history.append(handoff_dict)
+            if hasattr(shared_ctx, "collaboration_state") and shared_ctx.collaboration_state:
+                if not any(h.get("target_agent") == active_handoff.target_agent and h.get("source_agent") == active_handoff.source_agent for h in shared_ctx.collaboration_state.handoff_history):
+                    shared_ctx.collaboration_state.handoff_history.append(handoff_dict)
+            for fact in active_handoff.observed_facts:
+                if fact not in shared_ctx.observed_facts:
+                    shared_ctx.observed_facts.append(fact)
+            for inf in active_handoff.inferences:
+                if inf not in shared_ctx.inferences:
+                    shared_ctx.inferences.append(inf)
+            for unc in active_handoff.uncertainties:
+                if unc not in shared_ctx.uncertainties:
+                    shared_ctx.uncertainties.append(unc)
+            for asm in active_handoff.assumptions:
+                if asm not in shared_ctx.assumptions:
+                    shared_ctx.assumptions.append(asm)
+
         start_time = time.time()
-        context.current_agent = self.name
+        shared_ctx.current_agent = self.name
 
         self._emit_event(
             AgentEventType.SEO_AGENT_STARTED,
             payload={
-                "task_type": context.task_type,
-                "task_goal": context.task_goal,
-                "target_url": context.target_url,
-                "target_query": context.target_query
+                "task_type": shared_ctx.task_type,
+                "task_goal": shared_ctx.task_goal,
+                "target_url": shared_ctx.target_url,
+                "target_query": shared_ctx.target_query
             },
-            correlation_id=context.correlation_id
+            correlation_id=shared_ctx.correlation_id
         )
 
         try:
-            result = self._execute(context)
+            result = self._execute(shared_ctx)
             duration_ms = int((time.time() - start_time) * 1000)
             result.duration_ms = duration_ms
 
-            context.agent_results_history.append(result.to_dict())
+            # Synchronize categorized findings into shared context
+            for fact in result.observed_facts:
+                if fact not in shared_ctx.observed_facts:
+                    shared_ctx.observed_facts.append(fact)
+            for inf in result.inferences:
+                if inf not in shared_ctx.inferences:
+                    shared_ctx.inferences.append(inf)
+            for unc in result.uncertainties:
+                if unc not in shared_ctx.uncertainties:
+                    shared_ctx.uncertainties.append(unc)
+            for asm in result.assumptions:
+                if asm not in shared_ctx.assumptions:
+                    shared_ctx.assumptions.append(asm)
+
+            shared_ctx.agent_results_history.append(result.to_dict())
 
             self._emit_event(
                 AgentEventType.SEO_AGENT_COMPLETED,
@@ -216,10 +337,12 @@ class BaseSpecializedAgent(ABC):
                     "confidence": result.confidence,
                     "findings_count": len(result.findings),
                     "recommendations_count": len(result.recommendations),
+                    "observed_facts_count": len(result.observed_facts),
+                    "inferences_count": len(result.inferences),
                     "next_step": result.next_step,
                     "duration_ms": duration_ms
                 },
-                correlation_id=context.correlation_id
+                correlation_id=shared_ctx.correlation_id
             )
             return result
 
@@ -228,7 +351,7 @@ class BaseSpecializedAgent(ABC):
             error_str = f"Agent '{self.name}' failed: {str(exc)}"
             logger.exception(f"[{self.name}] {error_str}")
 
-            context.errors.append(error_str)
+            shared_ctx.errors.append(error_str)
             failed_result = AgentResult(
                 agent=self.name,
                 status="failed",
@@ -236,7 +359,7 @@ class BaseSpecializedAgent(ABC):
                 errors=[error_str],
                 duration_ms=duration_ms
             )
-            context.agent_results_history.append(failed_result.to_dict())
+            shared_ctx.agent_results_history.append(failed_result.to_dict())
 
             self._emit_event(
                 AgentEventType.SEO_AGENT_FAILED,
@@ -244,9 +367,10 @@ class BaseSpecializedAgent(ABC):
                     "error": str(exc),
                     "duration_ms": duration_ms
                 },
-                correlation_id=context.correlation_id
+                correlation_id=shared_ctx.correlation_id
             )
             return failed_result
+
 
     @abstractmethod
     def _execute(self, context: SharedContext) -> AgentResult:

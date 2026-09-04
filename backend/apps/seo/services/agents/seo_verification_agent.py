@@ -36,6 +36,9 @@ class SEOVerificationAgent(BaseSpecializedAgent):
         findings: List[str] = []
         verifications: Dict[str, Any] = {}
         outcome_results: Dict[str, Any] = {}
+        observed_facts: List[Dict[str, Any]] = []
+        inferences: List[Dict[str, Any]] = []
+        uncertainties: List[str] = []
 
         verifier = SEOActionVerifier(project=self.project, publisher=self.publisher)
         outcome_service = SEOOutcomeMeasurementService(project=self.project, publisher=self.publisher)
@@ -56,22 +59,43 @@ class SEOVerificationAgent(BaseSpecializedAgent):
             verifications["plan_verification"] = plan_verif
             verified_count = plan_verif.get("verified_actions_count", 0)
             failed_count = plan_verif.get("failed_actions_count", 0)
-            findings.append(
+            fact_str = (
                 f"Verified ActionPlan #{target_plan.id}: {verified_count} verified, "
                 f"{failed_count} unverified out of {plan_verif.get('total_actions_count', 0)} actions."
             )
+            findings.append(fact_str)
+            observed_facts.append({
+                "fact": fact_str,
+                "source": "verify_action_plan",
+                "confidence": 1.0,
+                "raw_data": plan_verif
+            })
+
+            inferences.append({
+                "inference": f"Technical DOM verification confirmed {verified_count} modifications deployed to live site.",
+                "based_on": ["verify_action_plan"],
+                "confidence": 0.92
+            })
 
             # Measure plan outcome if actions are completed
             try:
                 outcome_summary = outcome_service.measure_plan_outcome(target_plan, window_days=14)
                 outcome_results["plan_outcome"] = outcome_summary
-                findings.append(
+                outcome_fact = (
                     f"Plan Outcome Measurement: {outcome_summary.get('improved', 0)} improved, "
                     f"{outcome_summary.get('no_change', 0)} neutral, {outcome_summary.get('declined', 0)} declined "
                     f"({outcome_summary.get('plan_outcome', 'UNKNOWN').upper()})."
                 )
+                findings.append(outcome_fact)
+                observed_facts.append({
+                    "fact": outcome_fact,
+                    "source": "get_action_outcomes",
+                    "confidence": 1.0,
+                    "raw_data": outcome_summary
+                })
             except Exception as exc:
                 logger.warning(f"[{self.name}] Plan outcome measurement skipped: {exc}")
+                uncertainties.append("Plan outcome measurement skipped due to missing post-deployment GSC window.")
 
         # 2. Check for individual completed actions awaiting measurement
         completed_actions = SEOAction.objects.filter(
@@ -83,20 +107,35 @@ class SEOVerificationAgent(BaseSpecializedAgent):
             if act.verification_status == VerificationStatus.PENDING:
                 act_verif = verifier.verify_action(act)
                 verifications[f"action_{act.id}"] = act_verif.to_dict()
+                observed_facts.append({
+                    "fact": f"Action #{act.id} verified with status: {act_verif.status.value}.",
+                    "source": "verify_seo_action",
+                    "confidence": 1.0,
+                    "raw_data": act_verif.to_dict()
+                })
 
             if not act.outcome_measured_at:
                 try:
                     act_outcome = outcome_service.measure_action_outcome(act, window_days=14)
                     outcome_results[f"action_{act.id}"] = act_outcome.to_dict()
-                    findings.append(
+                    fact_str = (
                         f"Action #{act.id} ({act.action_type}): Classified as {act_outcome.outcome.value.upper()} "
                         f"(confidence {round(act_outcome.confidence_score*100)}%)."
                     )
+                    findings.append(fact_str)
+                    observed_facts.append({
+                        "fact": fact_str,
+                        "source": "get_action_outcomes",
+                        "confidence": 1.0,
+                        "raw_data": act_outcome.to_dict()
+                    })
                 except Exception as exc:
                     logger.warning(f"[{self.name}] Action outcome measurement skipped for #{act.id}: {exc}")
 
         context.verification_results.update(verifications)
         context.outcome_measurements.update(outcome_results)
+
+        uncertainties.append("External search engine algorithm updates and SERP volatility can influence outcome lift.")
 
         if not findings:
             findings.append("No active or completed actions required verification or measurement.")
@@ -111,6 +150,10 @@ class SEOVerificationAgent(BaseSpecializedAgent):
             },
             findings=findings,
             recommendations=[],
+            observed_facts=observed_facts,
+            inferences=inferences,
+            uncertainties=uncertainties,
+            assumptions=["DOM checks evaluate live rendered HTML structure."],
             next_step="completed",
             metadata={
                 "verified_items": len(verifications),
