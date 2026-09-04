@@ -597,7 +597,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               gap: '6px',
             }}
           >
-            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.2)'}
+            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.3)'}
           </button>
 
           <button
@@ -871,6 +871,156 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                       <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>{dec.status.toUpperCase()}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Phase 5.3: Dynamic Task Plan & Decomposition Card */}
+          <div
+            id="dynamic-task-plan-card"
+            style={{
+              marginTop: '16px',
+              padding: '16px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>🗺️</span>
+                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Dynamic Task Plan & Decomposition (Phase 5.3)</strong>
+                <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                  DAG Validated (Cycle-Free)
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                  Planning Rounds: {orchestrationResult.task_plan?.summary?.planning_rounds ?? orchestrationResult.collaboration_state?.task_plan_summary?.planning_rounds ?? 1}
+                </span>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
+                  Replans: {orchestrationResult.task_plan?.summary?.replan_count ?? orchestrationResult.collaboration_state?.task_plan_summary?.replan_count ?? 0}
+                </span>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
+                  Completion Rate: {orchestrationResult.task_plan?.summary?.completion_rate ?? orchestrationResult.collaboration_state?.task_plan_summary?.completion_rate ?? 100}%
+                </span>
+              </div>
+            </div>
+
+            {/* Task Metric Pills Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Total Tasks</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                  {orchestrationResult.task_plan?.summary?.total_tasks ?? orchestrationResult.collaboration_state?.task_plan_summary?.total_tasks ?? (orchestrationResult.agent_results_history?.length || 0)}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Ready / Running</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0284c7' }}>
+                  {(orchestrationResult.task_plan?.summary?.ready_tasks ?? 0) + (orchestrationResult.task_plan?.summary?.running_tasks ?? 0)}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Completed</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a' }}>
+                  {orchestrationResult.task_plan?.summary?.completed_tasks ?? orchestrationResult.collaboration_state?.task_plan_summary?.completed_tasks ?? (orchestrationResult.agent_results_history?.length || 0)}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Blocked</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: (orchestrationResult.task_plan?.summary?.blocked_tasks ?? 0) > 0 ? '#ea580c' : '#64748b' }}>
+                  {orchestrationResult.task_plan?.summary?.blocked_tasks ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Failed</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: (orchestrationResult.task_plan?.summary?.failed_tasks ?? 0) > 0 ? '#dc2626' : '#16a34a' }}>
+                  {orchestrationResult.task_plan?.summary?.failed_tasks ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Parallel Tiers</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#7c3aed' }}>
+                  {orchestrationResult.task_plan?.summary?.parallel_groups_count ?? 1}
+                </div>
+              </div>
+            </div>
+
+            {/* Task Decomposition Items List */}
+            {orchestrationResult.task_plan?.tasks && Object.keys(orchestrationResult.task_plan.tasks).length > 0 && (
+              <div style={{ marginTop: '10px', backgroundColor: '#ffffff', padding: '12px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                  🎯 Decomposed Agent Tasks (Topological Execution Order):
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {Object.values(orchestrationResult.task_plan.tasks).map((t: any) => {
+                    const statusBg =
+                      t.status === 'completed' ? '#dcfce7' :
+                      t.status === 'running' ? '#e0f2fe' :
+                      t.status === 'blocked' ? '#ffedd5' :
+                      t.status === 'failed' ? '#fee2e2' :
+                      t.status === 'ready' ? '#f0fdf4' : '#f1f5f9';
+                    const statusColor =
+                      t.status === 'completed' ? '#166534' :
+                      t.status === 'running' ? '#0369a1' :
+                      t.status === 'blocked' ? '#c2410c' :
+                      t.status === 'failed' ? '#b91c1c' :
+                      t.status === 'ready' ? '#15803d' : '#475569';
+                    const priorityColor =
+                      t.priority === 'critical' ? '#dc2626' :
+                      t.priority === 'high' ? '#ea580c' :
+                      t.priority === 'medium' ? '#2563eb' : '#64748b';
+
+                    return (
+                      <div
+                        key={t.task_id}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#fafafa',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{t.task_id}</span>
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
+                              {t.responsible_agent}
+                            </span>
+                            <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', border: `1px solid ${priorityColor}`, color: priorityColor, fontWeight: 700 }}>
+                              {t.priority?.toUpperCase()}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: statusBg, color: statusColor, fontWeight: 700 }}>
+                            {t.status?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#334155' }}>
+                          <strong>Objective:</strong> {t.objective}
+                        </div>
+                        {t.dependencies && t.dependencies.length > 0 && (
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            <strong>Dependencies:</strong> {t.dependencies.join(', ')}
+                          </div>
+                        )}
+                        {t.result_summary && (
+                          <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#f0fdf4', padding: '4px 8px', borderRadius: '4px', marginTop: '2px' }}>
+                            ✓ {t.result_summary}
+                          </div>
+                        )}
+                        {t.error && (
+                          <div style={{ fontSize: '11px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: '4px', marginTop: '2px' }}>
+                            ✕ {t.error}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

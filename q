@@ -1,0 +1,13 @@
+warning: in the working copy of 'backend/apps/seo/services/agent_evaluation.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agent_events.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agents/__init__.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agents/agent_handoff.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agents/base_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agents/seo_supervisor.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/services/agents/shared_memory.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/tests.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/urls.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/apps/seo/views.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dashboard/src/api/seoOrchestrator.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dashboard/src/components/AgentOrchestratorPanel.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dashboard/src/types/agentEvent.ts', LF will be replaced by CRLF the next time Git touches it

@@ -121,6 +121,19 @@ class AgentEventType(str, Enum):
     SEO_COLLABORATION_AGENT_REVISIT = "seo.collaboration.agent.revisit"
     SEO_COLLABORATION_CONTEXT_BOUNDED = "seo.collaboration.context.bounded"
 
+    # Dynamic Task Decomposition & Collaborative Planning lifecycle (Phase 5.3)
+    SEO_TASK_PLAN_CREATED = "seo.agent.task.plan.created"
+    SEO_TASK_CREATED = "seo.agent.task.created"
+    SEO_TASK_READY = "seo.agent.task.ready"
+    SEO_TASK_STARTED = "seo.agent.task.started"
+    SEO_TASK_COMPLETED = "seo.agent.task.completed"
+    SEO_TASK_FAILED = "seo.agent.task.failed"
+    SEO_TASK_BLOCKED = "seo.agent.task.blocked"
+    SEO_TASK_REPLANNED = "seo.agent.task.replanned"
+    SEO_TASK_CANCELLED = "seo.agent.task.cancelled"
+    SEO_TASK_DEPENDENCY_RESOLVED = "seo.agent.task.dependency.resolved"
+    SEO_TASK_PLAN_LIMIT_REACHED = "seo.agent.task.plan.limit_reached"
+
 
 
 

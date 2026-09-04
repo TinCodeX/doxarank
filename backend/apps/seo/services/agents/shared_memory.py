@@ -74,7 +74,7 @@ def redact_secrets(data: Any) -> Any:
         return [redact_secrets(item) for item in data]
     elif isinstance(data, str):
         # Mask API keys (sk-..., ghp_..., etc.)
-        clean = re.sub(r'(sk-[a-zA-Z0-9_-]{8,}|ghp_[a-zA-Z0-9]{20,})', '***REDACTED***', data)
+        clean = re.sub(r'\b(sk-[a-zA-Z0-9_-]{8,}|ghp_[a-zA-Z0-9]{20,})', '***REDACTED***', data)
         clean = re.sub(r'Bearer\s+[a-zA-Z0-9_\-\.]{8,}', 'Bearer ***REDACTED***', clean, flags=re.IGNORECASE)
         clean = re.sub(r'(?i)(api[_-]?key|apikey|secret|password|passwd|token|auth_token)\s*[:=]\s*[^\s,;]+', r'\1=***REDACTED***', clean)
         return clean

@@ -192,6 +192,10 @@ class AgentHandoffContext:
     open_conflicts: List[Dict[str, Any]] = field(default_factory=list)
     pending_questions: List[str] = field(default_factory=list)
 
+    # Phase 5.3 Dynamic Task Planning References
+    current_task_id: Optional[str] = None
+    task_objective: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "project_id": self.project_id,
@@ -219,6 +223,8 @@ class AgentHandoffContext:
             "active_uncertainties": self.active_uncertainties,
             "open_conflicts": self.open_conflicts,
             "pending_questions": self.pending_questions,
+            "current_task_id": self.current_task_id,
+            "task_objective": self.task_objective,
         }
 
     @classmethod
@@ -249,6 +255,8 @@ class AgentHandoffContext:
             active_uncertainties=data.get("active_uncertainties", []),
             open_conflicts=data.get("open_conflicts", []),
             pending_questions=data.get("pending_questions", []),
+            current_task_id=data.get("current_task_id"),
+            task_objective=data.get("task_objective"),
         )
 
 
@@ -275,6 +283,7 @@ class CollaborationState:
     revisit_history: List[Dict[str, Any]] = field(default_factory=list)
     open_conflicts_count: int = 0
     memory_summary: Dict[str, Any] = field(default_factory=dict)
+    task_plan_summary: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -295,6 +304,7 @@ class CollaborationState:
             "revisit_history": self.revisit_history,
             "open_conflicts_count": self.open_conflicts_count,
             "memory_summary": self.memory_summary,
+            "task_plan_summary": self.task_plan_summary,
         }
 
 

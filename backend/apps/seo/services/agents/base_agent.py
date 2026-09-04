@@ -98,6 +98,9 @@ class SharedContext:
     # Phase 5.2 Adaptive Multi-Agent Collaboration & Shared Working Memory
     shared_memory: Optional[Any] = None
 
+    # Phase 5.3 Dynamic Task Decomposition & Collaborative Planning
+    task_plan: Optional[Any] = None
+
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
     current_agent: Optional[str] = None
@@ -141,6 +144,7 @@ class SharedContext:
             "handoff_history": self.handoff_history,
             "collaboration_state": self.collaboration_state.to_dict() if hasattr(self.collaboration_state, "to_dict") else self.collaboration_state,
             "shared_memory": self.shared_memory.to_dict() if hasattr(self.shared_memory, "to_dict") else self.shared_memory,
+            "task_plan": self.task_plan.to_dict() if hasattr(self.task_plan, "to_dict") else self.task_plan,
             "agent_results_history": self.agent_results_history,
             "current_agent": self.current_agent,
             "status": self.status,

@@ -3354,7 +3354,7 @@ class ToolRegistryTests(TestCase):
             'get_action_outcomes'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 25)
+        self.assertEqual(len(registered_names), 29)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3364,7 +3364,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 25)
+        self.assertEqual(len(schemas), 29)
 
 
         for s in schemas:
@@ -11139,7 +11139,7 @@ class SEOAgentOrchestrationTests(TestCase):
         self.assertIn("strategy_confidence", context.strategy_signals)
 
         # Verify auditable agent execution history
-        agents_executed = [item["agent"] for item in context.agent_results_history]
+        agents_executed = list(dict.fromkeys(item["agent"] for item in context.agent_results_history))
         self.assertEqual(agents_executed, ["seo_researcher", "seo_investigator", "seo_strategist"])
 
     def test_action_planning_agent_preserves_human_approval_and_safety(self):
@@ -11222,10 +11222,10 @@ class SEOAgentOrchestrationTests(TestCase):
             self.assertIn("Simulated database timeout", context.errors[0])
 
             # Research agent succeeded, investigator failed, strategist skipped
-            executed = [item["agent"] for item in context.agent_results_history]
+            executed = list(dict.fromkeys(item["agent"] for item in context.agent_results_history))
             self.assertEqual(executed, ["seo_researcher", "seo_investigator"])
             self.assertEqual(context.agent_results_history[0]["status"], "completed")
-            self.assertEqual(context.agent_results_history[1]["status"], "failed")
+            self.assertEqual(context.agent_results_history[-1]["status"], "failed")
 
 
 class SEOModelContextProtocolTests(TestCase):
@@ -12243,8 +12243,8 @@ class SEOAgentCollaborationTests(TestCase):
             self.assertIn("audit_summary", context.evidence)
             self.assertEqual(context.agent_results_history[0]["agent"], "seo_researcher")
             self.assertEqual(context.agent_results_history[0]["status"], "completed")
-            self.assertEqual(context.agent_results_history[1]["agent"], "seo_investigator")
-            self.assertEqual(context.agent_results_history[1]["status"], "failed")
+            self.assertEqual(context.agent_results_history[-1]["agent"], "seo_investigator")
+            self.assertEqual(context.agent_results_history[-1]["status"], "failed")
 
     def test_evidence_provenance_preservation(self):
         """10. Observed facts without declared source provenance are rejected by validator."""
@@ -12972,3 +12972,711 @@ class SEOSharedWorkingMemoryTests(TestCase):
         self.assertEqual(len(restored._decisions), len(original._decisions))
         self.assertEqual(len(restored._revisits), len(original._revisits))
         self.assertEqual(len(restored._fingerprints), len(original._fingerprints))
+
+
+class SEODynamicTaskPlanningTests(TestCase):
+    """
+    Milestone 5.3 Test Suite:
+    Dynamic Task Decomposition & Collaborative Planning.
+    Verifies goal decomposition, DAG construction, Kahn's algorithm cycle detection,
+    depth limits, state machine transitions, dependency resolution, failure cascading to BLOCKED,
+    parallel tiers, adaptive replanning, planning budgets, secret redaction, human approval boundary,
+    observable telemetry events, evaluation metrics, REST API endpoints, and multi-tenant isolation.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from apps.seo.models import Project
+        self.client = APIClient()
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='plan_user_a@doxarank.com',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='plan_user_b@doxarank.com',
+            password='Password123!'
+        )
+
+        self.project_a = Project.objects.create(
+            name="Plan Project Alpha",
+            website_url="https://plan-alpha.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Plan Project Beta",
+            website_url="https://plan-beta.com",
+            owner=self.user_b
+        )
+
+    def test_goal_decomposition_intent_investigation_and_drop(self):
+        """1. Decompose goal with investigation/traffic drop intent into structured DAG."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskStatus
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Investigate 28-day CTR and ranking decline for key search queries"
+        )
+
+        self.assertEqual(plan.project_id, self.project_a.id)
+        self.assertEqual(len(plan.tasks), 5)
+
+        task_list = list(plan.tasks.values())
+        root_task = task_list[0]
+        self.assertEqual(root_task.responsible_agent, "seo_researcher")
+        self.assertEqual(root_task.status, TaskStatus.READY.value)
+        self.assertEqual(len(root_task.dependencies), 0)
+
+        second_task = task_list[1]
+        self.assertEqual(second_task.responsible_agent, "seo_researcher")
+        self.assertEqual(second_task.status, TaskStatus.PENDING.value)
+        self.assertIn(root_task.task_id, second_task.dependencies)
+
+        # Graph validation passes without cycles
+        self.assertTrue(plan.validate_graph())
+
+    def test_goal_decomposition_intent_verification_and_audit(self):
+        """2. Decompose verification goal into focused task DAG."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Verify live DOM and check deployment on landing pages"
+        )
+
+        self.assertEqual(len(plan.tasks), 1)
+        agents = [t.responsible_agent for t in plan.tasks.values()]
+        self.assertEqual(agents, ["seo_verifier"])
+        self.assertTrue(plan.validate_graph())
+
+    def test_goal_decomposition_intent_strategy_and_page2(self):
+        """3. Decompose strategy goal into opportunity-focused DAG."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Prioritize strategy and calibrated win rate opportunities"
+        )
+
+        self.assertEqual(len(plan.tasks), 2)
+        agents = [t.responsible_agent for t in plan.tasks.values()]
+        self.assertEqual(agents, ["seo_researcher", "seo_strategist"])
+        self.assertTrue(plan.validate_graph())
+
+    def test_dag_cycle_detection_via_kahns_algorithm(self):
+        """4. Kahn's algorithm detects circular dependencies and raises CircularDependencyError."""
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, CircularDependencyError
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Circular dependency test",
+            correlation_id="corr-cycle-004"
+        )
+
+        t1 = AgentTask(
+            task_id="task_1",
+            objective="Task 1",
+            description="First task",
+            responsible_agent="seo_researcher",
+            dependencies=["task_3"],  # Cycle: 1 -> 2 -> 3 -> 1
+            correlation_id="corr-cycle-004"
+        )
+        t2 = AgentTask(
+            task_id="task_2",
+            objective="Task 2",
+            description="Second task",
+            responsible_agent="seo_investigator",
+            dependencies=["task_1"],
+            correlation_id="corr-cycle-004"
+        )
+        t3 = AgentTask(
+            task_id="task_3",
+            objective="Task 3",
+            description="Third task",
+            responsible_agent="seo_strategist",
+            dependencies=["task_2"],
+            correlation_id="corr-cycle-004"
+        )
+
+        plan.add_task(t1)
+        plan.add_task(t2)
+        plan.add_task(t3)
+
+        with self.assertRaises(CircularDependencyError) as ctx:
+            plan.validate_graph()
+        self.assertIn("Circular dependency detected", str(ctx.exception))
+
+    def test_dag_depth_limit_exceeded(self):
+        """5. Exceeding max_dependency_depth raises PlanLimitExceededError."""
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, PlanLimitExceededError, PlanBudgetConfig
+
+        budget = PlanBudgetConfig(max_dependency_depth=3, max_tasks_per_plan=10)
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Depth limit test",
+            correlation_id="corr-depth-005",
+            budget=budget
+        )
+
+        prev_id = None
+        for i in range(5):
+            tid = f"task_{i+1}"
+            deps = [prev_id] if prev_id else []
+            t = AgentTask(
+                task_id=tid,
+                objective=f"Step {i+1}",
+                description="Nested chain",
+                responsible_agent="seo_researcher",
+                dependencies=deps,
+                correlation_id="corr-depth-005"
+            )
+            plan.add_task(t)
+            prev_id = tid
+
+        with self.assertRaises(PlanLimitExceededError) as ctx:
+            plan.validate_graph()
+        self.assertIn("exceeds maximum allowed depth", str(ctx.exception))
+
+    def test_task_state_machine_valid_and_invalid_transitions(self):
+        """6. State machine enforces valid transitions and rejects invalid state jumps."""
+        from apps.seo.services.agents.task_planner import AgentTask, TaskStatus, InvalidTaskTransitionError
+
+        task = AgentTask(
+            task_id="task_sm_006",
+            objective="State machine test",
+            description="Testing transitions",
+            responsible_agent="seo_researcher",
+            status=TaskStatus.PENDING.value,
+            correlation_id="corr-sm-006"
+        )
+
+        # Valid transitions: PENDING -> READY -> RUNNING -> COMPLETED
+        task.transition_to(TaskStatus.READY)
+        self.assertEqual(task.status, TaskStatus.READY.value)
+
+        task.transition_to(TaskStatus.RUNNING)
+        self.assertEqual(task.status, TaskStatus.RUNNING.value)
+
+        task.transition_to(TaskStatus.COMPLETED, result_summary="Successfully fetched metrics")
+        self.assertEqual(task.status, TaskStatus.COMPLETED.value)
+        self.assertEqual(task.result_summary, "Successfully fetched metrics")
+        self.assertIsNotNone(task.completed_at)
+
+        # Invalid transition: COMPLETED -> READY
+        with self.assertRaises(InvalidTaskTransitionError):
+            task.transition_to(TaskStatus.READY)
+
+        # Invalid transition: COMPLETED -> RUNNING
+        with self.assertRaises(InvalidTaskTransitionError):
+            task.transition_to(TaskStatus.RUNNING)
+
+    def test_task_readiness_and_dependency_resolution(self):
+        """7. Upstream task completion automatically unblocks downstream dependencies to READY."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskStatus
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Investigate ranking drop for target page"
+        )
+
+        task_ids = list(plan.tasks.keys())
+        t1 = plan.tasks[task_ids[0]]
+        t2 = plan.tasks[task_ids[1]]
+
+        self.assertEqual(t1.status, TaskStatus.READY.value)
+        self.assertEqual(t2.status, TaskStatus.PENDING.value)
+
+        ready_tasks = plan.get_ready_tasks()
+        self.assertEqual(len(ready_tasks), 1)
+        self.assertEqual(ready_tasks[0].task_id, t1.task_id)
+
+        # Complete t1
+        t1.transition_to(TaskStatus.RUNNING)
+        t1.transition_to(TaskStatus.COMPLETED, result_summary="Done")
+
+        # Now t2 should be unblocked to READY
+        ready_tasks = plan.get_ready_tasks()
+        self.assertGreaterEqual(len(ready_tasks), 1)
+        self.assertIn(t2.task_id, [t.task_id for t in ready_tasks])
+        self.assertEqual(t2.status, TaskStatus.READY.value)
+
+    def test_cascading_failure_to_blocked(self):
+        """8. Upstream task failure cascades BLOCKED status down dependency tree."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskStatus
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Investigate ranking drops and synthesize fix"
+        )
+
+        task_ids = list(plan.tasks.keys())
+        t1 = plan.tasks[task_ids[0]]
+        t2 = plan.tasks[task_ids[1]]
+        t3 = plan.tasks[task_ids[2]]
+        t4 = plan.tasks[task_ids[3]]
+
+        # t1 starts in READY and fails
+        t1.transition_to(TaskStatus.RUNNING)
+        t1.transition_to(TaskStatus.FAILED, error="GSC API connection timeout")
+
+        blocked_ids = plan.handle_task_failure(t1.task_id)
+        self.assertIn(t2.task_id, blocked_ids)
+        self.assertIn(t3.task_id, blocked_ids)
+        self.assertIn(t4.task_id, blocked_ids)
+
+        self.assertEqual(t2.status, TaskStatus.BLOCKED.value)
+        self.assertEqual(t3.status, TaskStatus.BLOCKED.value)
+        self.assertEqual(t4.status, TaskStatus.BLOCKED.value)
+
+        # Ready tasks should now be empty
+        self.assertEqual(len(plan.get_ready_tasks()), 0)
+
+    def test_parallel_groups_tier_computation(self):
+        """9. Parallel groups partitions tasks into topological depth tiers."""
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Parallel group test",
+            correlation_id="corr-parallel-009"
+        )
+
+        # Tier 0: Two independent root tasks
+        t_a = AgentTask("t_a", "Collect GSC data", "", "seo_researcher", correlation_id="c")
+        t_b = AgentTask("t_b", "Collect Audit data", "", "seo_researcher", correlation_id="c")
+
+        # Tier 1: Task depending on both t_a and t_b
+        t_c = AgentTask("t_c", "Correlate data", "", "seo_investigator", dependencies=["t_a", "t_b"], correlation_id="c")
+
+        # Tier 2: Final task depending on t_c
+        t_d = AgentTask("t_d", "Formulate plan", "", "seo_action_planner", dependencies=["t_c"], correlation_id="c")
+
+        plan.add_task(t_a)
+        plan.add_task(t_b)
+        plan.add_task(t_c)
+        plan.add_task(t_d)
+
+        groups = plan.get_parallel_groups()
+        self.assertEqual(len(groups), 3)
+
+        tier_0_ids = set(groups[0])
+        self.assertEqual(tier_0_ids, {"t_a", "t_b"})
+
+        tier_1_ids = set(groups[1])
+        self.assertEqual(tier_1_ids, {"t_c"})
+
+        tier_2_ids = set(groups[2])
+        self.assertEqual(tier_2_ids, {"t_d"})
+
+    def test_adaptive_replanning_on_conflict_or_evidence(self):
+        """10. Adaptive replanner updates plan rounds, records history, and modifies tasks."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, ReplanReason, AgentTask
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Investigate sudden organic drop"
+        )
+
+        initial_rounds = plan.planning_rounds
+        self.assertEqual(initial_rounds, 1)
+
+        extra_task = AgentTask(
+            task_id="extra_audit_010",
+            objective="Deep-dive into canonical tag anomalies",
+            description="Resolve conflicting canonical findings",
+            responsible_agent="seo_investigator",
+            correlation_id=plan.correlation_id
+        )
+
+        plan = planner.replan(
+            plan=plan,
+            reason=ReplanReason.CONFLICT_DETECTED,
+            explanation="Canonical conflict between researcher and investigator",
+            new_tasks=[extra_task]
+        )
+
+        self.assertEqual(plan.planning_rounds, 2)
+        self.assertEqual(len(plan.replan_history), 1)
+        self.assertEqual(plan.replan_history[0]["reason"], "conflict_detected")
+        self.assertIn("extra_audit_010", plan.tasks)
+
+    def test_replanning_budget_limits(self):
+        """11. Exceeding max_replans or max_tasks_per_plan enforces budget ceilings."""
+        from apps.seo.services.agents.task_planner import (
+            DynamicTaskPlanner, ReplanReason, AgentTask, PlanBudgetConfig,
+            PlanBudgetExceededError, PlanLimitExceededError
+        )
+
+        budget = PlanBudgetConfig(max_replans=2, max_tasks_per_plan=20)
+        planner = DynamicTaskPlanner(default_budget=budget)
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Budget ceiling test"
+        )
+
+        # Replan round 1: OK
+        plan = planner.replan(plan, ReplanReason.NEW_EVIDENCE, "Round 1")
+        # Replan round 2: OK
+        plan = planner.replan(plan, ReplanReason.NEW_EVIDENCE, "Round 2")
+
+        # Replan round 3: Exceeds max_replans=2
+        with self.assertRaises(PlanBudgetExceededError) as ctx:
+            planner.replan(plan, ReplanReason.NEW_EVIDENCE, "Round 3")
+        self.assertIn("Maximum allowed replans", str(ctx.exception))
+
+    def test_secret_redaction_in_tasks(self):
+        """12. Secrets, API keys, and Bearer tokens are redacted upon task creation."""
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        task = AgentTask(
+            task_id="task_sec_012",
+            objective="Authenticate using Bearer secret_token_xyz123 and test endpoint",
+            description="Query GSC with api_key=sk-abcdef1234567890 securely",
+            responsible_agent="seo_researcher",
+            correlation_id="corr-sec-012"
+        )
+
+        self.assertNotIn("secret_token_xyz123", task.objective)
+        self.assertIn("REDACTED", task.objective)
+        self.assertNotIn("sk-abcdef1234567890", task.description)
+        self.assertIn("REDACTED", task.description)
+
+    def test_human_approval_safety_in_action_planning(self):
+        """13. Action Planner task execution preserves human approval boundary (requires_approval=True)."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisor
+        from apps.seo.models import SEOAction
+
+        supervisor = SEOSupervisor(project=self.project_a, user=self.user_a)
+        result = supervisor.orchestrate(task="Propose title and meta description updates for landing page")
+
+        self.assertEqual(result.status, "completed")
+        self.assertIsNotNone(result.task_plan)
+
+        # Verify any action proposals strictly require human approval
+        actions = SEOAction.objects.filter(project=self.project_a)
+        for action in actions:
+            self.assertTrue(action.requires_human_approval)
+            self.assertEqual(action.status, "proposed")
+
+    def test_supervisor_emits_phase_5_3_task_events(self):
+        """14. Supervisor emits Phase 5.3 structured task lifecycle events."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisor
+        from apps.seo.services.agent_events import AgentEventType
+
+        events_captured = []
+        class MockPublisher:
+            def publish(self, event):
+                events_captured.append(event)
+
+        supervisor = SEOSupervisor(
+            project=self.project_a,
+            user=self.user_a,
+            publisher=MockPublisher()
+        )
+        result = supervisor.orchestrate(task="Diagnose traffic drop and propose recovery plan")
+
+        emitted_types = [e.event_type for e in events_captured]
+        self.assertIn(AgentEventType.SEO_TASK_PLAN_CREATED, emitted_types)
+        self.assertIn(AgentEventType.SEO_TASK_CREATED, emitted_types)
+        self.assertIn(AgentEventType.SEO_TASK_READY, emitted_types)
+        self.assertIn(AgentEventType.SEO_TASK_STARTED, emitted_types)
+        self.assertIn(AgentEventType.SEO_TASK_COMPLETED, emitted_types)
+
+    def test_evaluation_metrics_include_task_planning(self):
+        """15. AgentEvaluationService computes all 12 Phase 5.3 task planning dimensions."""
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskStatus
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Evaluation task planning test"
+        )
+
+        # Mark all tasks completed for evaluation
+        for t in plan.tasks.values():
+            t.status = TaskStatus.COMPLETED.value
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            task_type="investigation",
+            task_goal=plan.goal,
+            correlation_id=plan.correlation_id,
+            status="completed",
+            task_plan=plan
+        )
+
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(context)
+        self.assertIn("task_planning_metrics", eval_res)
+        metrics = eval_res["task_planning_metrics"]
+
+        expected_keys = [
+            "tasks_created", "tasks_completed", "tasks_failed", "tasks_blocked",
+            "tasks_replanned", "planning_rounds", "average_tasks_per_plan",
+            "dependency_resolution_rate", "circular_dependencies_detected",
+            "task_completion_efficiency", "replan_efficiency", "planning_safety_compliance"
+        ]
+        for k in expected_keys:
+            self.assertIn(k, metrics)
+
+        self.assertEqual(metrics["tasks_created"], len(plan.tasks))
+        self.assertEqual(metrics["tasks_completed"], len(plan.tasks))
+        self.assertEqual(metrics["circular_dependencies_detected"], 0)
+        self.assertEqual(metrics["planning_safety_compliance"], 100.0)
+
+    def test_task_plan_serialization_and_deserialization(self):
+        """16. TaskPlan roundtrips cleanly through to_dict() and from_dict()."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskPlan
+
+        planner = DynamicTaskPlanner()
+        original = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Roundtrip serialization test"
+        )
+
+        data = original.to_dict()
+        restored = TaskPlan.from_dict(data)
+
+        self.assertEqual(restored.project_id, original.project_id)
+        self.assertEqual(restored.correlation_id, original.correlation_id)
+        self.assertEqual(restored.goal, original.goal)
+        self.assertEqual(len(restored.tasks), len(original.tasks))
+        self.assertEqual(restored.planning_rounds, original.planning_rounds)
+
+        for tid, orig_task in original.tasks.items():
+            rest_task = restored.tasks[tid]
+            self.assertEqual(rest_task.task_id, orig_task.task_id)
+            self.assertEqual(rest_task.objective, orig_task.objective)
+            self.assertEqual(rest_task.responsible_agent, orig_task.responsible_agent)
+            self.assertEqual(rest_task.status, orig_task.status)
+            self.assertEqual(rest_task.dependencies, orig_task.dependencies)
+
+    def test_api_endpoints_tasks_summary_graph(self):
+        """17. API endpoints return complete TaskPlan, summary, and visualization graph."""
+        from apps.seo.models import AgentRun, AgentRunStatus
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskPlanRegistry
+
+        planner = DynamicTaskPlanner()
+        plan = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Endpoint verification test"
+        )
+
+        run = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal=plan.goal,
+            status=AgentRunStatus.COMPLETED,
+            context_snapshot={"task_plan": plan.to_dict(), "correlation_id": plan.correlation_id}
+        )
+        plan.run_id = run.id
+        TaskPlanRegistry.get_instance().register(plan)
+
+        self.client.force_authenticate(user=self.user_a)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/tasks/
+        res_tasks = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/tasks/')
+        self.assertEqual(res_tasks.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_tasks.data["project_id"], self.project_a.id)
+        self.assertIn("tasks", res_tasks.data)
+        self.assertIn("summary", res_tasks.data)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/tasks/summary/
+        res_sum = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/tasks/summary/')
+        self.assertEqual(res_sum.status_code, status.HTTP_200_OK)
+        self.assertIn("total_tasks", res_sum.data)
+        self.assertIn("completion_rate", res_sum.data)
+        self.assertIn("parallel_groups_count", res_sum.data)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/tasks/graph/
+        res_graph = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/tasks/graph/')
+        self.assertEqual(res_graph.status_code, status.HTTP_200_OK)
+        self.assertIn("nodes", res_graph.data)
+        self.assertIn("edges", res_graph.data)
+        self.assertIn("summary", res_graph.data)
+        self.assertEqual(len(res_graph.data["nodes"]), len(plan.tasks))
+
+    def test_multi_tenant_isolation_forbidden_on_cross_tenant_plan(self):
+        """18. User B cannot access User A's task plan via correlation_id or run_id."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, TaskPlanRegistry
+
+        planner = DynamicTaskPlanner()
+        plan_a = planner.decompose_goal(
+            project_id=self.project_a.id,
+            goal="Tenant isolation test"
+        )
+        TaskPlanRegistry.get_instance().register(plan_a)
+
+        # User B authenticated
+        self.client.force_authenticate(user=self.user_b)
+
+        res = self.client.get(f'/api/seo/ai/orchestrate/{plan_a.correlation_id}/tasks/')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_bug001_sequential_same_agent_tasks_execute_in_dependency_order(self):
+        """19. Regression BUG-001: Sequential tasks assigned to same agent execute in strict DAG order."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Sequential same-agent task test",
+            correlation_id="corr-seq-019"
+        )
+        t1 = AgentTask("r1", "Research 1", "Step 1", "seo_researcher", dependencies=[], correlation_id="corr-seq-019")
+        t2 = AgentTask("r2", "Research 2", "Step 2", "seo_researcher", dependencies=["r1"], correlation_id="corr-seq-019")
+        t3 = AgentTask("r3", "Research 3", "Step 3", "seo_researcher", dependencies=["r2"], correlation_id="corr-seq-019")
+        t4 = AgentTask("i1", "Investigate 1", "Step 4", "seo_investigator", dependencies=["r3"], correlation_id="corr-seq-019")
+
+        for t in [t1, t2, t3, t4]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="Sequential same-agent test", correlation_id="corr-seq-019", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(len(plan.tasks), 4)
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        execution_order = [h.get("current_task_id") for h in result_ctx.handoff_history if h.get("current_task_id")]
+        self.assertEqual(execution_order, ["r1", "r2", "r3", "i1"])
+
+    def test_bug001_parallel_independent_tasks_execute_before_merge(self):
+        """20. Regression BUG-001: Independent parallel tasks both execute before downstream merge task."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Parallel tasks test",
+            correlation_id="corr-par-020"
+        )
+        t1 = AgentTask("r1", "Parallel Research A", "Branch A", "seo_researcher", dependencies=[], correlation_id="corr-par-020")
+        t2 = AgentTask("r2", "Parallel Research B", "Branch B", "seo_researcher", dependencies=[], correlation_id="corr-par-020")
+        t3 = AgentTask("i1", "Merge Investigation", "Merge A & B", "seo_investigator", dependencies=["r1", "r2"], correlation_id="corr-par-020")
+
+        for t in [t1, t2, t3]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="Parallel test", correlation_id="corr-par-020", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        execution_order = [h.get("current_task_id") for h in result_ctx.handoff_history if h.get("current_task_id")]
+        self.assertIn("r1", execution_order)
+        self.assertIn("r2", execution_order)
+        self.assertIn("i1", execution_order)
+        self.assertLess(execution_order.index("r1"), execution_order.index("i1"))
+        self.assertLess(execution_order.index("r2"), execution_order.index("i1"))
+
+    def test_bug001_unsatisfied_dependency_cannot_execute(self):
+        """21. Regression BUG-001: Tasks with unsatisfied dependencies cannot execute or enter RUNNING."""
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus, InvalidTaskTransitionError
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Unsatisfied dependency test",
+            correlation_id="corr-unsat-021"
+        )
+        t1 = AgentTask("r1", "Root Research", "Root", "seo_researcher", dependencies=[], correlation_id="corr-unsat-021")
+        t2 = AgentTask("i1", "Dependent Investigation", "Dep", "seo_investigator", dependencies=["r1"], correlation_id="corr-unsat-021")
+        plan.add_task(t1)
+        plan.add_task(t2)
+
+        # t2 cannot be executed while PENDING
+        self.assertEqual(t2.status, TaskStatus.PENDING.value)
+        with self.assertRaises(InvalidTaskTransitionError):
+            t2.transition_to(TaskStatus.RUNNING)
+
+        ready_tasks = plan.get_ready_tasks()
+        self.assertEqual([t.task_id for t in ready_tasks], ["r1"])
+        self.assertNotIn("i1", [t.task_id for t in ready_tasks])
+
+    def test_bug001_failure_propagation_blocks_downstream_tasks(self):
+        """22. Regression BUG-001: Task failure marks dependent tasks BLOCKED and prevents execution."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Failure propagation test",
+            correlation_id="corr-fail-022"
+        )
+        t1 = AgentTask("r1", "Failing Research", "Fails", "seo_researcher", dependencies=[], correlation_id="corr-fail-022")
+        t2 = AgentTask("r2", "Dependent Research", "Dep on r1", "seo_researcher", dependencies=["r1"], correlation_id="corr-fail-022")
+        t3 = AgentTask("i1", "Dependent Investigation", "Dep on r2", "seo_investigator", dependencies=["r2"], correlation_id="corr-fail-022")
+        t4 = AgentTask("u1", "Unrelated Verifier", "Independent", "seo_verifier", dependencies=[], correlation_id="corr-fail-022")
+
+        for t in [t1, t2, t3, t4]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Mock researcher failure on r1
+        orig_researcher_run = supervisor._agents["seo_researcher"].run
+        def mock_researcher_run(*args, **kwargs):
+            handoff = kwargs.get("handoff") or (args[1] if len(args) > 1 else None)
+            if handoff and getattr(handoff, "current_task_id", None) == "r1":
+                return AgentResult(
+                    agent="seo_researcher",
+                    status="failed",
+                    confidence=0.0,
+                    errors=["Search API failure on r1"]
+                )
+            return orig_researcher_run(*args, **kwargs)
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_researcher_run):
+            supervisor.orchestrate(task="Failure test", correlation_id="corr-fail-022", task_plan=plan)
+
+        self.assertEqual(plan.get_task("r1").status, TaskStatus.FAILED.value)
+        self.assertEqual(plan.get_task("r2").status, TaskStatus.BLOCKED.value)
+        self.assertEqual(plan.get_task("i1").status, TaskStatus.BLOCKED.value)
+        self.assertEqual(plan.get_task("u1").status, TaskStatus.COMPLETED.value)
+
+    def test_bug001_full_supervisor_scenario_traffic_drop_100_percent_completion(self):
+        """23. Regression BUG-001: Previously failing 6-task scenario achieves 100% DAG completion."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        goal = "Investigate organic traffic drop on landing page and propose fix"
+        result_ctx = supervisor.orchestrate(task=goal)
+
+        self.assertEqual(result_ctx.status, "completed")
+        plan = result_ctx.task_plan
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan.tasks), 6)
+
+        summary = plan.summarize()
+        self.assertEqual(summary["total_tasks"], 6)
+        self.assertEqual(summary["completed_tasks"], 6)
+        self.assertEqual(summary["failed_tasks"], 0)
+        self.assertEqual(summary["blocked_tasks"], 0)
+        self.assertEqual(summary["ready_tasks"], 0)
+        self.assertEqual(summary["completion_rate"], 100.0)
+
+        # Verify evaluation service reflects actual DAG state
+        eval_result = SEOAgentEvaluationService.evaluate_shared_context(result_ctx)
+        task_metrics = eval_result["task_planning_metrics"]
+        self.assertEqual(task_metrics["tasks_created"], 6)
+        self.assertEqual(task_metrics["tasks_completed"], 6)
+        self.assertEqual(task_metrics["tasks_failed"], 0)
+        self.assertEqual(task_metrics["tasks_blocked"], 0)
+        self.assertEqual(task_metrics["dependency_resolution_rate"], 100.0)
+        self.assertEqual(task_metrics["task_completion_efficiency"], 100.0)

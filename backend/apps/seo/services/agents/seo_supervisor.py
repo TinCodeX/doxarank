@@ -32,6 +32,16 @@ from .shared_memory import (
     AgentRevisitReason,
     RevisitRecord,
 )
+from .task_planner import (
+    AgentTask,
+    TaskPlan,
+    TaskStatus,
+    TaskPriority,
+    ReplanReason,
+    DynamicTaskPlanner,
+    TaskPlanRegistry,
+    PlanBudgetConfig,
+)
 from .seo_research_agent import SEOResearchAgent
 from .seo_investigation_agent import SEOInvestigationAgent
 from .seo_strategy_agent import SEOStrategyAgent
@@ -80,11 +90,19 @@ class SEOSupervisorAgent:
 
     def __init__(
         self,
-        project: Project,
+        project: Optional[Project] = None,
         user=None,
         publisher: Optional[AgentEventPublisher] = None,
-        tool_registry: Optional[ToolRegistry] = None
+        tool_registry: Optional[ToolRegistry] = None,
+        project_id: Optional[int] = None,
+        user_id: Optional[int] = None
     ):
+        if project is None and project_id is not None:
+            project = Project.objects.get(id=project_id)
+        if user is None and user_id is not None:
+            from django.contrib.auth import get_user_model
+            user = get_user_model().objects.get(id=user_id)
+
         self.project = project
         self.user = user
         self.publisher = publisher or get_event_publisher()
@@ -98,6 +116,7 @@ class SEOSupervisorAgent:
             "seo_action_planner": SEOActionPlanningAgent(project=self.project, user=self.user, publisher=self.publisher),
             "seo_verifier": SEOVerificationAgent(project=self.project, user=self.user, publisher=self.publisher),
         }
+        self.planner = DynamicTaskPlanner()
 
     def list_specialized_agents(self) -> List[Dict[str, Any]]:
         """List all available specialized agents, their descriptions, and permitted tools."""
@@ -122,10 +141,10 @@ class SEOSupervisorAgent:
             return "verify", ROUTING_WORKFLOWS["verify"]["agents"]
         elif any(w in task_lower for w in ["strategy", "historical win rate", "prioritize opportunity"]):
             return "strategy", ROUTING_WORKFLOWS["strategy"]["agents"]
+        elif any(w in task_lower for w in ["plan", "fix", "action plan", "generate actions", "propose"]):
+            return "plan", ROUTING_WORKFLOWS["plan"]["agents"]
         elif any(w in task_lower for w in ["why", "investigate", "drop", "traffic loss", "cannibalization", "root cause"]):
             return "investigate", ROUTING_WORKFLOWS["investigate"]["agents"]
-        elif any(w in task_lower for w in ["plan", "fix", "action plan", "generate actions"]):
-            return "plan", ROUTING_WORKFLOWS["plan"]["agents"]
         elif any(w in task_lower for w in ["audit", "inspect", "crawl", "gsc", "rankings", "research"]):
             return "research", ROUTING_WORKFLOWS["research"]["agents"]
         else:
@@ -161,7 +180,9 @@ class SEOSupervisorAgent:
         source_agent: str,
         target_agent_name: str,
         context: SharedContext,
-        correlation_id: str
+        correlation_id: str,
+        current_task_id: Optional[str] = None,
+        task_objective: Optional[str] = None
     ) -> AgentHandoffContext:
         """
         Build a controlled, minimally-scoped context package for the target agent.
@@ -237,6 +258,8 @@ class SEOSupervisorAgent:
             active_uncertainties=active_uncertainties,
             open_conflicts=open_conflicts,
             pending_questions=pending_questions,
+            current_task_id=current_task_id,
+            task_objective=task_objective,
         )
 
     def orchestrate(
@@ -244,7 +267,8 @@ class SEOSupervisorAgent:
         task: str,
         target_url: Optional[str] = None,
         target_query: Optional[str] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
+        task_plan: Optional[TaskPlan] = None
     ) -> SharedContext:
         """
         Main orchestration entrypoint.
@@ -288,6 +312,48 @@ class SEOSupervisorAgent:
         context.shared_memory = shared_memory
         SharedMemoryRegistry.get_instance().register(shared_memory)
 
+        # Initialize Phase 5.3 Dynamic Task Plan
+        if task_plan is None:
+            task_plan = self.planner.decompose_goal(
+                goal=task,
+                project_id=self.project.id,
+                correlation_id=corr_id,
+                target_url=target_url,
+                target_query=target_query,
+                shared_memory=shared_memory
+            )
+        else:
+            task_plan.project_id = self.project.id
+            if not task_plan.correlation_id:
+                task_plan.correlation_id = corr_id
+        context.task_plan = task_plan
+        TaskPlanRegistry.get_instance().register(task_plan)
+
+        # Synchronize agent_pipeline with task_plan to ensure all planned agents execute
+        for tid in task_plan.get_topological_sort():
+            task_node = task_plan.get_task(tid)
+            if task_node and task_node.responsible_agent in self._agents and task_node.responsible_agent not in agent_pipeline:
+                agent_pipeline.append(task_node.responsible_agent)
+                if task_node.responsible_agent not in collaboration_state.pending_agents:
+                    collaboration_state.pending_agents.append(task_node.responsible_agent)
+
+        self._emit_supervisor_event(
+            AgentEventType.SEO_TASK_PLAN_CREATED,
+            payload={
+                "plan_id": task_plan.plan_id,
+                "total_tasks": len(task_plan.tasks),
+                "summary": task_plan.summarize(),
+            },
+            correlation_id=corr_id
+        )
+
+        for t in task_plan.tasks.values():
+            self._emit_supervisor_event(
+                AgentEventType.SEO_TASK_CREATED,
+                payload=t.to_dict(),
+                correlation_id=corr_id
+            )
+
         self._emit_supervisor_event(
             AgentEventType.SEO_COLLABORATION_MEMORY_INITIALIZED,
             payload={
@@ -314,32 +380,55 @@ class SEOSupervisorAgent:
             f"with pipeline: {agent_pipeline} (Correlation: {corr_id})"
         )
 
-        # 2. Sequential Structured Agent Handoff Pipeline with Bounded Iteration
+        # 2. DAG-Driven Dynamic Task Execution Loop with Bounded Iteration
         previous_agent_name = "seo_supervisor"
-        pipeline_queue: List[str] = list(agent_pipeline)
-        max_total_steps = min(15, len(agent_pipeline) + 4)
+        max_total_steps = min(25, max(15, len(task_plan.tasks) * 2 + 5))
         step_idx = 0
 
-        while pipeline_queue and step_idx < max_total_steps:
-            agent_key = pipeline_queue.pop(0)
-            step_idx += 1
+        while step_idx < max_total_steps:
+            # 2a. Query ready tasks eligible for execution under strict DAG dependency satisfaction
+            ready_tasks = task_plan.get_ready_tasks()
+            if not ready_tasks:
+                # Terminal condition: either all tasks completed, or remaining tasks are blocked/cancelled
+                break
+
+            # 2b. Select highest-priority ready task (get_ready_tasks is sorted by priority and created_at)
+            task_to_execute = ready_tasks[0]
+            agent_key = task_to_execute.responsible_agent
             agent = self._agents.get(agent_key)
             if not agent:
-                err = f"Supervisor error: Agent '{agent_key}' not found in registry."
+                err = f"Supervisor error: Agent '{agent_key}' not found in registry for task '{task_to_execute.task_id}'."
                 context.errors.append(err)
                 collaboration_state.errors.append(err)
                 logger.error(err)
+                task_plan.handle_task_failure(task_to_execute.task_id, err)
                 break
 
-            # 2a. Build controlled, minimally-scoped handoff package
+            step_idx += 1
+
+            # 2c. Invariant: task must transition from READY to RUNNING
+            task_to_execute.transition_to(TaskStatus.RUNNING)
+            self._emit_supervisor_event(
+                AgentEventType.SEO_TASK_STARTED,
+                payload=task_to_execute.to_dict(),
+                correlation_id=corr_id
+            )
+
+            primary_task = task_to_execute
+            matching_task = primary_task
+            matching_tasks = [task_to_execute]
+
+            # 2d. Build controlled, minimally-scoped handoff package for this specific task
             handoff = self.build_handoff_context(
                 source_agent=previous_agent_name,
                 target_agent_name=agent.name,
                 context=context,
-                correlation_id=corr_id
+                correlation_id=corr_id,
+                current_task_id=task_to_execute.task_id,
+                task_objective=task_to_execute.objective
             )
 
-            # 2b. Pre-execution handoff validation
+            # 2e. Pre-execution handoff validation
             try:
                 AgentHandoffValidator.validate(handoff, expected_project_id=self.project.id)
             except AgentHandoffValidationError as val_err:
@@ -358,9 +447,10 @@ class SEOSupervisorAgent:
                 collaboration_state.errors.append(err_msg)
                 collaboration_state.status = "failed"
                 context.status = "failed"
+                task_plan.handle_task_failure(task_to_execute.task_id, err_msg)
                 break
 
-            # 2c. Emit context projection & handoff events
+            # 2f. Emit context projection & handoff events
             self._emit_supervisor_event(
                 AgentEventType.SEO_COLLABORATION_MEMORY_PROJECTED,
                 payload={
@@ -378,7 +468,7 @@ class SEOSupervisorAgent:
                     "source_agent": previous_agent_name,
                     "target_agent": agent.name,
                     "step_index": step_idx,
-                    "total_steps": len(agent_pipeline)
+                    "total_steps": len(task_plan.tasks)
                 },
                 correlation_id=corr_id
             )
@@ -396,31 +486,79 @@ class SEOSupervisorAgent:
 
             collaboration_state.current_agent = agent.name
 
-            # 2d. Execute specialized agent with handoff
+            # 2g. Execute specialized agent with handoff for this specific task
             result = agent.run(context, handoff=handoff)
             previous_agent_name = agent.name
 
-            # 2e. Failure isolation: preserve completed evidence on failure
+            # 2h. Failure isolation: preserve completed evidence on failure
             if result.status == "failed":
                 logger.warning(
-                    f"[{self.name}] Agent '{agent.name}' reported failure during step {step_idx}. "
+                    f"[{self.name}] Agent '{agent.name}' reported failure during step {step_idx} on task '{task_to_execute.task_id}'. "
                     f"Isolating failure and preserving {len(context.evidence)} evidence items."
                 )
-                collaboration_state.failed_agents.append(agent.name)
+                blocked_ids = task_plan.handle_task_failure(task_to_execute.task_id, str(result.errors or context.errors))
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_TASK_FAILED,
+                    payload=task_to_execute.to_dict(),
+                    correlation_id=corr_id
+                )
+                for b_id in blocked_ids:
+                    b_task = task_plan.get_task(b_id)
+                    if b_task:
+                        self._emit_supervisor_event(
+                            AgentEventType.SEO_TASK_BLOCKED,
+                            payload=b_task.to_dict(),
+                            correlation_id=corr_id
+                        )
+                if agent.name not in collaboration_state.failed_agents:
+                    collaboration_state.failed_agents.append(agent.name)
                 collaboration_state.status = "degraded"
-                context.status = "failed"
-                break
+                if not task_plan.get_ready_tasks():
+                    context.status = "failed"
+                    break
+                continue
 
-            # Success step: advance collaboration state
-            if agent.name in collaboration_state.pending_agents:
-                collaboration_state.pending_agents.remove(agent.name)
-            collaboration_state.completed_agents.append(agent.name)
+            # 2i. Success step: advance collaboration state and task status
+            task_to_execute.transition_to(
+                TaskStatus.COMPLETED,
+                result_summary=f"{agent.name} executed step with {len(result.findings)} findings."
+            )
+            self._emit_supervisor_event(
+                AgentEventType.SEO_TASK_COMPLETED,
+                payload=task_to_execute.to_dict(),
+                correlation_id=corr_id
+            )
+
+            if agent.name not in collaboration_state.completed_agents:
+                collaboration_state.completed_agents.append(agent.name)
             collaboration_state.current_evidence.update(result.evidence)
 
+            # Update pending agents based on remaining tasks in plan
+            remaining_agents = {
+                t.responsible_agent for t in task_plan.tasks.values()
+                if t.status in [TaskStatus.PENDING.value, TaskStatus.READY.value, TaskStatus.RUNNING.value]
+            }
+            collaboration_state.pending_agents = [a for a in agent_pipeline if a in remaining_agents]
+
+            # Unblock downstream dependencies and emit resolution events
+            new_ready_tasks = task_plan.get_ready_tasks()
+            for ready_t in new_ready_tasks:
+                if task_to_execute.task_id in ready_t.dependencies:
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_TASK_DEPENDENCY_RESOLVED,
+                        payload={"task_id": ready_t.task_id, "ready_task": ready_t.to_dict(), "resolved_by": task_to_execute.task_id},
+                        correlation_id=corr_id
+                    )
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_TASK_READY,
+                    payload=ready_t.to_dict(),
+                    correlation_id=corr_id
+                )
+
             handoff_dict = handoff.to_dict()
-            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent for h in collaboration_state.handoff_history):
+            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == task_to_execute.task_id for h in collaboration_state.handoff_history):
                 collaboration_state.handoff_history.append(handoff_dict)
-            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent for h in context.handoff_history):
+            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == task_to_execute.task_id for h in context.handoff_history):
                 context.handoff_history.append(handoff_dict)
 
             self._emit_supervisor_event(
@@ -447,12 +585,28 @@ class SEOSupervisorAgent:
                 correlation_id=corr_id
             )
 
-            # 2f. Conflict Detection & Resolution
+            # 2j. Conflict Detection & Adaptive Replanning
             new_conflicts = shared_memory.detect_conflicts()
             for conflict in new_conflicts:
                 self._emit_supervisor_event(
                     AgentEventType.SEO_COLLABORATION_MEMORY_CONFLICT_DETECTED,
                     payload=conflict.to_dict(),
+                    correlation_id=corr_id
+                )
+
+            # Adaptive Replanning on Conflict
+            if new_conflicts and task_plan.replans_count < task_plan.budget_config.max_replans:
+                c = new_conflicts[0]
+                task_plan = self.planner.replan(
+                    plan=task_plan,
+                    reason=ReplanReason.CONFLICT_DETECTED,
+                    trigger_info={"topic": c.topic, "responsible_agents": c.responsible_agents},
+                    shared_memory=shared_memory
+                )
+                context.task_plan = task_plan
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_TASK_REPLANNED,
+                    payload={"reason": ReplanReason.CONFLICT_DETECTED.value, "summary": task_plan.summarize()},
                     correlation_id=corr_id
                 )
 
@@ -472,8 +626,7 @@ class SEOSupervisorAgent:
                             correlation_id=corr_id
                         )
 
-            # 2g. Bounded Iterative Collaboration Check
-            revisit_triggered = False
+            # 2k. Bounded Iterative Collaboration Check (Phase 5.2 backward compatibility)
             for c in shared_memory._conflicts:
                 if c.resolution_status == ConflictStatus.OPEN.value:
                     for prev_agent_name in c.responsible_agents:
@@ -495,13 +648,10 @@ class SEOSupervisorAgent:
                                     },
                                     correlation_id=corr_id
                                 )
-                                pipeline_queue.insert(0, prev_agent_name)
-                                revisit_triggered = True
                                 break
-                    if revisit_triggered:
-                        break
+                    break
 
-        # Finalize Collaboration & Memory State
+        # Finalize Collaboration, Memory & Task Plan State
         if shared_memory.budget_exceeded_events > 0:
             self._emit_supervisor_event(
                 AgentEventType.SEO_COLLABORATION_CONTEXT_BOUNDED,
@@ -509,9 +659,17 @@ class SEOSupervisorAgent:
                 correlation_id=corr_id
             )
 
+        if task_plan.replans_count >= task_plan.budget_config.max_replans:
+            self._emit_supervisor_event(
+                AgentEventType.SEO_TASK_PLAN_LIMIT_REACHED,
+                payload={"plan_id": task_plan.plan_id, "summary": task_plan.summarize()},
+                correlation_id=corr_id
+            )
+
         collaboration_state.revisit_history = [r.to_dict() for r in shared_memory._revisits]
         collaboration_state.open_conflicts_count = len([c for c in shared_memory._conflicts if c.resolution_status == ConflictStatus.OPEN.value])
         collaboration_state.memory_summary = shared_memory.summarize()
+        collaboration_state.task_plan_summary = task_plan.summarize()
 
         if context.status != "failed":
             context.status = "completed"
@@ -521,9 +679,14 @@ class SEOSupervisorAgent:
                 payload={
                     "completed_agents": collaboration_state.completed_agents,
                     "total_handoffs": len(context.handoff_history),
-                    "memory_summary": collaboration_state.memory_summary
+                    "memory_summary": collaboration_state.memory_summary,
+                    "task_plan_summary": collaboration_state.task_plan_summary,
                 },
                 correlation_id=corr_id
             )
 
         return context
+
+
+# Alias for backward compatibility and concise import
+SEOSupervisor = SEOSupervisorAgent

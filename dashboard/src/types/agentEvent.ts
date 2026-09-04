@@ -45,7 +45,34 @@ export type AgentEventType =
   // SEO Action Real-World Verification lifecycle
   | 'seo.action.verification.started'
   | 'seo.action.verification.completed'
-  | 'seo.action.verification.failed';
+  | 'seo.action.verification.failed'
+  // Multi-Agent Collaboration & Structured Handoffs lifecycle (Phase 5.1)
+  | 'seo.agent.handoff.started'
+  | 'seo.agent.handoff.completed'
+  | 'seo.agent.handoff.rejected'
+  | 'seo.agent.collaboration.started'
+  | 'seo.agent.collaboration.completed'
+  | 'seo.agent.collaboration.failed'
+  // Shared Working Memory & Adaptive Collaboration lifecycle (Phase 5.2)
+  | 'seo.collaboration.memory.initialized'
+  | 'seo.collaboration.memory.updated'
+  | 'seo.collaboration.memory.projected'
+  | 'seo.collaboration.memory.conflict.detected'
+  | 'seo.collaboration.memory.conflict.resolved'
+  | 'seo.collaboration.agent.revisit'
+  | 'seo.collaboration.context.bounded'
+  // Dynamic Task Decomposition & Collaborative Planning lifecycle (Phase 5.3)
+  | 'seo.agent.task.plan.created'
+  | 'seo.agent.task.created'
+  | 'seo.agent.task.ready'
+  | 'seo.agent.task.started'
+  | 'seo.agent.task.completed'
+  | 'seo.agent.task.failed'
+  | 'seo.agent.task.blocked'
+  | 'seo.agent.task.replanned'
+  | 'seo.agent.task.cancelled'
+  | 'seo.agent.task.dependency.resolved'
+  | 'seo.agent.task.plan.limit_reached';
 
 export interface AgentEvent {
   event_id: string;

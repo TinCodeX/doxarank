@@ -1908,3 +1908,84 @@ class SEOCollaborationConflictsView(APIView):
             "open_count": len([c for c in conflicts if c.get("resolution_status") == "open"]),
             "resolved_count": len([c for c in conflicts if c.get("resolution_status") == "resolved"]),
         }, status=status.HTTP_200_OK)
+
+
+def _resolve_task_plan_for_run(request, run_id: str):
+    """Helper to resolve TaskPlan for an authenticated user's run or correlation ID."""
+    from apps.seo.models import AgentRun, Project
+    from apps.seo.services.agents.task_planner import TaskPlanRegistry, TaskPlan
+
+    registry = TaskPlanRegistry.get_instance()
+
+    # 1. Try numeric AgentRun.id
+    if str(run_id).isdigit():
+        try:
+            run = AgentRun.objects.get(id=int(run_id), project__owner=request.user)
+            corr_id = None
+            if isinstance(run.context_snapshot, dict):
+                corr_id = run.context_snapshot.get("correlation_id")
+            plan = (
+                registry.get_by_run_id(run.id)
+                or (registry.get_by_correlation_id(str(corr_id)) if corr_id else None)
+                or registry.get_by_correlation_id(str(run.id))
+            )
+            if plan:
+                return plan, None
+            # Check context snapshot
+            snap = run.context_snapshot.get("task_plan") if isinstance(run.context_snapshot, dict) else None
+            if snap and isinstance(snap, dict):
+                return TaskPlan.from_dict(snap), None
+        except AgentRun.DoesNotExist:
+            pass
+
+    # 2. Try correlation_id from registry
+    plan = registry.get_by_correlation_id(str(run_id))
+    if plan:
+        # Verify tenant ownership
+        if Project.objects.filter(id=plan.project_id, owner=request.user).exists():
+            return plan, None
+        return None, Response({"detail": "Permission denied for this collaboration plan."}, status=status.HTTP_403_FORBIDDEN)
+
+    return None, Response({"detail": "Collaboration task plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class SEOCollaborationTasksView(APIView):
+    """
+    Retrieve complete structured TaskPlan for a multi-agent orchestration run.
+    GET /api/seo/ai/orchestrate/<run_id>/tasks/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        plan, err_response = _resolve_task_plan_for_run(request, run_id)
+        if err_response:
+            return err_response
+        return Response(plan.to_dict(), status=status.HTTP_200_OK)
+
+
+class SEOCollaborationTasksSummaryView(APIView):
+    """
+    Retrieve compact high-level summary of TaskPlan for a run.
+    GET /api/seo/ai/orchestrate/<run_id>/tasks/summary/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        plan, err_response = _resolve_task_plan_for_run(request, run_id)
+        if err_response:
+            return err_response
+        return Response(plan.summarize(), status=status.HTTP_200_OK)
+
+
+class SEOCollaborationTasksGraphView(APIView):
+    """
+    Retrieve visualization DAG node/edge format of TaskPlan for a run.
+    GET /api/seo/ai/orchestrate/<run_id>/tasks/graph/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        plan, err_response = _resolve_task_plan_for_run(request, run_id)
+        if err_response:
+            return err_response
+        return Response(plan.to_graph(), status=status.HTTP_200_OK)

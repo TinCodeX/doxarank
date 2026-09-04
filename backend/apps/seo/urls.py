@@ -11,7 +11,9 @@ from .views import (
     SEOAdaptiveStrategyView, SEOAgentOrchestrationView,
     MCPServersView, MCPToolsView, AgentEvaluationView,
     SEOCollaborationMemoryView, SEOCollaborationMemorySummaryView,
-    SEOCollaborationConflictsView
+    SEOCollaborationConflictsView,
+    SEOCollaborationTasksView, SEOCollaborationTasksSummaryView,
+    SEOCollaborationTasksGraphView
 )
 
 app_name = 'seo'
@@ -41,6 +43,9 @@ urlpatterns = [
     path('ai/orchestrate/<str:run_id>/memory/summary/', SEOCollaborationMemorySummaryView.as_view(), name='seo-orchestrate-memory-summary'),
     path('ai/orchestrate/<str:run_id>/memory/', SEOCollaborationMemoryView.as_view(), name='seo-orchestrate-memory'),
     path('ai/orchestrate/<str:run_id>/conflicts/', SEOCollaborationConflictsView.as_view(), name='seo-orchestrate-conflicts'),
+    path('ai/orchestrate/<str:run_id>/tasks/summary/', SEOCollaborationTasksSummaryView.as_view(), name='seo-orchestrate-tasks-summary'),
+    path('ai/orchestrate/<str:run_id>/tasks/graph/', SEOCollaborationTasksGraphView.as_view(), name='seo-orchestrate-tasks-graph'),
+    path('ai/orchestrate/<str:run_id>/tasks/', SEOCollaborationTasksView.as_view(), name='seo-orchestrate-tasks'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),
     path('integrations/google/authorization-url/', GoogleOAuthAuthorizationUrlView.as_view(), name='google-oauth-authorization-url'),
     path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),

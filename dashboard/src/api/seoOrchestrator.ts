@@ -68,6 +68,7 @@ export interface CollaborationStateInfo {
   revisit_history?: Array<Record<string, any>>;
   open_conflicts_count?: number;
   memory_summary?: SharedMemorySummary;
+  task_plan_summary?: TaskPlanSummary;
 }
 
 export interface OrchestrationResponse {
@@ -102,6 +103,11 @@ export interface OrchestrationResponse {
     uncertainties?: Array<Record<string, any>>;
     decisions?: CollaborationDecisionItem[];
     conflicts?: MemoryConflictItem[];
+    [key: string]: any;
+  };
+  task_plan?: {
+    summary?: TaskPlanSummary;
+    tasks?: Record<string, AgentTaskItem>;
     [key: string]: any;
   };
   current_agent?: string | null;
@@ -205,4 +211,86 @@ export async function getCollaborationConflicts(runId: string | number): Promise
   resolved_count: number;
 }> {
   return apiFetch(`/api/seo/ai/orchestrate/${runId}/conflicts/`);
+}
+
+export interface AgentTaskItem {
+  task_id: string;
+  objective: string;
+  description: string;
+  responsible_agent: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  dependencies: string[];
+  required_evidence: string[];
+  status: 'pending' | 'ready' | 'running' | 'completed' | 'blocked' | 'failed' | 'skipped' | 'cancelled';
+  created_by: string;
+  correlation_id: string;
+  reason?: string | null;
+  result_summary?: string | null;
+  error?: string | null;
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+  completed_at?: string | null;
+}
+
+export interface TaskPlanSummary {
+  project_id: number;
+  correlation_id: string;
+  goal: string;
+  total_tasks: number;
+  pending_tasks: number;
+  ready_tasks: number;
+  running_tasks: number;
+  completed_tasks: number;
+  blocked_tasks: number;
+  failed_tasks: number;
+  skipped_tasks: number;
+  completion_rate: number;
+  planning_rounds: number;
+  replan_count: number;
+  parallel_groups_count: number;
+}
+
+export interface TaskGraphNode {
+  id: string;
+  label: string;
+  agent: string;
+  status: string;
+  priority: string;
+  parallel_tier: number;
+}
+
+export interface TaskGraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface TaskGraphResponse {
+  correlation_id: string;
+  project_id: number;
+  goal: string;
+  nodes: TaskGraphNode[];
+  edges: TaskGraphEdge[];
+  summary: TaskPlanSummary;
+}
+
+/**
+ * Retrieve complete structured task plan (DAG of AgentTasks) for a run.
+ */
+export async function getCollaborationTasks(runId: string | number): Promise<Record<string, any>> {
+  return apiFetch<Record<string, any>>(`/api/seo/ai/orchestrate/${runId}/tasks/`);
+}
+
+/**
+ * Retrieve high-level summary of task plan for a run.
+ */
+export async function getCollaborationTasksSummary(runId: string | number): Promise<TaskPlanSummary> {
+  return apiFetch<TaskPlanSummary>(`/api/seo/ai/orchestrate/${runId}/tasks/summary/`);
+}
+
+/**
+ * Retrieve visualization DAG node/edge format of task plan for a run.
+ */
+export async function getCollaborationTasksGraph(runId: string | number): Promise<TaskGraphResponse> {
+  return apiFetch<TaskGraphResponse>(`/api/seo/ai/orchestrate/${runId}/tasks/graph/`);
 }
