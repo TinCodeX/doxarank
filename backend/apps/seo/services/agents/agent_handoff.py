@@ -185,6 +185,13 @@ class AgentHandoffContext:
     approval_state: str = "none"  # "none" | "pending_human_approval" | "approved" | "rejected"
     timestamp: str = field(default_factory=lambda: timezone.now().isoformat())
 
+    # Phase 5.2 Adaptive Working Memory References
+    memory_snapshot_id: Optional[str] = None
+    relevant_memory_ids: List[str] = field(default_factory=list)
+    active_uncertainties: List[str] = field(default_factory=list)
+    open_conflicts: List[Dict[str, Any]] = field(default_factory=list)
+    pending_questions: List[str] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "project_id": self.project_id,
@@ -207,6 +214,11 @@ class AgentHandoffContext:
             "risk_information": self.risk_information,
             "approval_state": self.approval_state,
             "timestamp": self.timestamp,
+            "memory_snapshot_id": self.memory_snapshot_id,
+            "relevant_memory_ids": self.relevant_memory_ids,
+            "active_uncertainties": self.active_uncertainties,
+            "open_conflicts": self.open_conflicts,
+            "pending_questions": self.pending_questions,
         }
 
     @classmethod
@@ -232,6 +244,11 @@ class AgentHandoffContext:
             risk_information=data.get("risk_information", {}),
             approval_state=data.get("approval_state", "none"),
             timestamp=data.get("timestamp", timezone.now().isoformat()),
+            memory_snapshot_id=data.get("memory_snapshot_id"),
+            relevant_memory_ids=data.get("relevant_memory_ids", []),
+            active_uncertainties=data.get("active_uncertainties", []),
+            open_conflicts=data.get("open_conflicts", []),
+            pending_questions=data.get("pending_questions", []),
         )
 
 
@@ -255,6 +272,9 @@ class CollaborationState:
     unresolved_questions: List[str] = field(default_factory=list)
     final_result: Optional[Dict[str, Any]] = None
     errors: List[str] = field(default_factory=list)
+    revisit_history: List[Dict[str, Any]] = field(default_factory=list)
+    open_conflicts_count: int = 0
+    memory_summary: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -272,6 +292,9 @@ class CollaborationState:
             "unresolved_questions": self.unresolved_questions,
             "final_result": self.final_result,
             "errors": self.errors,
+            "revisit_history": self.revisit_history,
+            "open_conflicts_count": self.open_conflicts_count,
+            "memory_summary": self.memory_summary,
         }
 
 

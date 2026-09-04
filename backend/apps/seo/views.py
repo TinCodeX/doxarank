@@ -1819,3 +1819,92 @@ class AgentEvaluationView(APIView):
 
         evaluation = SEOAgentEvaluationService.evaluate_run(run)
         return Response(evaluation, status=status.HTTP_200_OK)
+
+
+def _resolve_memory_for_run(request, run_id: str):
+    """Helper to resolve SharedWorkingMemory for an authenticated user's run or correlation ID."""
+    from apps.seo.models import AgentRun, Project
+    from apps.seo.services.agents.shared_memory import SharedMemoryRegistry, SharedWorkingMemory
+
+    registry = SharedMemoryRegistry.get_instance()
+
+    # 1. Try numeric AgentRun.id
+    if str(run_id).isdigit():
+        try:
+            run = AgentRun.objects.get(id=int(run_id), project__owner=request.user)
+            # Check registry first
+            corr_id = None
+            if isinstance(run.context_snapshot, dict):
+                corr_id = run.context_snapshot.get("correlation_id")
+            mem = (
+                registry.get_by_run_id(run.id)
+                or (registry.get_by_correlation_id(str(corr_id)) if corr_id else None)
+                or registry.get_by_correlation_id(str(run.id))
+            )
+            if mem:
+                return mem, None
+            # Check context snapshot
+            snap = run.context_snapshot.get("shared_memory") if isinstance(run.context_snapshot, dict) else None
+            if snap and isinstance(snap, dict):
+                return SharedWorkingMemory.from_dict(snap), None
+        except AgentRun.DoesNotExist:
+            pass
+
+    # 2. Try correlation_id from registry
+    mem = registry.get_by_correlation_id(str(run_id))
+    if mem:
+        # Verify tenant ownership
+        if Project.objects.filter(id=mem.project_id, owner=request.user).exists():
+            return mem, None
+        return None, Response({"detail": "Permission denied for this collaboration session."}, status=status.HTTP_403_FORBIDDEN)
+
+    return None, Response({"detail": "Collaboration memory session not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class SEOCollaborationMemoryView(APIView):
+    """
+    Retrieve complete structured SharedWorkingMemory for a multi-agent orchestration run.
+    GET /api/seo/ai/orchestrate/<run_id>/memory/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        mem, err_response = _resolve_memory_for_run(request, run_id)
+        if err_response:
+            return err_response
+        return Response(mem.to_dict(), status=status.HTTP_200_OK)
+
+
+class SEOCollaborationMemorySummaryView(APIView):
+    """
+    Retrieve compact high-level summary of SharedWorkingMemory for a run.
+    GET /api/seo/ai/orchestrate/<run_id>/memory/summary/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        mem, err_response = _resolve_memory_for_run(request, run_id)
+        if err_response:
+            return err_response
+        return Response(mem.summarize(), status=status.HTTP_200_OK)
+
+
+class SEOCollaborationConflictsView(APIView):
+    """
+    Retrieve multi-agent claim conflicts and their resolution statuses for a run.
+    GET /api/seo/ai/orchestrate/<run_id>/conflicts/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        mem, err_response = _resolve_memory_for_run(request, run_id)
+        if err_response:
+            return err_response
+        conflicts = [c.to_dict() for c in mem._conflicts]
+        return Response({
+            "correlation_id": mem.correlation_id,
+            "project_id": mem.project_id,
+            "conflicts": conflicts,
+            "open_count": len([c for c in conflicts if c.get("resolution_status") == "open"]),
+            "resolved_count": len([c for c in conflicts if c.get("resolution_status") == "resolved"]),
+        }, status=status.HTTP_200_OK)

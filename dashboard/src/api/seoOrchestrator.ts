@@ -65,6 +65,9 @@ export interface CollaborationStateInfo {
   current_evidence: Record<string, any>;
   unresolved_questions: string[];
   errors: string[];
+  revisit_history?: Array<Record<string, any>>;
+  open_conflicts_count?: number;
+  memory_summary?: SharedMemorySummary;
 }
 
 export interface OrchestrationResponse {
@@ -92,11 +95,61 @@ export interface OrchestrationResponse {
   assumptions?: string[];
   handoff_history?: AgentHandoffItem[];
   collaboration_state?: CollaborationStateInfo;
+  shared_memory?: {
+    summary?: SharedMemorySummary;
+    facts?: Array<Record<string, any>>;
+    inferences?: Array<Record<string, any>>;
+    uncertainties?: Array<Record<string, any>>;
+    decisions?: CollaborationDecisionItem[];
+    conflicts?: MemoryConflictItem[];
+    [key: string]: any;
+  };
   current_agent?: string | null;
   status: string;
   errors: string[];
 }
 
+export interface SharedMemorySummary {
+  project_id: number;
+  correlation_id: string;
+  task_goal: string;
+  facts_count: number;
+  inferences_count: number;
+  uncertainties_count: number;
+  assumptions_count: number;
+  recommendations_count: number;
+  decisions_count: number;
+  open_conflicts_count: number;
+  resolved_conflicts_count: number;
+  pending_work_count: number;
+  completed_work_count: number;
+  revisits_count: number;
+  entries_created: number;
+  entries_deduplicated: number;
+  context_efficiency: number;
+}
+
+export interface MemoryConflictItem {
+  conflict_id: string;
+  topic: string;
+  claim_a: { agent: string; content: string; confidence?: number };
+  claim_b: { agent: string; content: string; confidence?: number };
+  responsible_agents: string[];
+  resolution_status: 'open' | 'resolved' | 'escalated';
+  resolution_notes?: string | null;
+  resolved_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollaborationDecisionItem {
+  decision_id: string;
+  title: string;
+  reason: string;
+  decision_owner: string;
+  status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+  timestamp: string;
+}
 
 /**
  * List all available specialized agents, their descriptions, and permitted tools.
@@ -125,4 +178,31 @@ export async function orchestrateTask(
       target_query: options?.target_query,
     }),
   });
+}
+
+/**
+ * Retrieve complete structured collaboration working memory for a run.
+ */
+export async function getCollaborationMemory(runId: string | number): Promise<Record<string, any>> {
+  return apiFetch<Record<string, any>>(`/api/seo/ai/orchestrate/${runId}/memory/`);
+}
+
+/**
+ * Retrieve high-level summary of collaboration working memory for a run.
+ */
+export async function getCollaborationMemorySummary(runId: string | number): Promise<SharedMemorySummary> {
+  return apiFetch<SharedMemorySummary>(`/api/seo/ai/orchestrate/${runId}/memory/summary/`);
+}
+
+/**
+ * Retrieve detected multi-agent conflicts and resolution records for a run.
+ */
+export async function getCollaborationConflicts(runId: string | number): Promise<{
+  correlation_id: string;
+  project_id: number;
+  conflicts: MemoryConflictItem[];
+  open_count: number;
+  resolved_count: number;
+}> {
+  return apiFetch(`/api/seo/ai/orchestrate/${runId}/conflicts/`);
 }

@@ -112,6 +112,15 @@ class AgentEventType(str, Enum):
     SEO_AGENT_COLLABORATION_COMPLETED = "seo.agent.collaboration.completed"
     SEO_AGENT_COLLABORATION_FAILED = "seo.agent.collaboration.failed"
 
+    # Shared Working Memory & Adaptive Collaboration lifecycle (Phase 5.2)
+    SEO_COLLABORATION_MEMORY_INITIALIZED = "seo.collaboration.memory.initialized"
+    SEO_COLLABORATION_MEMORY_UPDATED = "seo.collaboration.memory.updated"
+    SEO_COLLABORATION_MEMORY_PROJECTED = "seo.collaboration.memory.projected"
+    SEO_COLLABORATION_MEMORY_CONFLICT_DETECTED = "seo.collaboration.memory.conflict.detected"
+    SEO_COLLABORATION_MEMORY_CONFLICT_RESOLVED = "seo.collaboration.memory.conflict.resolved"
+    SEO_COLLABORATION_AGENT_REVISIT = "seo.collaboration.agent.revisit"
+    SEO_COLLABORATION_CONTEXT_BOUNDED = "seo.collaboration.context.bounded"
+
 
 
 

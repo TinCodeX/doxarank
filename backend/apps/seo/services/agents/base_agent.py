@@ -95,6 +95,9 @@ class SharedContext:
     handoff_history: List[Dict[str, Any]] = field(default_factory=list)
     collaboration_state: Optional[Any] = None
 
+    # Phase 5.2 Adaptive Multi-Agent Collaboration & Shared Working Memory
+    shared_memory: Optional[Any] = None
+
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
     current_agent: Optional[str] = None
@@ -137,6 +140,7 @@ class SharedContext:
             "assumptions": self.assumptions,
             "handoff_history": self.handoff_history,
             "collaboration_state": self.collaboration_state.to_dict() if hasattr(self.collaboration_state, "to_dict") else self.collaboration_state,
+            "shared_memory": self.shared_memory.to_dict() if hasattr(self.shared_memory, "to_dict") else self.shared_memory,
             "agent_results_history": self.agent_results_history,
             "current_agent": self.current_agent,
             "status": self.status,
@@ -327,6 +331,39 @@ class BaseSpecializedAgent(ABC):
             for asm in result.assumptions:
                 if asm not in shared_ctx.assumptions:
                     shared_ctx.assumptions.append(asm)
+
+            # Phase 5.2: Ingest into shared working memory if present
+            if getattr(shared_ctx, "shared_memory", None):
+                mem = shared_ctx.shared_memory
+                for fact in result.observed_facts:
+                    if isinstance(fact, dict):
+                        mem.add_evidence(
+                            fact=fact.get("fact", str(fact)),
+                            source_agent=self.name,
+                            source_tool=fact.get("source"),
+                            confidence=fact.get("confidence", 1.0),
+                            raw_data=fact.get("raw_data")
+                        )
+                for inf in result.inferences:
+                    if isinstance(inf, dict):
+                        mem.add_inference(
+                            hypothesis=inf.get("inference", str(inf)),
+                            source_agent=self.name,
+                            supporting_fact_ids=inf.get("based_on", []),
+                            confidence=inf.get("confidence", 0.8)
+                        )
+                for unc in result.uncertainties:
+                    mem.add_uncertainty(description=str(unc), source_agent=self.name)
+                for asm in result.assumptions:
+                    mem.add_assumption(assumption=str(asm), source_agent=self.name)
+                for rec in result.recommendations:
+                    rec_text = rec.get("action_type", str(rec)) if isinstance(rec, dict) else str(rec)
+                    mem.add_recommendation(recommendation=rec_text, source_agent=self.name)
+                mem.record_completed_work(
+                    agent=self.name,
+                    task_description=shared_ctx.task_goal,
+                    result_summary=f"Completed with {len(result.findings)} findings and {len(result.recommendations)} recommendations"
+                )
 
             shared_ctx.agent_results_history.append(result.to_dict())
 

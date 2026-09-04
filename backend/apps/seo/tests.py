@@ -12346,3 +12346,629 @@ class SEOAgentCollaborationTests(TestCase):
         for act in context.action_proposals:
             self.assertTrue(act["requires_human_approval"])
             self.assertEqual(act["status"], ActionStatus.PROPOSED)
+
+
+class SEOSharedWorkingMemoryTests(TestCase):
+    """
+    Milestone 5.2 Test Suite:
+    Adaptive Multi-Agent Collaboration & Shared Working Memory.
+    Verifies epistemic segregation, evidence provenance, fingerprint deduplication,
+    budget compaction, role-specific projection, multi-agent conflict detection
+    and resolution, bounded iterative revisits, safety invariants, evaluation metrics,
+    and REST API endpoints.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='mem_user_a@doxarank.com',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='mem_user_b@doxarank.com',
+            password='Password123!'
+        )
+
+        self.project_a = Project.objects.create(
+            name="Memory Project Alpha",
+            website_url="https://mem-alpha.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Memory Project Beta",
+            website_url="https://mem-beta.com",
+            owner=self.user_b
+        )
+
+        self.client = APIClient()
+        from apps.seo.services.agents.shared_memory import SharedMemoryRegistry
+        SharedMemoryRegistry.get_instance().clear()
+
+    def tearDown(self):
+        from apps.seo.services.agents.shared_memory import SharedMemoryRegistry
+        SharedMemoryRegistry.get_instance().clear()
+
+    def test_memory_initialization_and_epistemic_separation(self):
+        """1. SharedWorkingMemory maintains strict epistemic separation between facts, inferences, uncertainties, etc."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, MemoryCategory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Audit and optimize organic search visibility",
+            correlation_id="corr-test-epistemic-001"
+        )
+
+        # Ingest items across different epistemic categories
+        f = mem.add_evidence(
+            fact="HTTP 200 OK returned on /pricing",
+            source_agent="seo_researcher",
+            source_tool="check_url_status",
+            confidence=1.0
+        )
+        inf = mem.add_inference(
+            hypothesis="Pricing page ranking drop is caused by title tag truncation",
+            source_agent="seo_investigator",
+            supporting_fact_ids=[f.memory_id],
+            confidence=0.85
+        )
+        unc = mem.add_uncertainty(
+            description="Competitor schema markup changes could not be crawled",
+            source_agent="seo_investigator"
+        )
+        asm = mem.add_assumption(
+            assumption="Target domain crawl budget is sufficient for daily recrawls",
+            source_agent="seo_supervisor"
+        )
+        rec = mem.add_recommendation(
+            recommendation="Rewrite title tag to under 60 characters with primary keyword",
+            source_agent="seo_strategist"
+        )
+        dec = mem.record_decision(
+            title="Adopt Title Tag Optimization Strategy",
+            reason="Supported by empirical observation and low implementation risk",
+            evidence_ids=[f.memory_id],
+            decision_owner="seo_supervisor"
+        )
+        mem.record_completed_work(
+            agent="seo_researcher",
+            task_description="Gather baseline metrics",
+            result_summary="Crawled 5 core URLs and extracted GSC query metrics"
+        )
+        mem.record_pending_work(
+            agent="seo_action_planner",
+            task_description="Generate staged action proposal",
+            priority="high"
+        )
+        mem.record_verification_result(
+            action_id="act-001",
+            target_url="https://mem-alpha.com/pricing",
+            verified=True,
+            details={"status_code": 200, "meta_title_present": True}
+        )
+
+        # Epistemic segregation validation
+        self.assertEqual(len(mem._facts), 1)
+        self.assertEqual(len(mem._inferences), 1)
+        self.assertEqual(len(mem._uncertainties), 1)
+        self.assertEqual(len(mem._assumptions), 1)
+        self.assertEqual(len(mem._recommendations), 1)
+        self.assertEqual(len(mem._decisions), 1)
+        self.assertEqual(len(mem._completed_work), 1)
+        self.assertEqual(len(mem._pending_work), 1)
+        self.assertEqual(len(mem._verification_results), 1)
+
+        # Category invariants
+        self.assertNotIn(f.memory_id, mem._inferences)
+        self.assertNotIn(inf.memory_id, mem._facts)
+        self.assertEqual(f.category, MemoryCategory.OBSERVED_FACT.value)
+        self.assertEqual(inf.category, MemoryCategory.INFERENCE.value)
+        self.assertEqual(unc.category, MemoryCategory.UNCERTAINTY.value)
+        self.assertEqual(rec.category, MemoryCategory.RECOMMENDATION.value)
+
+    def test_add_evidence_with_provenance_and_confidence(self):
+        """2. Empirical evidence entries retain source agent, tool, step index, confidence, and metadata."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Investigate Core Web Vitals",
+            correlation_id="corr-test-prov-002"
+        )
+
+        item = mem.add_evidence(
+            fact="Core Web Vitals Largest Contentful Paint (LCP) is 4.2s",
+            source_agent="seo_researcher",
+            source_tool="get_site_audit_summary",
+            confidence=0.92,
+            metadata={"device": "mobile", "threshold": "poor"},
+            step_index=1
+        )
+
+        self.assertEqual(item.content, "Core Web Vitals Largest Contentful Paint (LCP) is 4.2s")
+        self.assertEqual(item.source_agent, "seo_researcher")
+        self.assertEqual(item.source_tool, "get_site_audit_summary")
+        self.assertEqual(item.confidence, 0.92)
+        self.assertEqual(item.source_step, 1)
+        self.assertEqual(item.metadata["device"], "mobile")
+        self.assertEqual(item.metadata["threshold"], "poor")
+        self.assertTrue(item.memory_id.startswith("fact-"))
+        self.assertTrue(bool(item.created_at))
+
+    def test_add_inference_linked_to_facts(self):
+        """3. Inferences must link to supporting empirical evidence and preserve derivation rationale."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Diagnose ranking decline",
+            correlation_id="corr-test-inf-003"
+        )
+
+        fact = mem.add_evidence(
+            fact="Server response time TTFB increased from 200ms to 1250ms",
+            source_agent="seo_researcher",
+            source_tool="check_url_status",
+            confidence=0.98
+        )
+
+        inference = mem.add_inference(
+            hypothesis="Hosting infrastructure or database bottleneck is degrading crawl efficiency",
+            source_agent="seo_investigator",
+            supporting_fact_ids=[fact.memory_id],
+            confidence=0.82,
+            derivation_rationale="TTFB exceeds recommended 800ms threshold by 56%"
+        )
+
+        self.assertEqual(inference.evidence_ids, [fact.memory_id])
+        self.assertEqual(inference.source_agent, "seo_investigator")
+        self.assertEqual(inference.confidence, 0.82)
+        self.assertEqual(
+            inference.metadata["derivation_rationale"],
+            "TTFB exceeds recommended 800ms threshold by 56%"
+        )
+
+    def test_add_uncertainty_and_recommendation(self):
+        """4. Uncertainties capture gaps with suggested resolutions; recommendations track proposed actions."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Content gap analysis",
+            correlation_id="corr-test-unc-004"
+        )
+
+        unc = mem.add_uncertainty(
+            description="Competitor backlink velocity cannot be verified due to rate limiting",
+            source_agent="seo_researcher",
+            suggested_resolution="Retry backlink check during off-peak window"
+        )
+        self.assertEqual(unc.source_agent, "seo_researcher")
+        self.assertEqual(unc.metadata["suggested_resolution"], "Retry backlink check during off-peak window")
+
+        rec = mem.add_recommendation(
+            recommendation="Deploy redis caching layer on /pricing API responses",
+            source_agent="seo_strategist",
+            evidence_ids=["fact-123"]
+        )
+        self.assertEqual(rec.source_agent, "seo_strategist")
+        self.assertEqual(rec.evidence_ids, ["fact-123"])
+
+    def test_fingerprint_deduplication(self):
+        """5. Identical content is deduplicated deterministically while preserving multi-agent confirmation."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Deduplication test",
+            correlation_id="corr-test-dedup-005"
+        )
+
+        fact_text = "Canonical link element points to https://mem-alpha.com/en/"
+        item1 = mem.add_evidence(fact=fact_text, source_agent="seo_researcher")
+        item2 = mem.add_evidence(fact=fact_text, source_agent="seo_investigator")
+
+        # Same memory ID returned, no duplicate entry created
+        self.assertEqual(item1.memory_id, item2.memory_id)
+        self.assertEqual(len(mem._facts), 1)
+        self.assertEqual(mem.entries_created, 1)
+        self.assertEqual(mem.entries_deduplicated, 1)
+
+        # Multi-agent provenance recorded
+        self.assertIn("seo_investigator", item1.metadata.get("confirmed_by_agents", []))
+
+    def test_context_budget_enforcement_and_compaction(self):
+        """6. Context budget limits memory growth and prunes lower-confidence items."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, ContextBudgetConfig
+
+        budget = ContextBudgetConfig(max_facts=3, max_inferences=2, max_uncertainties=2)
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Budget enforcement test",
+            correlation_id="corr-test-budget-006",
+            budget_config=budget
+        )
+
+        # Add 5 facts with varying confidence levels
+        mem.add_evidence(fact="Low confidence fact 1", source_agent="agent_a", confidence=0.4)
+        mem.add_evidence(fact="Low confidence fact 2", source_agent="agent_a", confidence=0.5)
+        mem.add_evidence(fact="High confidence fact 3", source_agent="agent_b", confidence=0.95)
+        mem.add_evidence(fact="High confidence fact 4", source_agent="agent_b", confidence=0.98)
+        mem.add_evidence(fact="Highest confidence fact 5", source_agent="agent_c", confidence=0.99)
+
+        # Store should be bounded at max_facts = 3
+        self.assertEqual(len(mem._facts), 3)
+        self.assertGreaterEqual(mem.budget_exceeded_events, 2)
+
+        # Retained facts must be the higher-confidence ones
+        retained_confidences = [f.confidence for f in mem._facts.values()]
+        self.assertIn(0.95, retained_confidences)
+        self.assertIn(0.98, retained_confidences)
+        self.assertIn(0.99, retained_confidences)
+        self.assertNotIn(0.4, retained_confidences)
+
+    def test_role_specific_context_projection(self):
+        """7. SharedWorkingMemory projects role-specific context tailored to each specialized agent."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Full lifecycle optimization",
+            correlation_id="corr-test-proj-007"
+        )
+
+        mem.add_evidence(
+            fact="GSC click count dropped 35% on /features",
+            source_agent="seo_researcher",
+            source_tool="get_gsc_performance",
+            confidence=1.0
+        )
+        mem.add_evidence(
+            fact="Historical win rate 72% for schema markup additions",
+            source_agent="seo_strategist",
+            confidence=0.95
+        )
+        mem.add_inference(
+            hypothesis="Cannibalization between /features and /product-tour",
+            source_agent="seo_investigator",
+            confidence=0.88
+        )
+        mem.add_uncertainty(
+            description="SERP competitor rank changes unconfirmed",
+            source_agent="seo_researcher"
+        )
+        mem.add_recommendation(
+            recommendation="Add Product schema and canonicalize /product-tour to /features",
+            source_agent="seo_strategist"
+        )
+        mem.record_decision(
+            title="Consolidate duplicate feature URLs",
+            reason="Clear cannibalization signal with high historical win rate",
+            decision_owner="seo_supervisor"
+        )
+
+        # 1. Researcher projection
+        res_ctx = mem.get_context_for_agent("seo_researcher")
+        self.assertIn("known_uncertainties", res_ctx)
+        self.assertIn("relevant_evidence", res_ctx)
+        self.assertNotIn("approved_strategy", res_ctx)
+
+        # 2. Investigator projection
+        inv_ctx = mem.get_context_for_agent("seo_investigator")
+        self.assertIn("relevant_evidence", inv_ctx)
+        self.assertIn("hypotheses", inv_ctx)
+        self.assertIn("research_findings", inv_ctx)
+
+        # 3. Strategist projection
+        strat_ctx = mem.get_context_for_agent("seo_strategist")
+        self.assertIn("verified_evidence", strat_ctx)
+        self.assertIn("investigation_findings", strat_ctx)
+        self.assertIn("historical_outcome_signals", strat_ctx)
+        self.assertIn("constraints", strat_ctx)
+
+        # 4. Action Planner projection
+        plan_ctx = mem.get_context_for_agent("seo_action_planner")
+        self.assertIn("approved_strategy", plan_ctx)
+        self.assertIn("recommended_actions", plan_ctx)
+        self.assertIn("risk_information", plan_ctx)
+        self.assertTrue(plan_ctx["risk_information"]["requires_human_approval"])
+        self.assertIn("requires_human_approval = True", plan_ctx["constraints"])
+
+        # 5. Verifier projection
+        ver_ctx = mem.get_context_for_agent("seo_verifier")
+        self.assertIn("expected_outcomes", ver_ctx)
+        self.assertIn("before_state_evidence", ver_ctx)
+
+    def test_conflict_detection_and_storage(self):
+        """8. detect_conflicts identifies contradictory claims between agents and records them."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, ConflictStatus
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Audit conflicting signals",
+            correlation_id="corr-test-conf-008"
+        )
+
+        # Claim A from researcher: Healthy
+        mem.add_evidence(
+            fact="The site is technically healthy with 0 crawl errors reported",
+            source_agent="seo_researcher"
+        )
+        # Claim B from investigator: Technical defect
+        mem.add_inference(
+            hypothesis="Critical indexing problem detected: technical defect in robots.txt blocking pages",
+            source_agent="seo_investigator"
+        )
+
+        conflicts = mem.detect_conflicts()
+
+        self.assertEqual(len(conflicts), 1)
+        c = conflicts[0]
+        self.assertEqual(c.topic, "technical_health_discrepancy")
+        self.assertEqual(c.resolution_status, ConflictStatus.OPEN.value)
+        self.assertIn("seo_researcher", c.responsible_agents)
+        self.assertIn("seo_investigator", c.responsible_agents)
+        self.assertEqual(c.claim_a["agent"], "seo_researcher")
+        self.assertEqual(c.claim_b["agent"], "seo_investigator")
+
+    def test_conflict_resolution(self):
+        """9. resolve_conflict marks conflicts resolved with auditor identity and notes."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, ConflictStatus
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Conflict resolution test",
+            correlation_id="corr-test-res-009"
+        )
+
+        mem.add_evidence(
+            fact="The site is technically healthy with 0 crawl errors",
+            source_agent="seo_researcher"
+        )
+        mem.add_inference(
+            hypothesis="Critical indexing problem detected due to technical defect",
+            source_agent="seo_investigator"
+        )
+
+        conflicts = mem.detect_conflicts()
+        self.assertEqual(len(conflicts), 1)
+        conflict_id = conflicts[0].conflict_id
+
+        resolved = mem.resolve_conflict(
+            conflict_id=conflict_id,
+            resolved_by="seo_supervisor",
+            resolution_notes="Supervisor confirmed robots.txt disallow was removed 2 hours ago; production is now healthy."
+        )
+
+        self.assertTrue(resolved)
+        self.assertEqual(conflicts[0].resolution_status, ConflictStatus.RESOLVED.value)
+        self.assertEqual(conflicts[0].resolved_by, "seo_supervisor")
+        self.assertIn("robots.txt disallow was removed", conflicts[0].resolution_notes)
+
+        # Summary reports 0 open conflicts and 1 resolved
+        summary = mem.summarize()
+        self.assertEqual(summary["open_conflicts_count"], 0)
+        self.assertEqual(summary["resolved_conflicts_count"], 1)
+
+    def test_safety_secret_redaction_on_ingest(self):
+        """10. Sensitive secrets (API keys, tokens, passwords) are redacted automatically upon ingestion."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, redact_secrets
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Analyze data with sk-abcdef1234567890abcdef1234567890",
+            correlation_id="corr-test-sec-010"
+        )
+
+        # Task goal sanitized
+        self.assertNotIn("sk-abcdef", mem.task_goal)
+        self.assertIn("***REDACTED***", mem.task_goal)
+
+        # Evidence text sanitized
+        f = mem.add_evidence(
+            fact="External API returned 401 with Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 and password=SuperSecretPassword123!",
+            source_agent="seo_researcher",
+            metadata={"api_key": "sk-secret99999", "service": "google_search_console"}
+        )
+
+        self.assertNotIn("SuperSecretPassword123!", f.content)
+        self.assertNotIn("sk-secret99999", str(f.metadata))
+        self.assertIn("***REDACTED***", f.content)
+
+        # Decisions sanitized
+        dec = mem.record_decision(
+            title="Deploy secret token change",
+            reason="Updated secret=VeryConfidentialToken12345 for GSC integration",
+            decision_owner="seo_supervisor"
+        )
+        self.assertNotIn("VeryConfidentialToken12345", dec.reason)
+        self.assertIn("***REDACTED***", dec.reason)
+
+    def test_safety_cross_tenant_memory_isolation(self):
+        """11. Cross-tenant memory access is strictly forbidden via REST API endpoints."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, SharedMemoryRegistry
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Tenant A confidential optimization",
+            correlation_id="corr-tenant-a-iso-011"
+        )
+        mem.add_evidence(fact="Confidential revenue data for Project A", source_agent="seo_researcher")
+        SharedMemoryRegistry.get_instance().register(mem)
+
+        # 1. Unauthenticated request rejected
+        res_unauth = self.client.get(f'/api/seo/ai/orchestrate/{mem.correlation_id}/memory/')
+        self.assertEqual(res_unauth.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 2. User B (unauthorized tenant) request rejected with 403 Forbidden
+        self.client.force_authenticate(user=self.user_b)
+        res_user_b = self.client.get(f'/api/seo/ai/orchestrate/{mem.correlation_id}/memory/')
+        self.assertEqual(res_user_b.status_code, status.HTTP_403_FORBIDDEN)
+
+        res_b_summary = self.client.get(f'/api/seo/ai/orchestrate/{mem.correlation_id}/memory/summary/')
+        self.assertEqual(res_b_summary.status_code, status.HTTP_403_FORBIDDEN)
+
+        res_b_conflicts = self.client.get(f'/api/seo/ai/orchestrate/{mem.correlation_id}/conflicts/')
+        self.assertEqual(res_b_conflicts.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 3. User A (project owner) request allowed with 200 OK
+        self.client.force_authenticate(user=self.user_a)
+        res_user_a = self.client.get(f'/api/seo/ai/orchestrate/{mem.correlation_id}/memory/')
+        self.assertEqual(res_user_a.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_user_a.data["correlation_id"], mem.correlation_id)
+        self.assertEqual(len(res_user_a.data["facts"]), 1)
+
+    def test_safety_decision_approval_escalation_rejected(self):
+        """12. Non-supervisor agents cannot manufacture auto-approved decisions."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, DecisionStatus
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Autonomous action safety test",
+            correlation_id="corr-test-safe-012"
+        )
+
+        # Agent attempts to record an approved decision
+        decision = mem.record_decision(
+            title="Execute Direct DB Modification",
+            reason="Autonomous fix proposed by action agent",
+            decision_owner="seo_action_planner",
+            status="approved"
+        )
+
+        # Invariant enforced: Status forcibly defaulted to PROPOSED
+        self.assertEqual(decision.status, DecisionStatus.PROPOSED.value)
+
+    def test_supervisor_collaborative_revisit_on_conflict(self):
+        """13. SEOSupervisorAgent orchestrates bounded iterative revisits when conflicts arise."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.shared_memory import ConflictStatus
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = supervisor.orchestrate(task="Comprehensive multi-agent SEO optimization")
+
+        self.assertEqual(context.status, "completed")
+        self.assertIsNotNone(context.shared_memory)
+
+        # Shared working memory was initialized and registered
+        mem = context.shared_memory
+        self.assertEqual(mem.project_id, self.project_a.id)
+        self.assertGreaterEqual(mem.entries_created, 4)
+
+        # Invariant: Revisit bounds are respected (<= 2 per agent, <= 4 total)
+        self.assertLessEqual(len(mem._revisits), 4)
+        for r in mem._revisits:
+            self.assertLessEqual(r.revisit_count, 2)
+
+        # Collaboration state tracks memory summary
+        collab = context.collaboration_state
+        self.assertIsNotNone(collab.memory_summary)
+        self.assertEqual(collab.memory_summary["project_id"], self.project_a.id)
+
+    def test_evaluation_collaboration_memory_metrics(self):
+        """14. SEOAgentEvaluationService computes Phase 5.2 collaboration memory metrics."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        context = supervisor.orchestrate(task="Investigate drop and prioritize strategy")
+
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(context)
+
+        self.assertIn("collaboration_metrics", eval_res)
+        collab = eval_res["collaboration_metrics"]
+
+        # Phase 5.2 memory metrics assertions
+        self.assertIn("memory_entries_created", collab)
+        self.assertIn("memory_entries_deduplicated", collab)
+        self.assertIn("conflicts_detected", collab)
+        self.assertIn("conflicts_resolved", collab)
+        self.assertIn("agent_revisits", collab)
+        self.assertIn("context_efficiency", collab)
+        self.assertIn("collaboration_efficiency", collab)
+
+        self.assertGreaterEqual(collab["memory_entries_created"], 1)
+        self.assertGreaterEqual(collab["evidence_provenance_score"], 0.8)
+
+    def test_collaboration_memory_api_endpoints(self):
+        """15. REST endpoints return structured memory, summary, and conflicts for authenticated run owners."""
+        from apps.seo.models import AgentRun, AgentRunStatus
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, SharedMemoryRegistry
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Endpoint verification run",
+            correlation_id="corr-test-endpoints-015"
+        )
+        mem.add_evidence(fact="Baseline page speed score: 85/100", source_agent="seo_researcher")
+        mem.add_inference(hypothesis="Speed score allows competitive mobile ranking", source_agent="seo_investigator")
+        mem.record_decision(title="Proceed with mobile optimization", reason="Meets baseline threshold")
+
+        run = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Test run for collaboration memory endpoints",
+            status=AgentRunStatus.COMPLETED,
+            context_snapshot={"shared_memory": mem.to_dict(), "correlation_id": mem.correlation_id}
+        )
+        mem.run_id = run.id
+        SharedMemoryRegistry.get_instance().register(mem)
+
+        self.client.force_authenticate(user=self.user_a)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/memory/
+        res_mem = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/memory/')
+        self.assertEqual(res_mem.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_mem.data["project_id"], self.project_a.id)
+        self.assertIn("facts", res_mem.data)
+        self.assertIn("inferences", res_mem.data)
+        self.assertIn("decisions", res_mem.data)
+        self.assertEqual(len(res_mem.data["facts"]), 1)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/memory/summary/
+        res_sum = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/memory/summary/')
+        self.assertEqual(res_sum.status_code, status.HTTP_200_OK)
+        self.assertIn("facts_count", res_sum.data)
+        self.assertIn("inferences_count", res_sum.data)
+        self.assertIn("context_efficiency", res_sum.data)
+        self.assertEqual(res_sum.data["facts_count"], 1)
+
+        # Test GET /api/seo/ai/orchestrate/<run_id>/conflicts/
+        res_conf = self.client.get(f'/api/seo/ai/orchestrate/{run.id}/conflicts/')
+        self.assertEqual(res_conf.status_code, status.HTTP_200_OK)
+        self.assertIn("conflicts", res_conf.data)
+        self.assertIn("open_count", res_conf.data)
+        self.assertEqual(res_conf.data["open_count"], 0)
+
+    def test_memory_serialization_and_deserialization(self):
+        """16. SharedWorkingMemory roundtrips accurately through to_dict() and from_dict()."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        original = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Serialization roundtrip test",
+            correlation_id="corr-roundtrip-016",
+            run_id=42
+        )
+
+        f = original.add_evidence(fact="Discovered 3 unlinked brand mentions", source_agent="seo_researcher")
+        original.add_inference(hypothesis="Mention reclamation will yield easy backlinks", source_agent="seo_investigator", supporting_fact_ids=[f.memory_id])
+        original.add_uncertainty(description="Author contact info unavailable for 1 mention", source_agent="seo_investigator")
+        original.add_assumption(assumption="Outreach response rate estimated at 15%", source_agent="seo_strategist")
+        original.add_recommendation(recommendation="Send outreach emails to mention authors", source_agent="seo_strategist")
+        original.record_decision(title="Launch Mention Outreach Campaign", reason="High ROI potential")
+        original.record_revisit(agent="seo_researcher", reason="missing_evidence", step_index=2)
+
+        data = original.to_dict()
+        restored = SharedWorkingMemory.from_dict(data)
+
+        self.assertEqual(restored.project_id, original.project_id)
+        self.assertEqual(restored.run_id, original.run_id)
+        self.assertEqual(restored.correlation_id, original.correlation_id)
+        self.assertEqual(len(restored._facts), len(original._facts))
+        self.assertEqual(len(restored._inferences), len(original._inferences))
+        self.assertEqual(len(restored._uncertainties), len(original._uncertainties))
+        self.assertEqual(len(restored._assumptions), len(original._assumptions))
+        self.assertEqual(len(restored._recommendations), len(original._recommendations))
+        self.assertEqual(len(restored._decisions), len(original._decisions))
+        self.assertEqual(len(restored._revisits), len(original._revisits))
+        self.assertEqual(len(restored._fingerprints), len(original._fingerprints))

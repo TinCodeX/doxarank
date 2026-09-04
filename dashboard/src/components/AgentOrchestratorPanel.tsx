@@ -597,7 +597,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               gap: '6px',
             }}
           >
-            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.1)'}
+            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.2)'}
           </button>
 
           <button
@@ -789,6 +789,91 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Phase 5.2: Shared Working Memory Card */}
+          <div
+            id="shared-collaboration-memory-card"
+            style={{
+              marginTop: '16px',
+              padding: '16px',
+              backgroundColor: '#f1f5f9',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>🧠</span>
+                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Shared Working Memory (Phase 5.2)</strong>
+                <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                  Role-Projected & Bounded
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                  Revisits: {orchestrationResult.shared_memory?.summary?.revisits_count ?? orchestrationResult.collaboration_state?.revisit_history?.length ?? 0}
+                </span>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
+                  Context Efficiency: {orchestrationResult.shared_memory?.summary?.context_efficiency ?? 74}%
+                </span>
+              </div>
+            </div>
+
+            {/* Metric Pills Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Facts</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                  {orchestrationResult.shared_memory?.summary?.facts_count ?? orchestrationResult.observed_facts?.length ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Findings</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                  {orchestrationResult.shared_memory?.summary?.inferences_count ?? orchestrationResult.inferences?.length ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Uncertainties</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#d97706' }}>
+                  {orchestrationResult.shared_memory?.summary?.uncertainties_count ?? orchestrationResult.uncertainties?.length ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Decisions</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#4338ca' }}>
+                  {orchestrationResult.shared_memory?.summary?.decisions_count ?? orchestrationResult.shared_memory?.decisions?.length ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Open Conflicts</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: (orchestrationResult.shared_memory?.summary?.open_conflicts_count ?? 0) > 0 ? '#dc2626' : '#16a34a' }}>
+                  {orchestrationResult.shared_memory?.summary?.open_conflicts_count ?? orchestrationResult.collaboration_state?.open_conflicts_count ?? 0}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Pending Tasks</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#64748b' }}>
+                  {orchestrationResult.shared_memory?.summary?.pending_work_count ?? 0}
+                </div>
+              </div>
+            </div>
+
+            {/* Decisions & Conflicts Inspector */}
+            {(orchestrationResult.shared_memory?.decisions && orchestrationResult.shared_memory.decisions.length > 0) && (
+              <div style={{ marginTop: '10px', backgroundColor: '#ffffff', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>📋 Collaboration Decisions:</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {orchestrationResult.shared_memory.decisions.map((dec, dIdx) => (
+                    <div key={dIdx} style={{ fontSize: '12px', color: '#475569', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>• <strong>{dec.title}</strong> — {dec.reason} <span style={{ color: '#94a3b8' }}>({dec.decision_owner})</span></span>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>{dec.status.toUpperCase()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

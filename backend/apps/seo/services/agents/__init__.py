@@ -13,6 +13,19 @@ from .agent_handoff import (
     UncertaintyItem,
     KNOWN_AGENTS,
 )
+from .shared_memory import (
+    SharedWorkingMemory,
+    MemoryItem,
+    MemoryCategory,
+    DecisionStatus,
+    CollaborationDecision,
+    ConflictStatus,
+    MemoryConflict,
+    AgentRevisitReason,
+    RevisitRecord,
+    ContextBudgetConfig,
+    SharedMemoryRegistry,
+)
 from .seo_research_agent import SEOResearchAgent
 from .seo_investigation_agent import SEOInvestigationAgent
 from .seo_strategy_agent import SEOStrategyAgent
@@ -32,6 +45,17 @@ __all__ = [
     "InferenceItem",
     "UncertaintyItem",
     "KNOWN_AGENTS",
+    "SharedWorkingMemory",
+    "MemoryItem",
+    "MemoryCategory",
+    "DecisionStatus",
+    "CollaborationDecision",
+    "ConflictStatus",
+    "MemoryConflict",
+    "AgentRevisitReason",
+    "RevisitRecord",
+    "ContextBudgetConfig",
+    "SharedMemoryRegistry",
     "SEOResearchAgent",
     "SEOInvestigationAgent",
     "SEOStrategyAgent",

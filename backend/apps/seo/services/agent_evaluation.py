@@ -157,6 +157,52 @@ class SEOAgentEvaluationService:
         )
         provenance_score = round(facts_with_provenance / max(len(observed_facts), 1), 3) if observed_facts else 1.0
 
+        # Phase 5.2 Adaptive Working Memory & Collaboration Metrics
+        shared_mem = getattr(context, "shared_memory", None)
+        if shared_mem:
+            mem_summary = shared_mem.summarize()
+            entries_created = shared_mem.entries_created
+            entries_deduplicated = shared_mem.entries_deduplicated
+            total_stored = (
+                len(shared_mem._facts) + len(shared_mem._inferences) +
+                len(shared_mem._uncertainties) + len(shared_mem._recommendations)
+            )
+            memory_context_size = total_stored
+            memory_projection_size = min(total_stored, max(1, total_stored // 3)) if total_stored > 0 else 0
+            conflicts_detected = len(shared_mem._conflicts)
+            conflicts_resolved = len([c for c in shared_mem._conflicts if c.resolution_status == "resolved"])
+            agent_revisits = len(shared_mem._revisits)
+            context_budget_exceeded = shared_mem.budget_exceeded_events
+            context_efficiency = mem_summary.get("context_efficiency", 75.0)
+        else:
+            entries_created = len(getattr(context, "observed_facts", [])) + len(getattr(context, "inferences", []))
+            entries_deduplicated = 0
+            memory_context_size = entries_created
+            memory_projection_size = max(1, entries_created // 2) if entries_created > 0 else 0
+            conflicts_detected = 0
+            conflicts_resolved = 0
+            agent_revisits = 0
+            context_budget_exceeded = 0
+            context_efficiency = 100.0
+
+        unnecessary_revisits = max(0, agent_revisits - conflicts_detected)
+        collaboration_efficiency = round((successful_handoffs / max(total_handoffs + agent_revisits, 1)) * 100, 1)
+
+        memory_metrics = {
+            "memory_entries_created": entries_created,
+            "memory_entries_deduplicated": entries_deduplicated,
+            "memory_context_size": memory_context_size,
+            "memory_projection_size": memory_projection_size,
+            "conflicts_detected": conflicts_detected,
+            "conflicts_resolved": conflicts_resolved,
+            "agent_revisits": agent_revisits,
+            "unnecessary_revisits": unnecessary_revisits,
+            "context_budget_exceeded": context_budget_exceeded,
+            "provenance_completeness": provenance_score,
+            "context_efficiency": context_efficiency,
+            "collaboration_efficiency": collaboration_efficiency,
+        }
+
         collaboration_metrics = {
             "agents_involved": len(unique_agents),
             "agents_list": unique_agents,
@@ -166,7 +212,8 @@ class SEOAgentEvaluationService:
             "failed_agents": failed_agent_names,
             "collaboration_completed": task_success,
             "redundant_handoffs": redundant_handoffs,
-            "evidence_provenance_score": provenance_score
+            "evidence_provenance_score": provenance_score,
+            **memory_metrics
         }
 
         score = 0.0
@@ -192,5 +239,6 @@ class SEOAgentEvaluationService:
             "action_plan_id": context.action_plan_id,
             "evidence_keys_collected": list(context.evidence.keys()),
             "collaboration_metrics": collaboration_metrics,
+            "memory_metrics": memory_metrics,
             "overall_score": round(score, 1)
         }
