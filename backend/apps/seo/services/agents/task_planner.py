@@ -108,6 +108,7 @@ class PlanBudgetConfig:
     max_replans: int = 2
     max_dependency_depth: int = 8
     max_agent_executions: int = 25
+    max_parallel_tasks: int = 3
 
 
 @dataclass
@@ -485,6 +486,7 @@ class TaskPlan:
             "pending_tasks": counts["pending"],
             "skipped_tasks": counts["skipped"],
             "parallel_groups_count": len(self.get_parallel_groups()) if self._tasks else 0,
+            "max_parallel_tasks": getattr(self.budget_config, "max_parallel_tasks", 3),
             **counts
         }
 

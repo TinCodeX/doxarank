@@ -69,6 +69,27 @@ export interface CollaborationStateInfo {
   open_conflicts_count?: number;
   memory_summary?: SharedMemorySummary;
   task_plan_summary?: TaskPlanSummary;
+  parallel_batches?: ParallelBatchInfo[];
+}
+
+export interface ParallelBatchInfo {
+  batch_id: string;
+  tasks: string[];
+  status: string;
+  concurrency_limit: number;
+  overlap_detected?: boolean;
+  overlap_duration_ms?: number;
+  task_timings?: Record<
+    string,
+    {
+      task_id: string;
+      responsible_agent: string;
+      start_time: number;
+      end_time: number;
+      duration_ms: number;
+      status: string;
+    }
+  >;
 }
 
 export interface OrchestrationResponse {
@@ -96,6 +117,7 @@ export interface OrchestrationResponse {
   assumptions?: string[];
   handoff_history?: AgentHandoffItem[];
   collaboration_state?: CollaborationStateInfo;
+  parallel_batches?: ParallelBatchInfo[];
   shared_memory?: {
     summary?: SharedMemorySummary;
     facts?: Array<Record<string, any>>;

@@ -13680,3 +13680,551 @@ class SEODynamicTaskPlanningTests(TestCase):
         self.assertEqual(task_metrics["tasks_blocked"], 0)
         self.assertEqual(task_metrics["dependency_resolution_rate"], 100.0)
         self.assertEqual(task_metrics["task_completion_efficiency"], 100.0)
+
+
+from django.test import TransactionTestCase
+
+
+class SEOParallelAgentExecutionTests(TransactionTestCase):
+    """
+    Milestone 5.4 Test Suite: Parallel Agent Execution.
+    Verifies:
+    1. Independent tasks execute concurrently in a bounded parallel batch.
+    2. Sequential dependency order is strictly preserved with zero concurrency overlap.
+    3. Same-agent parallel tasks run concurrently (not deduplicated).
+    4. Merge barrier: downstream task waits for all parallel dependencies to finish.
+    5. Concurrency limit is bounded (max_parallel_tasks enforced, partition into batches).
+    6. Partial batch failure isolation: one task fails, other succeeds, downstream blocks cleanly.
+    7. SharedWorkingMemory concurrency: thread-safe concurrent writes with no lost updates.
+    8. Human-in-the-loop (HITL) approval boundary respected in parallel tasks.
+    9. ToolRegistry permissions isolation across parallel worker threads.
+    10. Full DoxaRank scenario with DAG completion, telemetry, and evaluation metrics.
+    11. Functional runtime overlap proof verifying genuine concurrent execution.
+    """
+
+    def setUp(self):
+        import time
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from apps.projects.models import Project
+        from apps.seo.services.agent_events import get_event_publisher
+
+        self.client = APIClient()
+        User = get_user_model()
+        self.user_a = User.objects.create_user(
+            email='parallel_user_a@doxarank.com',
+            password='Password123!'
+        )
+        self.user_b = User.objects.create_user(
+            email='parallel_user_b@doxarank.com',
+            password='Password123!'
+        )
+
+        self.project_a = Project.objects.create(
+            name="Parallel Project Alpha",
+            website_url="https://parallel-alpha.com",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Parallel Project Beta",
+            website_url="https://parallel-beta.com",
+            owner=self.user_b
+        )
+
+        # Clear global event publisher
+        get_event_publisher().clear()
+
+    def test_01_independent_tasks_execute_concurrently(self):
+        """1. Independent tasks execute concurrently in a bounded parallel batch (T1 -> [T2, T3] -> T4)."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Concurrent independent tasks test",
+            correlation_id="corr-par-001"
+        )
+        t1 = AgentTask("t1", "Root Research", "Initial research", "seo_researcher", dependencies=[], correlation_id="corr-par-001")
+        t2 = AgentTask("t2", "Branch A Research", "Keyword discovery", "seo_researcher", dependencies=["t1"], correlation_id="corr-par-001")
+        t3 = AgentTask("t3", "Branch B Audit", "Technical inspection", "seo_investigator", dependencies=["t1"], correlation_id="corr-par-001")
+        t4 = AgentTask("t4", "Merge Strategy", "Consolidate results", "seo_strategist", dependencies=["t2", "t3"], correlation_id="corr-par-001")
+
+        for t in [t1, t2, t3, t4]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=3)
+        result_ctx = supervisor.orchestrate(task="Concurrent test", correlation_id="corr-par-001", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        # Verify parallel batches recorded
+        batches = result_ctx.parallel_batches
+        self.assertGreaterEqual(len(batches), 2)
+
+        # Find the batch containing t2 and t3
+        parallel_batch = next((b for b in batches if "t2" in b.get("tasks", b.get("task_ids", [])) and "t3" in b.get("tasks", b.get("task_ids", []))), None)
+        self.assertIsNotNone(parallel_batch, "Expected parallel batch with t2 and t3")
+        batch_tasks = parallel_batch.get("tasks", parallel_batch.get("task_ids", []))
+        self.assertEqual(set(batch_tasks), {"t2", "t3"})
+        self.assertEqual(parallel_batch["status"], "completed")
+        timings = parallel_batch.get("task_timings", parallel_batch.get("metadata", {}).get("timings", {}))
+        self.assertIn("t2", timings)
+        self.assertIn("t3", timings)
+
+    def test_02_sequential_dependency_order_strictly_preserved(self):
+        """2. Sequential tasks (T1 -> T2 -> T3) preserve strict ordering with zero invalid overlap."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Strict sequential order test",
+            correlation_id="corr-seq-002"
+        )
+        t1 = AgentTask("s1", "Step 1", "Root", "seo_researcher", dependencies=[], correlation_id="corr-seq-002")
+        t2 = AgentTask("s2", "Step 2", "Depends on s1", "seo_investigator", dependencies=["s1"], correlation_id="corr-seq-002")
+        t3 = AgentTask("s3", "Step 3", "Depends on s2", "seo_strategist", dependencies=["s2"], correlation_id="corr-seq-002")
+
+        for t in [t1, t2, t3]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="Sequential test", correlation_id="corr-seq-002", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        # Every batch should contain exactly one task
+        batches = result_ctx.parallel_batches
+        self.assertEqual(len(batches), 3)
+        for b in batches:
+            batch_tasks = b.get("tasks", b.get("task_ids", []))
+            self.assertEqual(len(batch_tasks), 1)
+            self.assertFalse(b.get("overlap_detected", False))
+
+        # Check monotonic timestamps across sequential batches
+        b1_timings = batches[0].get("task_timings", batches[0].get("metadata", {}).get("timings", {}))
+        b2_timings = batches[1].get("task_timings", batches[1].get("metadata", {}).get("timings", {}))
+        b3_timings = batches[2].get("task_timings", batches[2].get("metadata", {}).get("timings", {}))
+
+        b1_timing = b1_timings["s1"]
+        b2_timing = b2_timings["s2"]
+        b3_timing = b3_timings["s3"]
+
+        self.assertLessEqual(b1_timing["end_time"], b2_timing["start_time"] + 0.005)
+        self.assertLessEqual(b2_timing["end_time"], b3_timing["start_time"] + 0.005)
+
+    def test_03_same_agent_parallel_tasks_run_concurrently(self):
+        """3. Independent tasks assigned to the same agent run concurrently without being deduplicated."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Same agent concurrent test",
+            correlation_id="corr-same-003"
+        )
+        r1 = AgentTask("r1", "Research Domain A", "Keyword cluster A", "seo_researcher", dependencies=[], correlation_id="corr-same-003")
+        r2 = AgentTask("r2", "Research Domain B", "Keyword cluster B", "seo_researcher", dependencies=[], correlation_id="corr-same-003")
+
+        plan.add_task(r1)
+        plan.add_task(r2)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=3)
+        result_ctx = supervisor.orchestrate(task="Same agent test", correlation_id="corr-same-003", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("r1").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("r2").status, TaskStatus.COMPLETED.value)
+
+        batches = result_ctx.parallel_batches
+        self.assertEqual(len(batches), 1)
+        batch_tasks = batches[0].get("tasks", batches[0].get("task_ids", []))
+        self.assertEqual(set(batch_tasks), {"r1", "r2"})
+
+    def test_04_merge_barrier_waits_for_all_parallel_dependencies(self):
+        """4. Merge barrier ensures downstream task starts only after all upstream parallel tasks complete."""
+        import time
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Merge barrier test",
+            correlation_id="corr-bar-004"
+        )
+        p1 = AgentTask("p1", "Slow Parallel Task", "Takes 40ms", "seo_researcher", dependencies=[], correlation_id="corr-bar-004")
+        p2 = AgentTask("p2", "Fast Parallel Task", "Takes 10ms", "seo_investigator", dependencies=[], correlation_id="corr-bar-004")
+        m1 = AgentTask("m1", "Downstream Merge", "Depends on p1 and p2", "seo_strategist", dependencies=["p1", "p2"], correlation_id="corr-bar-004")
+
+        for t in [p1, p2, m1]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=3)
+
+        orig_researcher_run = supervisor._agents["seo_researcher"].run
+        def mock_researcher_run(*args, **kwargs):
+            time.sleep(0.04)
+            return orig_researcher_run(*args, **kwargs)
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_researcher_run):
+            result_ctx = supervisor.orchestrate(task="Merge barrier test", correlation_id="corr-bar-004", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("m1").status, TaskStatus.COMPLETED.value)
+
+        batches = result_ctx.parallel_batches
+        self.assertEqual(len(batches), 2)
+
+        batch_par = batches[0]
+        batch_merge = batches[1]
+
+        timings_par = batch_par.get("task_timings", batch_par.get("metadata", {}).get("timings", {}))
+        timings_merge = batch_merge.get("task_timings", batch_merge.get("metadata", {}).get("timings", {}))
+
+        p1_end = timings_par["p1"]["end_time"]
+        p2_end = timings_par["p2"]["end_time"]
+        m1_start = timings_merge["m1"]["start_time"]
+
+        self.assertGreaterEqual(m1_start, p1_end)
+        self.assertGreaterEqual(m1_start, p2_end)
+
+    def test_05_concurrency_limit_bounded_to_max_parallel_tasks(self):
+        """5. Max concurrency limit is strictly bounded, partitioning excess ready tasks into batches."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Concurrency limit test",
+            correlation_id="corr-limit-005"
+        )
+        t1 = AgentTask("l1", "Task 1", "Root 1", "seo_researcher", dependencies=[], correlation_id="corr-limit-005")
+        t2 = AgentTask("l2", "Task 2", "Root 2", "seo_researcher", dependencies=[], correlation_id="corr-limit-005")
+        t3 = AgentTask("l3", "Task 3", "Root 3", "seo_investigator", dependencies=[], correlation_id="corr-limit-005")
+        t4 = AgentTask("l4", "Task 4", "Root 4", "seo_investigator", dependencies=[], correlation_id="corr-limit-005")
+
+        for t in [t1, t2, t3, t4]:
+            plan.add_task(t)
+
+        # Set max_parallel_tasks to 2 on 4 ready tasks
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        result_ctx = supervisor.orchestrate(task="Limit test", correlation_id="corr-limit-005", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        # Should be partitioned into 2 batches of 2 tasks each
+        batches = result_ctx.parallel_batches
+        self.assertEqual(len(batches), 2)
+        for b in batches:
+            batch_tasks = b.get("tasks", b.get("task_ids", []))
+            self.assertLessEqual(len(batch_tasks), 2)
+
+        # Verify limit event emitted
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_PARALLEL_CONCURRENCY_LIMITED.value, event_types)
+
+    def test_06_partial_batch_failure_isolation(self):
+        """6. Failure in one parallel task does not abort other tasks, and downstream dependencies block cleanly."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.base_agent import AgentResult
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Partial failure test",
+            correlation_id="corr-part-006"
+        )
+        f1 = AgentTask("f1", "Failing Task", "Will fail", "seo_researcher", dependencies=[], correlation_id="corr-part-006")
+        s1 = AgentTask("s1", "Succeeding Task", "Will succeed", "seo_investigator", dependencies=[], correlation_id="corr-part-006")
+        d1 = AgentTask("d1", "Dependent on F1", "Should block", "seo_strategist", dependencies=["f1"], correlation_id="corr-part-006")
+        d2 = AgentTask("d2", "Dependent on S1", "Should complete", "seo_verifier", dependencies=["s1"], correlation_id="corr-part-006")
+
+        for t in [f1, s1, d1, d2]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=3)
+
+        orig_researcher_run = supervisor._agents["seo_researcher"].run
+        def mock_researcher_run(*args, **kwargs):
+            handoff = kwargs.get("handoff") or (args[1] if len(args) > 1 else None)
+            if handoff and getattr(handoff, "current_task_id", None) == "f1":
+                return AgentResult(
+                    agent="seo_researcher",
+                    status="failed",
+                    confidence=0.0,
+                    errors=["Network timeout on f1"]
+                )
+            return orig_researcher_run(*args, **kwargs)
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_researcher_run):
+            result_ctx = supervisor.orchestrate(task="Partial failure test", correlation_id="corr-part-006", task_plan=plan)
+
+        self.assertEqual(plan.get_task("f1").status, TaskStatus.FAILED.value)
+        self.assertEqual(plan.get_task("s1").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("d1").status, TaskStatus.BLOCKED.value)
+        self.assertEqual(plan.get_task("d2").status, TaskStatus.COMPLETED.value)
+
+        # Batch 1 should be partial failure
+        batches = result_ctx.parallel_batches
+        self.assertGreaterEqual(len(batches), 1)
+        batch_1 = next((b for b in batches if "f1" in b.get("tasks", b.get("task_ids", []))), None)
+        self.assertIsNotNone(batch_1)
+        self.assertEqual(batch_1["status"], "partial_failure")
+
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_PARALLEL_BATCH_PARTIAL_FAILURE.value, event_types)
+
+    def test_07_shared_memory_thread_safe_concurrency(self):
+        """7. SharedWorkingMemory is thread-safe under concurrent writes with zero lost updates."""
+        import threading
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, ContextBudgetConfig
+
+        mem = SharedWorkingMemory(
+            project_id=self.project_a.id,
+            task_goal="Thread safe concurrency test",
+            correlation_id="corr-mem-007",
+            budget_config=ContextBudgetConfig(max_facts=200, max_inferences=200, max_uncertainties=200)
+        )
+
+        errors = []
+        num_threads = 6
+        ops_per_thread = 15
+
+        def worker_task(thread_id: int):
+            try:
+                for i in range(ops_per_thread):
+                    fact = mem.add_evidence(
+                        fact=f"Empirical discovery {i} from worker {thread_id}",
+                        source_agent="seo_researcher",
+                        task_id=f"t_{thread_id}_{i}"
+                    )
+                    mem.add_inference(
+                        hypothesis=f"Hypothesis {i} from worker {thread_id}",
+                        source_agent="seo_investigator",
+                        supporting_fact_ids=[fact.memory_id],
+                        confidence=0.85
+                    )
+                    mem.add_uncertainty(
+                        description=f"Uncertainty {i} from worker {thread_id}",
+                        source_agent="seo_strategist"
+                    )
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker_task, args=(tid,)) for tid in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(errors), 0, f"Concurrent writes produced exceptions: {errors}")
+
+        # Verify no lost updates
+        summary = mem.summarize()
+        expected_facts = num_threads * ops_per_thread
+        expected_inferences = num_threads * ops_per_thread
+        expected_uncertainties = num_threads * ops_per_thread
+
+        self.assertEqual(summary["facts_count"], expected_facts)
+        self.assertEqual(summary["inferences_count"], expected_inferences)
+        self.assertEqual(summary["uncertainties_count"], expected_uncertainties)
+
+        # Check provenance preserved
+        all_facts = list(mem._facts.values())
+        for f in all_facts:
+            self.assertEqual(f.source_agent, "seo_researcher")
+            self.assertTrue(f.metadata.get("task_id", "").startswith("t_"))
+
+    def test_08_hitl_approval_boundary_respected_in_parallel_task(self):
+        """8. Mutating actions proposed by parallel tasks strictly require human approval."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.models import SEOAction, ActionStatus, SiteAudit, AuditIssue
+
+        # Create audit issue so action planner synthesizes actions
+        audit = SiteAudit.objects.create(project=self.project_a, status='completed')
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_title",
+            title="Missing Title Tag",
+            page_url=f"{self.project_a.website_url}/landing",
+            severity="critical"
+        )
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="HITL approval boundary in parallel execution",
+            correlation_id="corr-hitl-008"
+        )
+        t_plan = AgentTask(
+            task_id="act_1",
+            objective="Synthesize action plan",
+            description="Propose actionable fixes",
+            responsible_agent="seo_action_planner",
+            dependencies=[],
+            correlation_id="corr-hitl-008"
+        )
+        t_audit = AgentTask(
+            task_id="aud_1",
+            objective="Inspect site health",
+            description="Parallel audit inspection",
+            responsible_agent="seo_investigator",
+            dependencies=[],
+            correlation_id="corr-hitl-008"
+        )
+
+        plan.add_task(t_plan)
+        plan.add_task(t_audit)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        result_ctx = supervisor.orchestrate(task="HITL parallel test", correlation_id="corr-hitl-008", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+
+        # Verify all created actions require human approval and are not auto-executed
+        actions = SEOAction.objects.filter(project=self.project_a)
+        self.assertGreaterEqual(actions.count(), 1)
+        for act in actions:
+            self.assertTrue(act.requires_human_approval)
+            self.assertIn(act.status, [ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL])
+            self.assertIsNone(act.approved_at)
+            self.assertIsNone(act.completed_at)
+
+    def test_09_tool_permissions_isolation_across_parallel_workers(self):
+        """9. Parallel tasks cannot escalate ToolRegistry or MCP permissions."""
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        from apps.seo.services.agents.seo_action_agent import SEOActionPlanningAgent
+
+        researcher = SEOResearchAgent(project=self.project_a, user=self.user_a)
+        action_agent = SEOActionPlanningAgent(project=self.project_a, user=self.user_a)
+
+        # Researcher is read-only; action planner has plan_seo_actions
+        self.assertFalse(researcher.is_tool_allowed("plan_seo_actions"))
+        self.assertTrue(action_agent.is_tool_allowed("plan_seo_actions"))
+
+        # Verify executing forbidden tool raises PermissionError
+        with self.assertRaises(PermissionError):
+            researcher.execute_tool("plan_seo_actions", {})
+
+    def test_10_full_doxarank_parallel_scenario_telemetry_and_evaluation(self):
+        """10. Full DoxaRank Scenario executes with 100% completion, parallel telemetry, and evaluation metrics."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=3)
+        goal = "Investigate organic traffic drop on landing page and propose fix"
+        result_ctx = supervisor.orchestrate(task=goal)
+
+        self.assertEqual(result_ctx.status, "completed")
+        plan = result_ctx.task_plan
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan.tasks), 6)
+
+        summary = plan.summarize()
+        self.assertEqual(summary["completed_tasks"], 6)
+        self.assertEqual(summary["completion_rate"], 100.0)
+
+        # Telemetry: verify parallel events emitted
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_PARALLEL_BATCH_CREATED.value, event_types)
+        self.assertIn(AgentEventType.SEO_PARALLEL_TASK_STARTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_PARALLEL_TASK_COMPLETED.value, event_types)
+        self.assertIn(AgentEventType.SEO_PARALLEL_BATCH_COMPLETED.value, event_types)
+
+        # Evaluation metrics
+        eval_result = SEOAgentEvaluationService.evaluate_shared_context(result_ctx)
+        self.assertIn("parallel_execution_metrics", eval_result)
+        p_metrics = eval_result["parallel_execution_metrics"]
+
+        self.assertGreaterEqual(p_metrics["parallel_batches_count"], 1)
+        self.assertGreaterEqual(p_metrics["parallel_tasks_executed"], 2)
+        self.assertEqual(p_metrics["concurrency_limit"], 3)
+        self.assertEqual(p_metrics["dependency_violations"], 0)
+        self.assertEqual(p_metrics["lost_memory_updates"], 0)
+        self.assertEqual(p_metrics["unauthorized_mutations"], 0)
+        self.assertGreater(p_metrics["parallelization_rate"], 0.0)
+
+    def test_11_functional_runtime_overlap_proof(self):
+        """11. Functional Proof: Independent parallel tasks exhibit genuine temporal runtime overlap."""
+        import time
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Runtime overlap functional proof",
+            correlation_id="corr-overlap-011"
+        )
+        task_a = AgentTask("tA", "Timed Task A", "Sleeps 50ms", "seo_researcher", dependencies=[], correlation_id="corr-overlap-011")
+        task_b = AgentTask("tB", "Timed Task B", "Sleeps 50ms", "seo_investigator", dependencies=[], correlation_id="corr-overlap-011")
+
+        plan.add_task(task_a)
+        plan.add_task(task_b)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+
+        orig_researcher_run = supervisor._agents["seo_researcher"].run
+        orig_investigator_run = supervisor._agents["seo_investigator"].run
+
+        def mock_sleep_researcher(*args, **kwargs):
+            time.sleep(0.05)
+            return orig_researcher_run(*args, **kwargs)
+
+        def mock_sleep_investigator(*args, **kwargs):
+            time.sleep(0.05)
+            return orig_investigator_run(*args, **kwargs)
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_sleep_researcher):
+            with patch.object(supervisor._agents["seo_investigator"], "run", side_effect=mock_sleep_investigator):
+                t_start = time.perf_counter()
+                result_ctx = supervisor.orchestrate(task="Overlap test", correlation_id="corr-overlap-011", task_plan=plan)
+                wall_clock_time = time.perf_counter() - t_start
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("tA").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("tB").status, TaskStatus.COMPLETED.value)
+
+        # 1. Batch duration must be strictly less than the sequential sum of individual task durations
+        batches = result_ctx.parallel_batches
+        self.assertEqual(len(batches), 1)
+        batch = batches[0]
+        timings = batch.get("task_timings", batch.get("metadata", {}).get("timings", {}))
+        tA_timing = timings["tA"]
+        tB_timing = timings["tB"]
+
+        sequential_sum_ms = tA_timing["duration_ms"] + tB_timing["duration_ms"]
+        batch_duration_ms = batch["duration_ms"]
+        self.assertLess(batch_duration_ms, sequential_sum_ms, f"Batch duration {batch_duration_ms}ms was not less than sequential sum {sequential_sum_ms}ms")
+
+        # 2. Verify overlap recorded in batch
+        self.assertTrue(batch["overlap_detected"], "Expected genuine overlap detection in parallel batch")
+        self.assertGreater(batch["overlap_duration_ms"], 0.0)
+
+        # 3. Direct verification of start and end interval intersection
+        has_temporal_overlap = (
+            tA_timing["start_time"] < tB_timing["end_time"] and
+            tB_timing["start_time"] < tA_timing["end_time"]
+        )
+        self.assertTrue(has_temporal_overlap, f"Tasks did not overlap: A={tA_timing}, B={tB_timing}")

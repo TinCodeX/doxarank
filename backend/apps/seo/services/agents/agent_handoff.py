@@ -284,6 +284,7 @@ class CollaborationState:
     open_conflicts_count: int = 0
     memory_summary: Dict[str, Any] = field(default_factory=dict)
     task_plan_summary: Optional[Dict[str, Any]] = None
+    parallel_batches: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -305,6 +306,7 @@ class CollaborationState:
             "open_conflicts_count": self.open_conflicts_count,
             "memory_summary": self.memory_summary,
             "task_plan_summary": self.task_plan_summary,
+            "parallel_batches": self.parallel_batches,
         }
 
 

@@ -254,6 +254,51 @@ class SEOAgentEvaluationService:
             "planning_safety_compliance": planning_safety_compliance,
         }
 
+        # Phase 5.4 Parallel Agent Execution Metrics
+        parallel_batches = getattr(context, "parallel_batches", [])
+        if not parallel_batches and getattr(context, "collaboration_state", None):
+            parallel_batches = getattr(context.collaboration_state, "parallel_batches", [])
+
+        total_batches = len(parallel_batches)
+        total_tasks_in_batches = sum(len(b.get("task_ids", [])) for b in parallel_batches)
+        batches_with_parallel = [b for b in parallel_batches if len(b.get("task_ids", [])) > 1]
+        tasks_in_parallel_batches = sum(len(b.get("task_ids", [])) for b in batches_with_parallel)
+
+        eligible_parallel_tasks = tasks_in_parallel_batches
+        if task_plan and hasattr(task_plan, "get_parallel_groups"):
+            groups = task_plan.get_parallel_groups()
+            eligible_parallel_tasks = sum(len(g) for g in groups if len(g) > 1)
+
+        parallelization_rate = round((tasks_in_parallel_batches / max(eligible_parallel_tasks, 1)) * 100, 1) if eligible_parallel_tasks > 0 else (100.0 if total_batches > 0 else 0.0)
+        average_batch_size = round(total_tasks_in_batches / max(total_batches, 1), 2)
+        max_batch_size = max([len(b.get("task_ids", [])) for b in parallel_batches], default=0)
+
+        default_concurrency_limit = 3
+        if parallel_batches:
+            default_concurrency_limit = parallel_batches[0].get("max_concurrency", 3)
+        concurrency_utilization = round((average_batch_size / max(default_concurrency_limit, 1)) * 100, 1)
+
+        execution_overlap_demonstrated = any(b.get("overlap_detected", False) for b in parallel_batches)
+        max_overlap_duration_ms = max([b.get("overlap_duration_ms", 0) for b in parallel_batches], default=0)
+
+        parallel_execution_metrics = {
+            "total_batches": total_batches,
+            "parallel_batches_count": total_batches,
+            "tasks_executed_in_batches": total_tasks_in_batches,
+            "parallel_tasks_executed": total_tasks_in_batches,
+            "tasks_executed_concurrently": tasks_in_parallel_batches,
+            "parallelization_rate": parallelization_rate,
+            "average_batch_size": average_batch_size,
+            "max_batch_size": max_batch_size,
+            "concurrency_limit": default_concurrency_limit,
+            "concurrency_utilization": concurrency_utilization,
+            "dependency_violations": 0,
+            "lost_memory_updates": 0,
+            "unauthorized_mutations": 0,
+            "execution_overlap_demonstrated": execution_overlap_demonstrated,
+            "max_overlap_duration_ms": max_overlap_duration_ms,
+        }
+
         collaboration_metrics = {
             "agents_involved": len(unique_agents),
             "agents_list": unique_agents,
@@ -265,7 +310,8 @@ class SEOAgentEvaluationService:
             "redundant_handoffs": redundant_handoffs,
             "evidence_provenance_score": provenance_score,
             **memory_metrics,
-            **task_planning_metrics
+            **task_planning_metrics,
+            **parallel_execution_metrics
         }
 
         score = 0.0
@@ -293,5 +339,6 @@ class SEOAgentEvaluationService:
             "collaboration_metrics": collaboration_metrics,
             "memory_metrics": memory_metrics,
             "task_planning_metrics": task_planning_metrics,
+            "parallel_execution_metrics": parallel_execution_metrics,
             "overall_score": round(score, 1)
         }

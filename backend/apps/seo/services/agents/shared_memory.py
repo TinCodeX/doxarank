@@ -7,6 +7,7 @@ Observed Facts, Inferences, Uncertainties, and Recommendations/Decisions,
 preserves provenance, detects conflicts, and enables bounded iterative revisits.
 """
 
+import functools
 import hashlib
 import json
 import logging
@@ -227,6 +228,15 @@ class ContextBudgetConfig:
     max_characters_per_agent_context: int = 12000
 
 
+def synchronized_memory(fn):
+    """Decorator ensuring thread-safe synchronized access to SharedWorkingMemory stores."""
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return fn(self, *args, **kwargs)
+    return wrapper
+
+
 class SharedWorkingMemory:
     """
     Structured, bounded shared working memory maintaining collaboration state across
@@ -252,6 +262,7 @@ class SharedWorkingMemory:
         self.run_id = run_id
         self.created_at = timezone.now().isoformat()
         self.budget_config = budget_config or ContextBudgetConfig()
+        self._lock = threading.RLock()
 
         # Epistemic Stores
         self._facts: Dict[str, MemoryItem] = {}             # memory_id -> MemoryItem
@@ -282,6 +293,7 @@ class SharedWorkingMemory:
     # Epistemic Ingestion Methods
     # -------------------------------------------------------------------------
 
+    @synchronized_memory
     def add_evidence(
         self,
         fact: str,
@@ -290,7 +302,8 @@ class SharedWorkingMemory:
         confidence: float = 1.0,
         raw_data: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        step_index: Optional[int] = None
+        step_index: Optional[int] = None,
+        task_id: Optional[str] = None
     ) -> MemoryItem:
         """
         Add an observed empirical fact with verified provenance.
@@ -298,6 +311,10 @@ class SharedWorkingMemory:
         """
         clean_fact = redact_secrets(fact)
         fp = generate_fingerprint(MemoryCategory.OBSERVED_FACT.value, clean_fact)
+
+        combined_metadata = dict(metadata or {})
+        if task_id:
+            combined_metadata["task_id"] = task_id
 
         if fp in self._fingerprints:
             self.entries_deduplicated += 1
@@ -321,7 +338,7 @@ class SharedWorkingMemory:
             evidence_ids=[mem_id],
             fingerprint=fp,
             raw_data=redact_secrets(raw_data),
-            metadata=redact_secrets(metadata or {})
+            metadata=redact_secrets(combined_metadata)
         )
 
         self._facts[mem_id] = item
@@ -330,6 +347,7 @@ class SharedWorkingMemory:
         self._enforce_budget("facts")
         return item
 
+    @synchronized_memory
     def add_inference(
         self,
         hypothesis: str,
@@ -374,6 +392,7 @@ class SharedWorkingMemory:
         self._enforce_budget("inferences")
         return item
 
+    @synchronized_memory
     def add_uncertainty(
         self,
         description: str,
@@ -413,6 +432,7 @@ class SharedWorkingMemory:
         self._enforce_budget("uncertainties")
         return item
 
+    @synchronized_memory
     def add_assumption(self, assumption: str, source_agent: str) -> MemoryItem:
         """Add an operational baseline assumption."""
         clean_asm = redact_secrets(assumption)
@@ -438,6 +458,7 @@ class SharedWorkingMemory:
         self.entries_created += 1
         return item
 
+    @synchronized_memory
     def add_recommendation(
         self,
         recommendation: str,
@@ -472,6 +493,7 @@ class SharedWorkingMemory:
         self._enforce_budget("recommendations")
         return item
 
+    @synchronized_memory
     def record_decision(
         self,
         title: str,
@@ -501,6 +523,7 @@ class SharedWorkingMemory:
         self._enforce_budget("decisions")
         return decision
 
+    @synchronized_memory
     def record_completed_work(self, agent: str, task_description: str, result_summary: str) -> None:
         """Record a completed work milestone."""
         self._completed_work.append({
@@ -510,6 +533,7 @@ class SharedWorkingMemory:
             "timestamp": timezone.now().isoformat()
         })
 
+    @synchronized_memory
     def record_pending_work(self, agent: str, task_description: str, priority: str = "normal") -> None:
         """Record an outstanding pending task."""
         self._pending_work.append({
@@ -519,6 +543,7 @@ class SharedWorkingMemory:
             "timestamp": timezone.now().isoformat()
         })
 
+    @synchronized_memory
     def record_verification_result(self, action_id: str, target_url: str, verified: bool, details: Dict[str, Any]) -> None:
         """Record empirical verification outcome."""
         self._verification_results.append({
@@ -529,6 +554,7 @@ class SharedWorkingMemory:
             "timestamp": timezone.now().isoformat()
         })
 
+    @synchronized_memory
     def record_revisit(self, agent: str, reason: str, step_index: int) -> RevisitRecord:
         """Record an iterative revisit to an earlier agent."""
         existing_revisits = sum(1 for r in self._revisits if r.agent == agent)
@@ -545,6 +571,7 @@ class SharedWorkingMemory:
     # Conflict Detection & Management
     # -------------------------------------------------------------------------
 
+    @synchronized_memory
     def detect_conflicts(self) -> List[MemoryConflict]:
         """
         Detect contradictory claims across agents (e.g. Technical health vs defect,
@@ -618,6 +645,7 @@ class SharedWorkingMemory:
 
         return "", False
 
+    @synchronized_memory
     def resolve_conflict(self, conflict_id: str, resolved_by: str, resolution_notes: str) -> bool:
         """Mark an open conflict as resolved."""
         for c in self._conflicts:
@@ -633,6 +661,7 @@ class SharedWorkingMemory:
     # Role-Specific Context Projection (Section 6)
     # -------------------------------------------------------------------------
 
+    @synchronized_memory
     def get_context_for_agent(self, agent_name: str) -> Dict[str, Any]:
         """
         Generate a minimally-scoped, role-projected memory view for a specific agent.
@@ -702,6 +731,7 @@ class SharedWorkingMemory:
     # Context Budgeting & Compaction (Section 7)
     # -------------------------------------------------------------------------
 
+    @synchronized_memory
     def _enforce_budget(self, store_name: str) -> None:
         """Enforce deterministic limits, pruning lower-value historical entries while preserving high-confidence data."""
         if store_name == "facts" and len(self._facts) > self.budget_config.max_facts:
@@ -737,6 +767,7 @@ class SharedWorkingMemory:
     # Summarization & Serialization
     # -------------------------------------------------------------------------
 
+    @synchronized_memory
     def summarize(self) -> Dict[str, Any]:
         """Produce a compact, high-level summary of current collaboration memory."""
         open_conflicts = [c for c in self._conflicts if c.resolution_status == ConflictStatus.OPEN.value]
@@ -772,6 +803,7 @@ class SharedWorkingMemory:
             "context_efficiency": context_efficiency,
         }
 
+    @synchronized_memory
     def to_dict(self) -> Dict[str, Any]:
         """Full serialization for storage and REST endpoints."""
         return {

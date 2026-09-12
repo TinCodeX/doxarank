@@ -314,6 +314,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   };
 
   const getEventTypeTagStyle = (eventType: string) => {
+    if (eventType.includes('.parallel.')) {
+      return { backgroundColor: '#ede9fe', color: '#6d28d9' };
+    }
+    if (eventType.startsWith('seo.agent.task.')) {
+      return { backgroundColor: '#e0f2fe', color: '#0369a1' };
+    }
     if (eventType.startsWith('agent.')) {
       return { backgroundColor: '#e0e7ff', color: '#3730a3' };
     }
@@ -1025,6 +1031,108 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               </div>
             )}
           </div>
+
+          {/* Phase 5.4: Parallel Execution Batches Card */}
+          {((orchestrationResult.parallel_batches && orchestrationResult.parallel_batches.length > 0) ||
+            (orchestrationResult.collaboration_state?.parallel_batches && orchestrationResult.collaboration_state.parallel_batches.length > 0)) && (
+            <div
+              id="parallel-execution-batches-card"
+              style={{
+                marginTop: '16px',
+                padding: '16px',
+                backgroundColor: '#faf5ff',
+                borderRadius: '10px',
+                border: '1px solid #e9d5ff',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>⚡</span>
+                  <strong style={{ fontSize: '14px', color: '#581c87' }}>Parallel Execution Batches (Phase 5.4)</strong>
+                  <span style={{ fontSize: '11px', backgroundColor: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                    Bounded Concurrency & Overlap Telemetry
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f3e8ff', color: '#7e22ce', fontWeight: 600 }}>
+                    Batches: {(orchestrationResult.parallel_batches || orchestrationResult.collaboration_state?.parallel_batches || []).length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Batch list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(orchestrationResult.parallel_batches || orchestrationResult.collaboration_state?.parallel_batches || []).map((batch: any, bIdx: number) => {
+                  const isSuccess = batch.status === 'completed';
+                  const isPartial = batch.status === 'partial_failure';
+                  const badgeBg = isSuccess ? '#dcfce7' : isPartial ? '#fef3c7' : '#fee2e2';
+                  const badgeColor = isSuccess ? '#166534' : isPartial ? '#b45309' : '#b91c1c';
+
+                  return (
+                    <div
+                      key={batch.batch_id || bIdx}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid #e9d5ff',
+                        backgroundColor: '#ffffff',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '12px', color: '#4c1d95' }}>Batch: {batch.batch_id}</strong>
+                          <span style={{ fontSize: '11px', color: '#6b21a8', backgroundColor: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>
+                            Limit: {batch.concurrency_limit}
+                          </span>
+                          {batch.overlap_detected && (
+                            <span style={{ fontSize: '11px', color: '#047857', backgroundColor: '#d1fae5', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              ⚡ Genuine Overlap ({Math.round(batch.overlap_duration_ms || 0)}ms)
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: badgeBg, color: badgeColor, fontWeight: 700 }}>
+                          {batch.status?.toUpperCase()}
+                        </span>
+                      </div>
+
+                      {/* Tasks in batch */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {batch.tasks?.map((tid: string) => {
+                          const timing = batch.task_timings?.[tid];
+                          return (
+                            <span
+                              key={tid}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: '#f8fafc',
+                                border: '1px solid #cbd5e1',
+                                color: '#334155',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              <strong>{tid}</strong>
+                              {timing && (
+                                <span style={{ color: '#64748b', fontSize: '10px' }}>
+                                  ({timing.responsible_agent}, {timing.duration_ms}ms)
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

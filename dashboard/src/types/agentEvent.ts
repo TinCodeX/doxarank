@@ -72,7 +72,15 @@ export type AgentEventType =
   | 'seo.agent.task.replanned'
   | 'seo.agent.task.cancelled'
   | 'seo.agent.task.dependency.resolved'
-  | 'seo.agent.task.plan.limit_reached';
+  | 'seo.agent.task.plan.limit_reached'
+  // Parallel Agent Execution lifecycle (Phase 5.4)
+  | 'seo.agent.parallel.batch.created'
+  | 'seo.agent.parallel.task.started'
+  | 'seo.agent.parallel.task.completed'
+  | 'seo.agent.parallel.task.failed'
+  | 'seo.agent.parallel.batch.completed'
+  | 'seo.agent.parallel.batch.partial_failure'
+  | 'seo.agent.parallel.concurrency_limited';
 
 export interface AgentEvent {
   event_id: string;

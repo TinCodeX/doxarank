@@ -9,6 +9,7 @@ and publisher abstractions (In-Memory, Redis Pub/Sub, Django Channels) for decou
 import json
 import logging
 import re
+import threading
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -134,6 +135,15 @@ class AgentEventType(str, Enum):
     SEO_TASK_DEPENDENCY_RESOLVED = "seo.agent.task.dependency.resolved"
     SEO_TASK_PLAN_LIMIT_REACHED = "seo.agent.task.plan.limit_reached"
 
+    # Parallel Agent Execution & Bounded Batch Scheduling (Milestone 5.4)
+    SEO_PARALLEL_BATCH_CREATED = "seo.agent.parallel.batch.created"
+    SEO_PARALLEL_TASK_STARTED = "seo.agent.parallel.task.started"
+    SEO_PARALLEL_TASK_COMPLETED = "seo.agent.parallel.task.completed"
+    SEO_PARALLEL_TASK_FAILED = "seo.agent.parallel.task.failed"
+    SEO_PARALLEL_BATCH_COMPLETED = "seo.agent.parallel.batch.completed"
+    SEO_PARALLEL_BATCH_PARTIAL_FAILURE = "seo.agent.parallel.batch.partial_failure"
+    SEO_PARALLEL_CONCURRENCY_LIMITED = "seo.agent.parallel.concurrency.limited"
+
 
 
 
@@ -235,30 +245,35 @@ class AgentEventPublisher(ABC):
 class InMemoryEventPublisher(AgentEventPublisher):
     """
     In-memory publisher implementation for testing, validation, and local logging.
-    Stores published events in order of arrival.
+    Stores published events in order of arrival with thread-safe locking.
     """
 
     def __init__(self):
         self._events: List[AgentEvent] = []
+        self._lock = threading.RLock()
 
     def publish(self, event: AgentEvent) -> None:
         """Store published event in memory."""
-        self._events.append(event)
+        with self._lock:
+            self._events.append(event)
         logger.debug(f"[InMemoryEventPublisher] Published event #{event.sequence_number}: {event.event_type} (Run #{event.run_id})")
 
     def get_events(self, run_id: Optional[int] = None) -> List[AgentEvent]:
         """Retrieve all events or events filtered by run_id."""
-        if run_id is not None:
-            return [e for e in self._events if e.run_id == run_id]
-        return list(self._events)
+        with self._lock:
+            if run_id is not None:
+                return [e for e in self._events if e.run_id == run_id]
+            return list(self._events)
 
     def get_event_types(self, run_id: Optional[int] = None) -> List[str]:
         """Retrieve list of event type strings."""
-        return [e.event_type for e in self.get_events(run_id)]
+        with self._lock:
+            return [e.event_type for e in self.get_events(run_id)]
 
     def clear(self) -> None:
         """Clear all stored events."""
-        self._events.clear()
+        with self._lock:
+            self._events.clear()
 
 
 class RedisEventPublisher(AgentEventPublisher):

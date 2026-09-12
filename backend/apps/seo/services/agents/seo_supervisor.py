@@ -47,6 +47,7 @@ from .seo_investigation_agent import SEOInvestigationAgent
 from .seo_strategy_agent import SEOStrategyAgent
 from .seo_action_agent import SEOActionPlanningAgent
 from .seo_verification_agent import SEOVerificationAgent
+from .parallel_executor import ParallelExecutionBatch, ParallelBatchExecutor, BatchExecutionResult
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,8 @@ class SEOSupervisorAgent:
         publisher: Optional[AgentEventPublisher] = None,
         tool_registry: Optional[ToolRegistry] = None,
         project_id: Optional[int] = None,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
+        max_parallel_tasks: int = 3
     ):
         if project is None and project_id is not None:
             project = Project.objects.get(id=project_id)
@@ -107,6 +109,8 @@ class SEOSupervisorAgent:
         self.user = user
         self.publisher = publisher or get_event_publisher()
         self.tool_registry = tool_registry or get_tool_registry()
+        self.max_parallel_tasks = max(1, int(max_parallel_tasks))
+        self.parallel_executor = ParallelBatchExecutor(max_parallel_tasks=self.max_parallel_tasks)
 
         # Initialize specialized sub-agents
         self._agents: Dict[str, BaseSpecializedAgent] = {
@@ -138,18 +142,18 @@ class SEOSupervisorAgent:
         task_lower = (task or "").lower()
 
         if any(w in task_lower for w in ["verify", "verification", "check outcome", "post-change"]):
-            return "verify", ROUTING_WORKFLOWS["verify"]["agents"]
+            return "verify", list(ROUTING_WORKFLOWS["verify"]["agents"])
         elif any(w in task_lower for w in ["strategy", "historical win rate", "prioritize opportunity"]):
-            return "strategy", ROUTING_WORKFLOWS["strategy"]["agents"]
+            return "strategy", list(ROUTING_WORKFLOWS["strategy"]["agents"])
         elif any(w in task_lower for w in ["plan", "fix", "action plan", "generate actions", "propose"]):
-            return "plan", ROUTING_WORKFLOWS["plan"]["agents"]
+            return "plan", list(ROUTING_WORKFLOWS["plan"]["agents"])
         elif any(w in task_lower for w in ["why", "investigate", "drop", "traffic loss", "cannibalization", "root cause"]):
-            return "investigate", ROUTING_WORKFLOWS["investigate"]["agents"]
+            return "investigate", list(ROUTING_WORKFLOWS["investigate"]["agents"])
         elif any(w in task_lower for w in ["audit", "inspect", "crawl", "gsc", "rankings", "research"]):
-            return "research", ROUTING_WORKFLOWS["research"]["agents"]
+            return "research", list(ROUTING_WORKFLOWS["research"]["agents"])
         else:
             # Default to full-cycle workflow
-            return "full_cycle", ROUTING_WORKFLOWS["full_cycle"]["agents"]
+            return "full_cycle", list(ROUTING_WORKFLOWS["full_cycle"]["agents"])
 
     def _emit_supervisor_event(
         self,
@@ -380,7 +384,7 @@ class SEOSupervisorAgent:
             f"with pipeline: {agent_pipeline} (Correlation: {corr_id})"
         )
 
-        # 2. DAG-Driven Dynamic Task Execution Loop with Bounded Iteration
+        # 2. DAG-Driven Dynamic Task Execution Loop with Bounded Parallel Batches
         previous_agent_name = "seo_supervisor"
         max_total_steps = min(25, max(15, len(task_plan.tasks) * 2 + 5))
         step_idx = 0
@@ -392,146 +396,285 @@ class SEOSupervisorAgent:
                 # Terminal condition: either all tasks completed, or remaining tasks are blocked/cancelled
                 break
 
-            # 2b. Select highest-priority ready task (get_ready_tasks is sorted by priority and created_at)
-            task_to_execute = ready_tasks[0]
-            agent_key = task_to_execute.responsible_agent
-            agent = self._agents.get(agent_key)
-            if not agent:
-                err = f"Supervisor error: Agent '{agent_key}' not found in registry for task '{task_to_execute.task_id}'."
-                context.errors.append(err)
-                collaboration_state.errors.append(err)
-                logger.error(err)
-                task_plan.handle_task_failure(task_to_execute.task_id, err)
-                break
-
-            step_idx += 1
-
-            # 2c. Invariant: task must transition from READY to RUNNING
-            task_to_execute.transition_to(TaskStatus.RUNNING)
-            self._emit_supervisor_event(
-                AgentEventType.SEO_TASK_STARTED,
-                payload=task_to_execute.to_dict(),
-                correlation_id=corr_id
-            )
-
-            primary_task = task_to_execute
-            matching_task = primary_task
-            matching_tasks = [task_to_execute]
-
-            # 2d. Build controlled, minimally-scoped handoff package for this specific task
-            handoff = self.build_handoff_context(
-                source_agent=previous_agent_name,
-                target_agent_name=agent.name,
-                context=context,
-                correlation_id=corr_id,
-                current_task_id=task_to_execute.task_id,
-                task_objective=task_to_execute.objective
-            )
-
-            # 2e. Pre-execution handoff validation
-            try:
-                AgentHandoffValidator.validate(handoff, expected_project_id=self.project.id)
-            except AgentHandoffValidationError as val_err:
-                err_msg = f"Handoff validation failed for '{agent.name}': {val_err}"
-                logger.error(f"[{self.name}] {err_msg}")
+            # 2b. Form bounded parallel execution batch
+            batch_tasks = ready_tasks[:self.max_parallel_tasks]
+            if len(ready_tasks) > self.max_parallel_tasks:
                 self._emit_supervisor_event(
-                    AgentEventType.SEO_AGENT_HANDOFF_REJECTED,
+                    AgentEventType.SEO_PARALLEL_CONCURRENCY_LIMITED,
                     payload={
-                        "source_agent": previous_agent_name,
-                        "target_agent": agent.name,
-                        "error": str(val_err)
+                        "ready_count": len(ready_tasks),
+                        "batch_size": len(batch_tasks),
+                        "max_concurrency": self.max_parallel_tasks,
+                        "deferred_tasks": [t.task_id for t in ready_tasks[self.max_parallel_tasks:]]
                     },
                     correlation_id=corr_id
                 )
-                context.errors.append(err_msg)
-                collaboration_state.errors.append(err_msg)
-                collaboration_state.status = "failed"
-                context.status = "failed"
-                task_plan.handle_task_failure(task_to_execute.task_id, err_msg)
-                break
 
-            # 2f. Emit context projection & handoff events
-            self._emit_supervisor_event(
-                AgentEventType.SEO_COLLABORATION_MEMORY_PROJECTED,
-                payload={
-                    "target_agent": agent.name,
-                    "projected_keys": list(handoff.relevant_evidence.keys()),
-                    "facts_count": len(handoff.observed_facts),
-                    "inferences_count": len(handoff.inferences),
-                },
-                correlation_id=corr_id
+            batch_id = f"batch-{uuid.uuid4().hex[:8]}"
+            batch = ParallelExecutionBatch(
+                batch_id=batch_id,
+                plan_id=task_plan.plan_id,
+                project_id=self.project.id,
+                task_ids=[t.task_id for t in batch_tasks],
+                agent_names=[t.responsible_agent for t in batch_tasks],
+                max_concurrency=self.max_parallel_tasks
             )
 
             self._emit_supervisor_event(
-                AgentEventType.SEO_AGENT_HANDOFF_STARTED,
-                payload={
-                    "source_agent": previous_agent_name,
-                    "target_agent": agent.name,
-                    "step_index": step_idx,
-                    "total_steps": len(task_plan.tasks)
-                },
+                AgentEventType.SEO_PARALLEL_BATCH_CREATED,
+                payload=batch.to_dict(),
                 correlation_id=corr_id
             )
 
-            self._emit_supervisor_event(
-                AgentEventType.SEO_AGENT_HANDOFF,
-                payload={
-                    "source_agent": previous_agent_name,
-                    "target_agent": agent.name,
-                    "step_index": step_idx,
-                    "task_type": handoff.task_type
-                },
-                correlation_id=corr_id
-            )
+            # 2c. Prepare handoff contexts and validate permissions for all batch tasks
+            handoffs = {}
+            validation_failed = False
+            for task_to_execute in batch_tasks:
+                agent_key = task_to_execute.responsible_agent
+                agent = self._agents.get(agent_key)
+                if not agent:
+                    err = f"Supervisor error: Agent '{agent_key}' not found in registry for task '{task_to_execute.task_id}'."
+                    context.errors.append(err)
+                    collaboration_state.errors.append(err)
+                    logger.error(err)
+                    task_plan.handle_task_failure(task_to_execute.task_id, err)
+                    validation_failed = True
+                    break
 
-            collaboration_state.current_agent = agent.name
-
-            # 2g. Execute specialized agent with handoff for this specific task
-            result = agent.run(context, handoff=handoff)
-            previous_agent_name = agent.name
-
-            # 2h. Failure isolation: preserve completed evidence on failure
-            if result.status == "failed":
-                logger.warning(
-                    f"[{self.name}] Agent '{agent.name}' reported failure during step {step_idx} on task '{task_to_execute.task_id}'. "
-                    f"Isolating failure and preserving {len(context.evidence)} evidence items."
-                )
-                blocked_ids = task_plan.handle_task_failure(task_to_execute.task_id, str(result.errors or context.errors))
+                # Invariant: task transitions from READY to RUNNING
+                task_to_execute.transition_to(TaskStatus.RUNNING)
                 self._emit_supervisor_event(
-                    AgentEventType.SEO_TASK_FAILED,
+                    AgentEventType.SEO_TASK_STARTED,
                     payload=task_to_execute.to_dict(),
                     correlation_id=corr_id
                 )
-                for b_id in blocked_ids:
-                    b_task = task_plan.get_task(b_id)
-                    if b_task:
-                        self._emit_supervisor_event(
-                            AgentEventType.SEO_TASK_BLOCKED,
-                            payload=b_task.to_dict(),
-                            correlation_id=corr_id
-                        )
-                if agent.name not in collaboration_state.failed_agents:
-                    collaboration_state.failed_agents.append(agent.name)
-                collaboration_state.status = "degraded"
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_PARALLEL_TASK_STARTED,
+                    payload={
+                        "batch_id": batch.batch_id,
+                        "task": task_to_execute.to_dict()
+                    },
+                    correlation_id=corr_id
+                )
+
+                # Build controlled, minimally-scoped handoff package
+                handoff = self.build_handoff_context(
+                    source_agent=previous_agent_name,
+                    target_agent_name=agent.name,
+                    context=context,
+                    correlation_id=corr_id,
+                    current_task_id=task_to_execute.task_id,
+                    task_objective=task_to_execute.objective
+                )
+
+                # Pre-execution handoff validation
+                try:
+                    AgentHandoffValidator.validate(handoff, expected_project_id=self.project.id)
+                except AgentHandoffValidationError as val_err:
+                    err_msg = f"Handoff validation failed for '{agent.name}': {val_err}"
+                    logger.error(f"[{self.name}] {err_msg}")
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_AGENT_HANDOFF_REJECTED,
+                        payload={
+                            "source_agent": previous_agent_name,
+                            "target_agent": agent.name,
+                            "error": str(val_err)
+                        },
+                        correlation_id=corr_id
+                    )
+                    context.errors.append(err_msg)
+                    collaboration_state.errors.append(err_msg)
+                    task_plan.handle_task_failure(task_to_execute.task_id, err_msg)
+                    validation_failed = True
+                    break
+
+                handoffs[task_to_execute.task_id] = handoff
+
+                # Emit context projection & handoff events
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_COLLABORATION_MEMORY_PROJECTED,
+                    payload={
+                        "target_agent": agent.name,
+                        "projected_keys": list(handoff.relevant_evidence.keys()),
+                        "facts_count": len(handoff.observed_facts),
+                        "inferences_count": len(handoff.inferences),
+                    },
+                    correlation_id=corr_id
+                )
+
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_AGENT_HANDOFF_STARTED,
+                    payload={
+                        "source_agent": previous_agent_name,
+                        "target_agent": agent.name,
+                        "step_index": step_idx + 1,
+                        "total_steps": len(task_plan.tasks)
+                    },
+                    correlation_id=corr_id
+                )
+
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_AGENT_HANDOFF,
+                    payload={
+                        "source_agent": previous_agent_name,
+                        "target_agent": agent.name,
+                        "step_index": step_idx + 1,
+                        "task_type": handoff.task_type
+                    },
+                    correlation_id=corr_id
+                )
+
+            if validation_failed:
                 if not task_plan.get_ready_tasks():
                     context.status = "failed"
+                    collaboration_state.status = "failed"
                     break
                 continue
 
-            # 2i. Success step: advance collaboration state and task status
-            task_to_execute.transition_to(
-                TaskStatus.COMPLETED,
-                result_summary=f"{agent.name} executed step with {len(result.findings)} findings."
-            )
-            self._emit_supervisor_event(
-                AgentEventType.SEO_TASK_COMPLETED,
-                payload=task_to_execute.to_dict(),
+            # 2d. Concurrently execute batch via ParallelBatchExecutor
+            batch_result = self.parallel_executor.execute_batch(
+                batch=batch,
+                tasks=batch_tasks,
+                agents=self._agents,
+                context=context,
+                handoffs=handoffs,
+                publisher=self.publisher,
                 correlation_id=corr_id
             )
+            step_idx += len(batch_tasks)
 
-            if agent.name not in collaboration_state.completed_agents:
-                collaboration_state.completed_agents.append(agent.name)
-            collaboration_state.current_evidence.update(result.evidence)
+            # 2e. Synchronize batch results and update DAG & shared context
+            for task_to_execute in batch_tasks:
+                tid = task_to_execute.task_id
+                agent_result = batch_result.task_results.get(tid)
+                agent_key = task_to_execute.responsible_agent
+                agent = self._agents.get(agent_key)
+                handoff = handoffs.get(tid)
+                timing = batch_result.timings.get(tid)
+                duration_ms = timing.duration_ms if timing else 0
+
+                if tid in batch.failed_tasks or (agent_result and agent_result.status == "failed"):
+                    err_detail = batch_result.errors.get(tid) or str(agent_result.errors if agent_result else "Unknown execution error")
+                    logger.warning(
+                        f"[{self.name}] Agent '{agent_key}' reported failure on task '{tid}'. "
+                        f"Isolating failure and preserving {len(context.evidence)} evidence items."
+                    )
+                    blocked_ids = task_plan.handle_task_failure(tid, err_detail)
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_TASK_FAILED,
+                        payload=task_to_execute.to_dict(),
+                        correlation_id=corr_id
+                    )
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_PARALLEL_TASK_FAILED,
+                        payload={
+                            "batch_id": batch.batch_id,
+                            "task_id": tid,
+                            "agent": agent_key,
+                            "error": err_detail,
+                            "duration_ms": duration_ms
+                        },
+                        correlation_id=corr_id
+                    )
+                    for b_id in blocked_ids:
+                        b_task = task_plan.get_task(b_id)
+                        if b_task:
+                            self._emit_supervisor_event(
+                                AgentEventType.SEO_TASK_BLOCKED,
+                                payload=b_task.to_dict(),
+                                correlation_id=corr_id
+                            )
+                    if agent_key not in collaboration_state.failed_agents:
+                        collaboration_state.failed_agents.append(agent_key)
+                    collaboration_state.status = "degraded"
+
+                else:
+                    # Success step
+                    task_to_execute.transition_to(
+                        TaskStatus.COMPLETED,
+                        result_summary=f"{agent_key} executed step with {len(agent_result.findings)} findings."
+                    )
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_TASK_COMPLETED,
+                        payload=task_to_execute.to_dict(),
+                        correlation_id=corr_id
+                    )
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_PARALLEL_TASK_COMPLETED,
+                        payload={
+                            "batch_id": batch.batch_id,
+                            "task_id": tid,
+                            "agent": agent_key,
+                            "findings_count": len(agent_result.findings),
+                            "duration_ms": duration_ms
+                        },
+                        correlation_id=corr_id
+                    )
+
+                    if agent_key not in collaboration_state.completed_agents:
+                        collaboration_state.completed_agents.append(agent_key)
+                    collaboration_state.current_evidence.update(agent_result.evidence)
+                    context.evidence.update(agent_result.evidence)
+
+                    for f in agent_result.observed_facts:
+                        if f not in context.observed_facts:
+                            context.observed_facts.append(f)
+                    for inf in agent_result.inferences:
+                        if inf not in context.inferences:
+                            context.inferences.append(inf)
+                    for unc in agent_result.uncertainties:
+                        if unc not in context.uncertainties:
+                            context.uncertainties.append(unc)
+                    for asm in agent_result.assumptions:
+                        if asm not in context.assumptions:
+                            context.assumptions.append(asm)
+
+                    if handoff:
+                        handoff_dict = handoff.to_dict()
+                        if not any(h.get("target_agent") == agent_key and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == tid for h in collaboration_state.handoff_history):
+                            collaboration_state.handoff_history.append(handoff_dict)
+                        if not any(h.get("target_agent") == agent_key and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == tid for h in context.handoff_history):
+                            context.handoff_history.append(handoff_dict)
+
+                        self._emit_supervisor_event(
+                            AgentEventType.SEO_AGENT_HANDOFF_COMPLETED,
+                            payload={
+                                "source_agent": handoff.source_agent,
+                                "target_agent": agent_key,
+                                "step_index": step_idx,
+                                "confidence": agent_result.confidence
+                            },
+                            correlation_id=corr_id
+                        )
+
+                    self._emit_supervisor_event(
+                        AgentEventType.SEO_COLLABORATION_MEMORY_UPDATED,
+                        payload={
+                            "agent": agent_key,
+                            "new_facts": len(agent_result.observed_facts),
+                            "new_inferences": len(agent_result.inferences),
+                            "new_uncertainties": len(agent_result.uncertainties),
+                            "memory_summary": shared_memory.summarize()
+                        },
+                        correlation_id=corr_id
+                    )
+                    previous_agent_name = agent_key
+
+            # 2f. Emit batch completion events and store batch
+            if batch.status == "partial_failure":
+                self._emit_supervisor_event(
+                    AgentEventType.SEO_PARALLEL_BATCH_PARTIAL_FAILURE,
+                    payload=batch.to_dict(),
+                    correlation_id=corr_id
+                )
+            self._emit_supervisor_event(
+                AgentEventType.SEO_PARALLEL_BATCH_COMPLETED,
+                payload=batch.to_dict(),
+                correlation_id=corr_id
+            )
+            batch_dict = batch.to_dict()
+            collaboration_state.parallel_batches.append(batch_dict)
+            context.parallel_batches.append(batch_dict)
 
             # Update pending agents based on remaining tasks in plan
             remaining_agents = {
@@ -543,49 +686,20 @@ class SEOSupervisorAgent:
             # Unblock downstream dependencies and emit resolution events
             new_ready_tasks = task_plan.get_ready_tasks()
             for ready_t in new_ready_tasks:
-                if task_to_execute.task_id in ready_t.dependencies:
-                    self._emit_supervisor_event(
-                        AgentEventType.SEO_TASK_DEPENDENCY_RESOLVED,
-                        payload={"task_id": ready_t.task_id, "ready_task": ready_t.to_dict(), "resolved_by": task_to_execute.task_id},
-                        correlation_id=corr_id
-                    )
+                for resolved_t in batch.successful_tasks:
+                    if resolved_t in ready_t.dependencies:
+                        self._emit_supervisor_event(
+                            AgentEventType.SEO_TASK_DEPENDENCY_RESOLVED,
+                            payload={"task_id": ready_t.task_id, "ready_task": ready_t.to_dict(), "resolved_by": resolved_t},
+                            correlation_id=corr_id
+                        )
                 self._emit_supervisor_event(
                     AgentEventType.SEO_TASK_READY,
                     payload=ready_t.to_dict(),
                     correlation_id=corr_id
                 )
 
-            handoff_dict = handoff.to_dict()
-            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == task_to_execute.task_id for h in collaboration_state.handoff_history):
-                collaboration_state.handoff_history.append(handoff_dict)
-            if not any(h.get("target_agent") == agent.name and h.get("source_agent") == handoff.source_agent and h.get("current_task_id") == task_to_execute.task_id for h in context.handoff_history):
-                context.handoff_history.append(handoff_dict)
-
-            self._emit_supervisor_event(
-                AgentEventType.SEO_AGENT_HANDOFF_COMPLETED,
-                payload={
-                    "source_agent": handoff.source_agent,
-                    "target_agent": agent.name,
-                    "step_index": step_idx,
-                    "confidence": result.confidence
-                },
-                correlation_id=corr_id
-            )
-
-            # Emit memory updated event
-            self._emit_supervisor_event(
-                AgentEventType.SEO_COLLABORATION_MEMORY_UPDATED,
-                payload={
-                    "agent": agent.name,
-                    "new_facts": len(result.observed_facts),
-                    "new_inferences": len(result.inferences),
-                    "new_uncertainties": len(result.uncertainties),
-                    "memory_summary": shared_memory.summarize()
-                },
-                correlation_id=corr_id
-            )
-
-            # 2j. Conflict Detection & Adaptive Replanning
+            # 2g. Conflict Detection & Adaptive Replanning
             new_conflicts = shared_memory.detect_conflicts()
             for conflict in new_conflicts:
                 self._emit_supervisor_event(
@@ -610,27 +724,29 @@ class SEOSupervisorAgent:
                     correlation_id=corr_id
                 )
 
-            # If agent provided updated findings resolving an earlier conflict, resolve it
+            # If any batch agent provided updated findings resolving an earlier conflict, resolve it
             for c in shared_memory._conflicts:
-                if c.resolution_status == ConflictStatus.OPEN.value and agent.name in c.responsible_agents:
-                    prev_revisits = sum(1 for r in shared_memory._revisits if r.agent == agent.name)
-                    if prev_revisits > 0:
-                        shared_memory.resolve_conflict(
-                            conflict_id=c.conflict_id,
-                            resolved_by=agent.name,
-                            resolution_notes=f"Resolved by {agent.name} with clarifying empirical evidence."
-                        )
-                        self._emit_supervisor_event(
-                            AgentEventType.SEO_COLLABORATION_MEMORY_CONFLICT_RESOLVED,
-                            payload=c.to_dict(),
-                            correlation_id=corr_id
-                        )
+                if c.resolution_status == ConflictStatus.OPEN.value:
+                    for b_agent in batch.agent_names:
+                        if b_agent in c.responsible_agents:
+                            prev_revisits = sum(1 for r in shared_memory._revisits if r.agent == b_agent)
+                            if prev_revisits > 0:
+                                shared_memory.resolve_conflict(
+                                    conflict_id=c.conflict_id,
+                                    resolved_by=b_agent,
+                                    resolution_notes=f"Resolved by {b_agent} with clarifying empirical evidence."
+                                )
+                                self._emit_supervisor_event(
+                                    AgentEventType.SEO_COLLABORATION_MEMORY_CONFLICT_RESOLVED,
+                                    payload=c.to_dict(),
+                                    correlation_id=corr_id
+                                )
 
-            # 2k. Bounded Iterative Collaboration Check (Phase 5.2 backward compatibility)
+            # 2h. Bounded Iterative Collaboration Check
             for c in shared_memory._conflicts:
                 if c.resolution_status == ConflictStatus.OPEN.value:
                     for prev_agent_name in c.responsible_agents:
-                        if prev_agent_name != agent.name and prev_agent_name in self._agents:
+                        if prev_agent_name in self._agents:
                             prev_revisits = sum(1 for r in shared_memory._revisits if r.agent == prev_agent_name)
                             if prev_revisits < 2 and len(shared_memory._revisits) < 4:
                                 shared_memory.record_revisit(
@@ -650,6 +766,10 @@ class SEOSupervisorAgent:
                                 )
                                 break
                     break
+
+            if not task_plan.get_ready_tasks() and len(batch.successful_tasks) == 0 and len(batch.failed_tasks) > 0:
+                context.status = "failed"
+                break
 
         # Finalize Collaboration, Memory & Task Plan State
         if shared_memory.budget_exceeded_events > 0:
@@ -681,6 +801,8 @@ class SEOSupervisorAgent:
                     "total_handoffs": len(context.handoff_history),
                     "memory_summary": collaboration_state.memory_summary,
                     "task_plan_summary": collaboration_state.task_plan_summary,
+                    "parallel_batches_count": len(context.parallel_batches),
+                    "parallel_batches": context.parallel_batches,
                 },
                 correlation_id=corr_id
             )
