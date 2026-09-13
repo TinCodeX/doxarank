@@ -43,7 +43,7 @@ class TaskStatus(str, Enum):
 # Deterministic state transition validation matrix
 VALID_TASK_TRANSITIONS: Dict[TaskStatus, Set[TaskStatus]] = {
     TaskStatus.PENDING: {TaskStatus.READY, TaskStatus.BLOCKED, TaskStatus.SKIPPED, TaskStatus.CANCELLED},
-    TaskStatus.READY: {TaskStatus.RUNNING, TaskStatus.BLOCKED, TaskStatus.SKIPPED, TaskStatus.CANCELLED},
+    TaskStatus.READY: {TaskStatus.RUNNING, TaskStatus.BLOCKED, TaskStatus.SKIPPED, TaskStatus.CANCELLED, TaskStatus.FAILED},
     TaskStatus.RUNNING: {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED},
     TaskStatus.BLOCKED: {TaskStatus.READY, TaskStatus.PENDING, TaskStatus.CANCELLED, TaskStatus.SKIPPED},
     TaskStatus.FAILED: {TaskStatus.READY, TaskStatus.CANCELLED},  # Allows bounded retry
@@ -500,6 +500,7 @@ class TaskPlan:
                 "status": t.status,
                 "priority": t.priority,
                 "dependencies": t.dependencies,
+                "routing_decision": t.metadata.get("routing_decision") if t.metadata else None,
             }
             for t in self._tasks.values()
         ]

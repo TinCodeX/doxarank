@@ -14228,3 +14228,686 @@ class SEOParallelAgentExecutionTests(TransactionTestCase):
             tB_timing["start_time"] < tA_timing["end_time"]
         )
         self.assertTrue(has_temporal_overlap, f"Tasks did not overlap: A={tA_timing}, B={tB_timing}")
+
+
+class SEOAdaptiveAgentCoordinationTests(TransactionTestCase):
+    """
+    Milestone 5.5 Test Suite: Adaptive Agent Coordination & Dynamic Agent Selection.
+    Verifies:
+    1. Best capability match is selected.
+    2. Ineligible agent is rejected by hard constraint.
+    3. Tool permission mismatch eliminates candidate.
+    4. HITL requirement cannot be bypassed.
+    5. Workload affects ranking when capabilities are otherwise comparable.
+    6. Deterministic tie-breaking with zero randomness.
+    7. Routing decision contains explainable reasons.
+    8. Low-confidence routing triggers safe fallback / review behavior.
+    9. Failed selected agent can safely fall back to next eligible agent.
+    10. Fallback is bounded and cannot loop indefinitely.
+    11. Same agent can still execute multiple independent tasks through 5.4.
+    12. Adaptive routing preserves DAG dependencies.
+    13. Parallel execution still works after dynamic agent assignment.
+    14. Shared memory context remains tenant-isolated.
+    15. Routing telemetry is emitted correctly.
+    16. Routing metrics are derived from runtime state.
+    17. No secrets appear in routing telemetry.
+    18. Full realistic DoxaRank scenario (Research -> Parallel Rank/Audit -> Investigation -> Strategy -> Action -> Verification).
+    19. Hard constraint failure blocks execution in supervisor (BUG-001 regression).
+    20. Ranking anomalies investigation routes to seo_investigator (BUG-002 Task B regression).
+    21. Post-action verification routes to seo_verifier (BUG-002 Task E regression).
+    22. Pure crawl and action planning queries route cleanly without cross-agent confusion.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+        self.user_a = User.objects.create_user(
+            email='coordinator_a@doxarank.com',
+            password='Password123!',
+            first_name='Coord',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='coordinator_b@doxarank.com',
+            password='Password123!',
+            first_name='Coord',
+            last_name='B'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Alpha Growth Project',
+            website_url='https://alpha-growth.io'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Beta Tenant Project',
+            website_url='https://beta-tenant.io'
+        )
+
+    def test_01_best_capability_match_selected(self):
+        """1. Candidate agent with the best matching capability profile is selected."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_res_01",
+            objective="Gather keyword rankings and SERP competitor research data",
+            description="Collect empirical ranking and search intent evidence",
+            responsible_agent="seo_investigator",  # initial baseline differs from best fit
+            correlation_id="corr-sel-001"
+        )
+
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_researcher")
+        self.assertGreater(decision.score, 0.60)
+        self.assertGreater(decision.confidence, 0.70)
+        self.assertTrue(any("capability_match" in r for r in decision.reasons))
+
+    def test_02_hard_constraint_rejects_ineligible_candidate(self):
+        """2. Hard constraint immediately eliminates candidates lacking mandatory capabilities."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_diag_02",
+            objective="Diagnose technical root cause of ranking drop",
+            description="Perform deep root cause analysis on traffic drop",
+            responsible_agent="seo_researcher",
+            metadata={"required_capabilities": ["root_cause_analysis"]},
+            correlation_id="corr-sel-002"
+        )
+
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_investigator")
+        rejected_names = [r["agent"] for r in decision.rejected_candidates]
+        self.assertIn("seo_researcher", rejected_names)
+        researcher_rej = next(r for r in decision.rejected_candidates if r["agent"] == "seo_researcher")
+        self.assertEqual(researcher_rej["hard_constraint"], "missing_required_capability")
+
+    def test_03_tool_permission_mismatch_eliminates_candidate(self):
+        """3. Candidate lacking tool authorization in ToolRegistry is eliminated by hard constraint."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_tool_03",
+            objective="Plan formal SEO remediations",
+            description="Synthesize structured action proposals",
+            responsible_agent="seo_researcher",
+            metadata={"required_tools": ["plan_seo_actions"]},
+            correlation_id="corr-sel-003"
+        )
+
+        decision = selector.select_agent(task=task)
+        # seo_action_planner is the only agent with plan_seo_actions
+        self.assertEqual(decision.selected_agent, "seo_action_planner")
+        rejected_names = [r["agent"] for r in decision.rejected_candidates]
+        self.assertIn("seo_researcher", rejected_names)
+        self.assertIn("seo_investigator", rejected_names)
+        self.assertIn("seo_strategist", rejected_names)
+
+    def test_04_hitl_requirement_cannot_be_bypassed(self):
+        """4. Agent selection cannot authorize mutations; HITL approval boundary strictly enforced."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.models import SEOAction, ActionStatus, SiteAudit, AuditIssue
+
+        # Create diagnostic issue so action planner synthesizes actions
+        audit = SiteAudit.objects.create(project=self.project_a, status='completed')
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="broken_redirect",
+            title="Broken Redirect Loop",
+            page_url=f"{self.project_a.website_url}/broken",
+            severity="critical"
+        )
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Mutating remediation under strict HITL",
+            correlation_id="corr-hitl-004"
+        )
+        t_plan = AgentTask(
+            task_id="plan_act_1",
+            objective="Synthesize action plan and remediations",
+            description="Design actionable code and tag fixes",
+            responsible_agent="seo_researcher",  # Deliberately misassigned
+            metadata={"is_mutating": True, "risk_level": "high"},
+            correlation_id="corr-hitl-004"
+        )
+        plan.add_task(t_plan)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="Remediation test", correlation_id="corr-hitl-004", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        # Verify dynamic routing reassigned the task to action planner
+        executed_task = plan.get_task("plan_act_1")
+        self.assertEqual(executed_task.responsible_agent, "seo_action_planner")
+
+        # Invariant: Selection != Authorization. Actions strictly require human approval
+        actions = SEOAction.objects.filter(project=self.project_a)
+        self.assertGreaterEqual(actions.count(), 1)
+        for act in actions:
+            self.assertTrue(act.requires_human_approval)
+            self.assertIn(act.status, [ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL])
+            self.assertIsNone(act.approved_at)
+            self.assertIsNone(act.completed_at)
+
+    def test_05_workload_affects_ranking_when_capabilities_otherwise_comparable(self):
+        """5. Workload factor lowers score of heavily loaded candidate when capabilities are comparable."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector, WorkloadTracker
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        tracker = WorkloadTracker()
+        # seo_researcher is saturated with 3 tasks; seo_investigator has 0
+        tracker.set_workloads({"seo_researcher": 3, "seo_investigator": 0})
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, workload_tracker=tracker, max_concurrency=3)
+        task = AgentTask(
+            task_id="t_audit_05",
+            objective="General crawl diagnostic audit",
+            description="Perform site diagnostic audit",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-workload-005"
+        )
+
+        decision = selector.select_agent(task=task, available_agents=["seo_researcher", "seo_investigator"])
+        researcher_score = decision.candidate_scores["seo_researcher"]
+        investigator_score = decision.candidate_scores["seo_investigator"]
+
+        # Investigator wins due to workload penalty on researcher
+        self.assertGreater(investigator_score, researcher_score)
+        self.assertEqual(decision.selected_agent, "seo_investigator")
+        self.assertTrue(any("workload_penalty" in r for r in decision.score_breakdowns["seo_researcher"]["reasons"]))
+
+    def test_06_deterministic_tie_breaking(self):
+        """6. Tie-breaking between equally scored candidates is strictly deterministic with zero randomness."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_tie_06",
+            objective="Diagnostic inspection task",
+            description="Diagnostic inspection",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-tie-006"
+        )
+
+        # Run 20 times to confirm 100% deterministic repeatability
+        first_decision = selector.select_agent(task=task)
+        for _ in range(20):
+            d = selector.select_agent(task=task)
+            self.assertEqual(d.selected_agent, first_decision.selected_agent)
+            self.assertEqual(d.score, first_decision.score)
+            self.assertEqual(d.confidence, first_decision.confidence)
+            self.assertEqual(d.ranked_candidates, first_decision.ranked_candidates)
+
+    def test_07_routing_decision_contains_explainable_reasons(self):
+        """7. RoutingDecision contains transparent, human-auditable reasons and rejection breakdown."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_exp_07",
+            objective="Formulate SEO strategy and prioritize high-ROI initiatives",
+            description="Synthesize portfolio strategy and recommend actions",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-exp-007"
+        )
+
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_strategist")
+        self.assertIsInstance(decision.reasons, list)
+        self.assertGreater(len(decision.reasons), 0)
+        self.assertTrue(any("strategy" in r.lower() or "capability" in r.lower() for r in decision.reasons))
+        self.assertIsInstance(decision.candidate_scores, dict)
+        self.assertIn("seo_strategist", decision.candidate_scores)
+        self.assertIsInstance(decision.rejected_candidates, list)
+
+    def test_08_low_confidence_routing_triggers_safe_behavior(self):
+        """8. Ambiguous or low-confidence routing flags low confidence and requires review for high risk."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, min_confidence_threshold=0.60)
+        task = AgentTask(
+            task_id="t_low_08",
+            objective="Execute esoteric unclassified protocol delta",
+            description="Non-standard unknown task payload",
+            responsible_agent="seo_supervisor",
+            metadata={"risk_level": "high"},
+            correlation_id="corr-low-008"
+        )
+
+        decision = selector.select_agent(task=task)
+        self.assertTrue(decision.is_low_confidence)
+        self.assertTrue(decision.requires_human_review)
+
+    def test_09_failed_selected_agent_safely_falls_back_to_next_eligible(self):
+        """9. When selected agent fails, supervisor safely reassigns to next eligible candidate."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.base_agent import AgentResult
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Fallback execution test",
+            correlation_id="corr-fallback-009"
+        )
+        task = AgentTask(
+            task_id="t_fb_09",
+            objective="Inspect site crawl health and search diagnostics",
+            description="Inspect diagnostics",
+            responsible_agent="seo_researcher",
+            correlation_id="corr-fallback-009"
+        )
+        plan.add_task(task)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Mock researcher failure
+        orig_res_run = supervisor._agents["seo_researcher"].run
+        def mock_researcher_fail(*args, **kwargs):
+            return AgentResult(
+                agent="seo_researcher",
+                status="failed",
+                confidence=0.0,
+                errors=["Temporary rate limit on Search Console API"]
+            )
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_researcher_fail):
+            result_ctx = supervisor.orchestrate(task="Fallback test", correlation_id="corr-fallback-009", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("t_fb_09").status, TaskStatus.COMPLETED.value)
+        # Task was reassigned to fallback agent (seo_investigator)
+        self.assertEqual(plan.get_task("t_fb_09").responsible_agent, "seo_investigator")
+
+        # Telemetry: verify fallback event emitted
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_AGENT_FALLBACK.value, event_types)
+
+    def test_10_fallback_is_bounded_and_cannot_loop_indefinitely(self):
+        """10. Fallback reassignment is strictly bounded by max_attempts and halts on exhaustion."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Bounded fallback exhaustion test",
+            correlation_id="corr-bound-010"
+        )
+        task = AgentTask(
+            task_id="t_exhaust_10",
+            objective="Audit crawl errors",
+            description="Crawl audit",
+            responsible_agent="seo_researcher",
+            correlation_id="corr-bound-010"
+        )
+        plan.add_task(task)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Both researcher and investigator fail
+        def mock_all_fail(agent_name):
+            def _runner(*args, **kwargs):
+                return AgentResult(agent=agent_name, status="failed", confidence=0.0, errors=["Fatal external error"])
+            return _runner
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_all_fail("seo_researcher")):
+            with patch.object(supervisor._agents["seo_investigator"], "run", side_effect=mock_all_fail("seo_investigator")):
+                with patch.object(supervisor._agents["seo_strategist"], "run", side_effect=mock_all_fail("seo_strategist")):
+                    supervisor.orchestrate(task="Exhaustion test", correlation_id="corr-bound-010", task_plan=plan)
+
+        # Task terminates as FAILED after bounded attempts without infinite loop
+        self.assertEqual(plan.get_task("t_exhaust_10").status, TaskStatus.FAILED.value)
+
+    def test_11_same_agent_can_execute_multiple_independent_parallel_tasks(self):
+        """11. Adaptive selection supports assigning same agent to multiple independent parallel tasks."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Multi-task same agent test",
+            correlation_id="corr-mult-011"
+        )
+        t1 = AgentTask("r_kwd", "Research keyword targets", "Keywords", "seo_supervisor", dependencies=[], correlation_id="corr-mult-011")
+        t2 = AgentTask("r_serp", "Research competitor serp", "SERP", "seo_supervisor", dependencies=[], correlation_id="corr-mult-011")
+        plan.add_task(t1)
+        plan.add_task(t2)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        result_ctx = supervisor.orchestrate(task="Parallel same agent", correlation_id="corr-mult-011", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("r_kwd").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("r_serp").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("r_kwd").responsible_agent, "seo_researcher")
+        self.assertEqual(plan.get_task("r_serp").responsible_agent, "seo_researcher")
+
+    def test_12_adaptive_routing_preserves_dag_dependencies(self):
+        """12. Dependent tasks cannot be selected or executed while prerequisites are unsatisfied."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="DAG preservation test",
+            correlation_id="corr-dag-012"
+        )
+        t_root = AgentTask("t_root", "Empirical keyword research", "Research", "seo_supervisor", dependencies=[], correlation_id="corr-dag-012")
+        t_dep = AgentTask("t_dep", "Strategic recommendation", "Strategy", "seo_supervisor", dependencies=["t_root"], correlation_id="corr-dag-012")
+        plan.add_task(t_root)
+        plan.add_task(t_dep)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="DAG test", correlation_id="corr-dag-012", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        order = [h.get("current_task_id") for h in result_ctx.handoff_history if h.get("current_task_id")]
+        self.assertEqual(order, ["t_root", "t_dep"])
+
+    def test_13_parallel_execution_works_after_dynamic_agent_assignment(self):
+        """13. Dynamically selected agents execute concurrently in bounded parallel batches."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Parallel dynamic assignment test",
+            correlation_id="corr-pardyn-013"
+        )
+        t1 = AgentTask("p_res", "Gather ranking data", "Research rankings", "seo_supervisor", dependencies=[], correlation_id="corr-pardyn-013")
+        t2 = AgentTask("p_diag", "Diagnose technical audit issues", "Audit diagnosis", "seo_supervisor", dependencies=[], correlation_id="corr-pardyn-013")
+        plan.add_task(t1)
+        plan.add_task(t2)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        result_ctx = supervisor.orchestrate(task="Parallel dynamic test", correlation_id="corr-pardyn-013", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("p_res").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("p_diag").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("p_res").responsible_agent, "seo_researcher")
+        self.assertEqual(plan.get_task("p_diag").responsible_agent, "seo_investigator")
+        self.assertEqual(len(result_ctx.parallel_batches), 1)
+
+    def test_14_shared_memory_context_remains_tenant_isolated(self):
+        """14. Tenant isolation is strictly enforced during agent selection and memory projection."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        # Task belongs to Project B
+        cross_task = AgentTask(
+            task_id="t_cross_14",
+            objective="Gather competitive keywords",
+            description="Collect keywords",
+            responsible_agent="seo_supervisor",
+            metadata={"project_id": self.project_b.id},
+            correlation_id="corr-tenant-014"
+        )
+
+        decision = selector.select_agent(task=cross_task, context_project_id=self.project_a.id)
+        self.assertEqual(decision.score, 0.0)
+        self.assertTrue(decision.is_low_confidence)
+        rejected_constraints = [r["hard_constraint"] for r in decision.rejected_candidates]
+        self.assertIn("tenant_isolation", rejected_constraints)
+
+    def test_15_routing_telemetry_emitted_correctly(self):
+        """15. Adaptive selection emits structured, auditable lifecycle telemetry events."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        supervisor.orchestrate(task="Investigate keyword rankings drop", correlation_id="corr-telem-015")
+
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_AGENT_SELECTION_STARTED.value, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_CANDIDATE_EVALUATED.value, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_SELECTED.value, event_types)
+
+        selected_events = pub.get_events_by_type(AgentEventType.SEO_AGENT_SELECTED)
+        self.assertGreaterEqual(len(selected_events), 1)
+        ev_payload = selected_events[0].payload
+        self.assertEqual(ev_payload["project_id"], self.project_a.id)
+        self.assertIn("selected_agent", ev_payload)
+        self.assertIn("score", ev_payload)
+        self.assertIn("confidence", ev_payload)
+
+    def test_16_routing_evaluation_metrics_derived_from_runtime_state(self):
+        """16. Agent evaluation service derives routing metrics from actual runtime events/state."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        result_ctx = supervisor.orchestrate(task="Audit and investigate landing page performance", correlation_id="corr-metrics-016")
+
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(result_ctx)
+        self.assertIn("adaptive_routing_metrics", eval_res)
+        r_metrics = eval_res["adaptive_routing_metrics"]
+
+        self.assertGreaterEqual(r_metrics["routing_decisions"], 1)
+        self.assertGreaterEqual(r_metrics["successful_selections"], 1)
+        self.assertGreater(r_metrics["selection_confidence"], 0.0)
+        self.assertGreaterEqual(r_metrics["average_candidate_count"], 1.0)
+        self.assertGreater(r_metrics["capability_match_rate"], 0.0)
+        self.assertIsInstance(r_metrics["task_completion_by_selected_agent"], dict)
+        self.assertGreater(len(r_metrics["task_completion_by_selected_agent"]), 0)
+
+    def test_17_no_secrets_appear_in_routing_telemetry(self):
+        """17. Secrets, API keys, and auth tokens are strictly redacted from routing telemetry."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, publisher=pub)
+        secret_task = AgentTask(
+            task_id="t_sec_17",
+            objective="Gather keywords with api_key=sk-live-secret-99999",
+            description="Task bearer token: Bearer my_secret_token_12345",
+            responsible_agent="seo_supervisor",
+            metadata={"secret_auth": "password123!"},
+            correlation_id="corr-sec-017"
+        )
+
+        selector.select_agent(task=secret_task)
+        events = pub.get_events()
+        for ev in events:
+            ev_str = str(ev.payload)
+            self.assertNotIn("sk-live-secret-99999", ev_str)
+            self.assertNotIn("my_secret_token_12345", ev_str)
+            self.assertNotIn("password123!", ev_str)
+
+    def test_18_full_realistic_doxarank_scenario(self):
+        """18. Realistic full DoxaRank scenario dynamically selects specialized agents across 6-stage workflow."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.models import SEOAction, ActionStatus, SiteAudit, AuditIssue
+
+        # Baseline audit data for action planning
+        audit = SiteAudit.objects.create(project=self.project_a, status='completed')
+        AuditIssue.objects.create(
+            audit=audit,
+            issue_type="missing_canonical",
+            title="Missing Canonical Tag",
+            page_url=f"{self.project_a.website_url}/canonical-issue",
+            severity="critical"
+        )
+
+        corr = "corr-full-scenario-018"
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Full realistic autonomous SEO investigation and fix",
+            correlation_id=corr
+        )
+
+        # 1. Root Research
+        t1 = AgentTask("t1_res", "Gather keyword research and SERP intelligence", "Keyword research", "seo_supervisor", dependencies=[], correlation_id=corr)
+        # 2 & 3. Parallel Rank Analysis & Technical Audit
+        t2 = AgentTask("t2_rank", "Perform ranking analysis on keyword portfolio", "Rank analysis", "seo_supervisor", dependencies=["t1_res"], correlation_id=corr)
+        t3 = AgentTask("t3_audit", "Technical audit crawl diagnostic inspection", "Audit inspection", "seo_supervisor", dependencies=["t1_res"], correlation_id=corr)
+        # 4. Merge Investigation
+        t4 = AgentTask("t4_inv", "Investigate root cause of ranking and audit anomalies", "Root cause diagnosis", "seo_supervisor", dependencies=["t2_rank", "t3_audit"], correlation_id=corr)
+        # 5. Strategic Prioritization
+        t5 = AgentTask("t5_strat", "Formulate SEO strategy and prioritize opportunities", "Strategy prioritization", "seo_supervisor", dependencies=["t4_inv"], correlation_id=corr)
+        # 6. Action Planning
+        t6 = AgentTask("t6_act", "Synthesize action plan and remediation proposals", "Action proposals", "seo_supervisor", dependencies=["t5_strat"], metadata={"is_mutating": True}, correlation_id=corr)
+        # 7. Verification
+        t7 = AgentTask("t7_ver", "Verify action plan integrity and outcome measurement", "Verification", "seo_supervisor", dependencies=["t6_act"], correlation_id=corr)
+
+        for t in [t1, t2, t3, t4, t5, t6, t7]:
+            plan.add_task(t)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        result_ctx = supervisor.orchestrate(task="Full scenario", correlation_id=corr, task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(len(plan.tasks), 7)
+        for t in plan.tasks.values():
+            self.assertEqual(t.status, TaskStatus.COMPLETED.value)
+
+        # Verify dynamic agent selection assigned the appropriate specialized agents
+        self.assertEqual(plan.get_task("t1_res").responsible_agent, "seo_researcher")
+        self.assertEqual(plan.get_task("t2_rank").responsible_agent, "seo_researcher")
+        self.assertEqual(plan.get_task("t3_audit").responsible_agent, "seo_investigator")
+        self.assertEqual(plan.get_task("t4_inv").responsible_agent, "seo_investigator")
+        self.assertEqual(plan.get_task("t5_strat").responsible_agent, "seo_strategist")
+        self.assertEqual(plan.get_task("t6_act").responsible_agent, "seo_action_planner")
+        self.assertEqual(plan.get_task("t7_ver").responsible_agent, "seo_verifier")
+
+        # Verify HITL invariant on action plan proposals
+        actions = SEOAction.objects.filter(project=self.project_a)
+        self.assertGreaterEqual(actions.count(), 1)
+        for act in actions:
+            self.assertTrue(act.requires_human_approval)
+            self.assertIn(act.status, [ActionStatus.PROPOSED, ActionStatus.PENDING_APPROVAL])
+
+        # Verify evaluation reflects complete orchestration
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(result_ctx)
+        self.assertEqual(eval_res["adaptive_routing_metrics"]["routing_decisions"], 7)
+        self.assertEqual(eval_res["adaptive_routing_metrics"]["successful_selections"], 7)
+        self.assertGreater(eval_res["adaptive_routing_metrics"]["selection_confidence"], 0.80)
+
+    def test_19_hard_constraint_failure_blocks_execution_in_supervisor(self):
+        """19. Hard constraint failure (score == 0.0) blocks execution, fails task, cascades to dependent tasks, and does NOT execute fallback agent."""
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+
+        corr = "corr-fail-safe-019"
+        plan = TaskPlan(plan_id="plan-fail-safe", project_id=self.project_a.id, correlation_id=corr)
+        task_fail = AgentTask(
+            task_id="t_impossible",
+            objective="Perform impossible quantum computing analysis on search graphs",
+            description="Require capability completely outside all agent profiles",
+            responsible_agent="seo_supervisor",
+            correlation_id=corr,
+            metadata={"required_capabilities": ["quantum_fourier_ranking_teleportation"]}
+        )
+        task_dep = AgentTask(
+            task_id="t_dependent",
+            objective="Verify outcome",
+            description="Dependent verification task",
+            responsible_agent="seo_supervisor",
+            dependencies=["t_impossible"],
+            correlation_id=corr
+        )
+        plan.add_task(task_fail)
+        plan.add_task(task_dep)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=1)
+        result_ctx = supervisor.orchestrate(task="Impossible requirement scenario", correlation_id=corr, task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "failed")
+        self.assertEqual(plan.get_task("t_impossible").status, TaskStatus.FAILED.value)
+        self.assertEqual(plan.get_task("t_dependent").status, TaskStatus.BLOCKED.value)
+        self.assertNotEqual(plan.get_task("t_impossible").responsible_agent, "seo_investigator")
+        self.assertTrue(any("hard constraints" in err for err in result_ctx.errors))
+        self.assertEqual(len(result_ctx.routing_decisions), 1)
+        self.assertEqual(result_ctx.routing_decisions[0]["score"], 0.0)
+
+    def test_20_investigation_anomalies_routes_to_investigator(self):
+        """20. Natural language query for ranking anomalies diagnosis routes to seo_investigator (not researcher)."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_anom_020",
+            objective="Investigate the root cause of ranking anomalies",
+            description="Diagnose sudden ranking drop across core keywords",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-audit-b-020"
+        )
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_investigator")
+        self.assertGreater(decision.score, 0.75)
+        self.assertGreater(decision.confidence, 0.85)
+
+    def test_21_post_action_verification_routes_to_verifier(self):
+        """21. Natural language query for post-action outcome verification routes to seo_verifier (not action_planner)."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task = AgentTask(
+            task_id="t_ver_021",
+            objective="Verify post-action SEO outcome",
+            description="Measure performance changes and keyword lift after action plan deployment",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-audit-e-021"
+        )
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_verifier")
+        self.assertGreater(decision.score, 0.75)
+        self.assertGreater(decision.confidence, 0.85)
+
+    def test_22_pure_crawl_and_action_planning_routing(self):
+        """22. Crawling and action planning queries route cleanly without cross-agent confusion."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+
+        crawl_task = AgentTask(
+            task_id="t_crawl_022",
+            objective="Crawl website for broken links and inspect sitemap",
+            description="Execute site crawler to identify technical 404s and crawl errors",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-crawl-022"
+        )
+        crawl_decision = selector.select_agent(task=crawl_task)
+        self.assertEqual(crawl_decision.selected_agent, "seo_researcher")
+        self.assertGreater(crawl_decision.score, 0.75)
+
+        plan_task = AgentTask(
+            task_id="t_plan_022",
+            objective="Design remediation and plan SEO actions",
+            description="Formulate structured remediation action plan for human approval",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-plan-022"
+        )
+        plan_decision = selector.select_agent(task=plan_task)
+        self.assertEqual(plan_decision.selected_agent, "seo_action_planner")
+        self.assertGreater(plan_decision.score, 0.75)

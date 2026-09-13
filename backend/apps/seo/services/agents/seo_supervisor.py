@@ -48,6 +48,9 @@ from .seo_strategy_agent import SEOStrategyAgent
 from .seo_action_agent import SEOActionPlanningAgent
 from .seo_verification_agent import SEOVerificationAgent
 from .parallel_executor import ParallelExecutionBatch, ParallelBatchExecutor, BatchExecutionResult
+from .adaptive_selector import (
+    AdaptiveAgentSelector, AgentCapabilityProfile, RoutingDecision, WorkloadTracker
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,14 @@ class SEOSupervisorAgent:
         self.tool_registry = tool_registry or get_tool_registry()
         self.max_parallel_tasks = max(1, int(max_parallel_tasks))
         self.parallel_executor = ParallelBatchExecutor(max_parallel_tasks=self.max_parallel_tasks)
+        self.workload_tracker = WorkloadTracker()
+        self.agent_selector = AdaptiveAgentSelector(
+            project_id=self.project.id if self.project else 0,
+            tool_registry=self.tool_registry,
+            publisher=self.publisher,
+            workload_tracker=self.workload_tracker,
+            max_concurrency=self.max_parallel_tasks
+        )
 
         # Initialize specialized sub-agents
         self._agents: Dict[str, BaseSpecializedAgent] = {
@@ -396,9 +407,56 @@ class SEOSupervisorAgent:
                 # Terminal condition: either all tasks completed, or remaining tasks are blocked/cancelled
                 break
 
-            # 2b. Form bounded parallel execution batch
-            batch_tasks = ready_tasks[:self.max_parallel_tasks]
-            if len(ready_tasks) > self.max_parallel_tasks:
+            # 2b. Form bounded parallel execution batch with Adaptive Agent Selection
+            candidate_tasks = ready_tasks[:self.max_parallel_tasks]
+            batch_tasks = []
+            for task_to_select in candidate_tasks:
+                routing_decision = self.agent_selector.select_agent(
+                    task=task_to_select,
+                    available_agents=list(self._agents.keys()),
+                    context_project_id=self.project.id if self.project else None,
+                    correlation_id=corr_id
+                )
+                if not task_to_select.metadata:
+                    task_to_select.metadata = {}
+                task_to_select.metadata["routing_decision"] = routing_decision.to_dict()
+                context.routing_decisions.append(routing_decision.to_dict())
+                if hasattr(collaboration_state, "routing_decisions"):
+                    collaboration_state.routing_decisions.append(routing_decision.to_dict())
+
+                # BUG-001: Enforce hard safety boundary when routing fails
+                is_routing_failure = (
+                    routing_decision.score == 0.0 or
+                    not routing_decision.ranked_candidates or
+                    (len(routing_decision.rejected_candidates) > 0 and not routing_decision.candidate_scores)
+                )
+                if is_routing_failure:
+                    err_reason = (
+                        routing_decision.reasons[0]
+                        if routing_decision.reasons
+                        else f"Routing failed: no eligible agent satisfied hard constraints for task '{task_to_select.task_id}'."
+                    )
+                    logger.warning(
+                        f"[{self.name}] Routing failed for task '{task_to_select.task_id}': {err_reason}. "
+                        "Failing task deterministically."
+                    )
+                    context.errors.append(f"Routing failed for task '{task_to_select.task_id}': {err_reason}")
+                    collaboration_state.errors.append(f"Routing failed for task '{task_to_select.task_id}': {err_reason}")
+                    task_plan.handle_task_failure(task_to_select.task_id, err_reason)
+                    continue
+
+                task_to_select.responsible_agent = routing_decision.selected_agent
+                self.workload_tracker.increment(routing_decision.selected_agent)
+                batch_tasks.append(task_to_select)
+
+            if not batch_tasks:
+                if not task_plan.get_ready_tasks():
+                    context.status = "failed"
+                    collaboration_state.status = "failed"
+                    break
+                continue
+
+            if len(ready_tasks) > len(batch_tasks):
                 self._emit_supervisor_event(
                     AgentEventType.SEO_PARALLEL_CONCURRENCY_LIMITED,
                     payload={
@@ -543,6 +601,10 @@ class SEOSupervisorAgent:
             )
             step_idx += len(batch_tasks)
 
+            # Decrement active workloads after batch execution completes
+            for t_done in batch_tasks:
+                self.workload_tracker.decrement(t_done.responsible_agent)
+
             # 2e. Synchronize batch results and update DAG & shared context
             for task_to_execute in batch_tasks:
                 tid = task_to_execute.task_id
@@ -553,7 +615,76 @@ class SEOSupervisorAgent:
                 timing = batch_result.timings.get(tid)
                 duration_ms = timing.duration_ms if timing else 0
 
-                if tid in batch.failed_tasks or (agent_result and agent_result.status == "failed"):
+                is_failed = tid in batch.failed_tasks or (agent_result and agent_result.status == "failed")
+                if is_failed:
+                    err_detail = batch_result.errors.get(tid) or str(agent_result.errors if agent_result else "Unknown execution error")
+
+                    # Milestone 5.5 Dynamic Reassignment / Bounded Safe Fallback
+                    prev_routing = task_to_execute.metadata.get("routing_decision")
+                    fallback_decision = None
+                    if prev_routing and prev_routing.get("ranked_candidates"):
+                        prev_dec_obj = RoutingDecision(
+                            task_id=prev_routing["task_id"],
+                            selected_agent=prev_routing["selected_agent"],
+                            score=prev_routing.get("score", 0.0),
+                            confidence=prev_routing.get("confidence", 0.5),
+                            reasons=prev_routing.get("reasons", []),
+                            rejected_candidates=prev_routing.get("rejected_candidates", []),
+                            candidate_scores=prev_routing.get("candidate_scores", {}),
+                            score_breakdowns=prev_routing.get("score_breakdowns", {}),
+                            ranked_candidates=prev_routing.get("ranked_candidates", []),
+                            fallback_attempt=prev_routing.get("fallback_attempt", 0),
+                            fallback_reason=prev_routing.get("fallback_reason"),
+                            project_id=self.project.id if self.project else 0
+                        )
+                        fallback_decision = self.agent_selector.select_fallback(
+                            task=task_to_execute,
+                            previous_decision=prev_dec_obj,
+                            failed_agent=agent_key,
+                            failure_reason=err_detail,
+                            context_project_id=self.project.id if self.project else None,
+                            correlation_id=corr_id,
+                            max_attempts=2
+                        )
+
+                    if fallback_decision:
+                        fallback_agent_key = fallback_decision.selected_agent
+                        fallback_agent = self._agents.get(fallback_agent_key)
+                        if fallback_agent:
+                            logger.info(
+                                f"[{self.name}] Attempting safe fallback reassignment for task '{tid}' "
+                                f"from '{agent_key}' to '{fallback_agent_key}' (Attempt {fallback_decision.fallback_attempt})."
+                            )
+                            task_to_execute.responsible_agent = fallback_agent_key
+                            task_to_execute.metadata["routing_decision"] = fallback_decision.to_dict()
+                            context.routing_decisions.append(fallback_decision.to_dict())
+                            if hasattr(collaboration_state, "routing_decisions"):
+                                collaboration_state.routing_decisions.append(fallback_decision.to_dict())
+
+                            fb_handoff = self.build_handoff_context(
+                                source_agent=previous_agent_name,
+                                target_agent_name=fallback_agent_key,
+                                context=context,
+                                correlation_id=corr_id,
+                                current_task_id=tid,
+                                task_objective=task_to_execute.objective
+                            )
+                            try:
+                                AgentHandoffValidator.validate(fb_handoff, expected_project_id=self.project.id)
+                                fb_res = fallback_agent.run(context, handoff=fb_handoff)
+                                if fb_res.status == "completed":
+                                    agent_result = fb_res
+                                    agent_key = fallback_agent_key
+                                    handoff = fb_handoff
+                                    is_failed = False
+                                    if tid in batch.failed_tasks:
+                                        batch.failed_tasks.remove(tid)
+                                    if tid not in batch.successful_tasks:
+                                        batch.successful_tasks.append(tid)
+                            except Exception as fb_err:
+                                logger.warning(f"[{self.name}] Fallback execution of '{fallback_agent_key}' failed: {fb_err}")
+
+                if is_failed:
                     err_detail = batch_result.errors.get(tid) or str(agent_result.errors if agent_result else "Unknown execution error")
                     logger.warning(
                         f"[{self.name}] Agent '{agent_key}' reported failure on task '{tid}'. "
@@ -615,6 +746,17 @@ class SEOSupervisorAgent:
                         collaboration_state.completed_agents.append(agent_key)
                     collaboration_state.current_evidence.update(agent_result.evidence)
                     context.evidence.update(agent_result.evidence)
+
+                    if agent_key == "seo_investigator" or "investigation" in agent_key:
+                        for f_item in agent_result.findings:
+                            if f_item not in context.investigation_findings:
+                                context.investigation_findings.append(f_item)
+                    if "strategy" in agent_result.evidence:
+                        context.strategy_signals.update(agent_result.evidence["strategy"])
+                    if agent_result.recommendations:
+                        for rec_item in agent_result.recommendations:
+                            if rec_item not in context.action_proposals:
+                                context.action_proposals.append(rec_item)
 
                     for f in agent_result.observed_facts:
                         if f not in context.observed_facts:

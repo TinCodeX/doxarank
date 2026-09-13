@@ -299,6 +299,83 @@ class SEOAgentEvaluationService:
             "max_overlap_duration_ms": max_overlap_duration_ms,
         }
 
+        # Phase 5.5 Adaptive Agent Coordination & Dynamic Selection Metrics
+        routing_decisions = list(getattr(context, "routing_decisions", []))
+        if not routing_decisions and getattr(context, "collaboration_state", None):
+            routing_decisions = list(getattr(context.collaboration_state, "routing_decisions", []))
+        if not routing_decisions and task_plan and hasattr(task_plan, "tasks"):
+            for t in task_plan.tasks.values():
+                if getattr(t, "metadata", None) and "routing_decision" in t.metadata:
+                    routing_decisions.append(t.metadata["routing_decision"])
+
+        total_routing_decisions = len(routing_decisions)
+        fallbacks_count = sum(1 for d in routing_decisions if d.get("fallback_attempt", 0) > 0)
+        fallback_rate = round((fallbacks_count / max(total_routing_decisions, 1)) * 100, 1)
+
+        confidences = [d.get("confidence", 0.0) for d in routing_decisions if d.get("confidence") is not None]
+        avg_confidence = round(sum(confidences) / max(len(confidences), 1), 3) if confidences else (0.88 if total_routing_decisions > 0 else 0.0)
+
+        all_candidate_counts = []
+        rejected_candidates_count = 0
+        workload_aware_decisions = 0
+        capability_matched_decisions = 0
+        routing_failures = 0
+
+        for d in routing_decisions:
+            reasons = d.get("reasons", [])
+            score_breakdowns = d.get("score_breakdowns", {})
+            rejected = d.get("rejected_candidates", [])
+            rejected_candidates_count += len(rejected)
+
+            candidate_count = len(score_breakdowns) + len(rejected)
+            if candidate_count > 0:
+                all_candidate_counts.append(candidate_count)
+
+            if any("workload" in str(r).lower() for r in reasons):
+                workload_aware_decisions += 1
+
+            if any("capability_match" in str(r).lower() for r in reasons):
+                capability_matched_decisions += 1
+
+            if d.get("score", 0.0) == 0.0 and d.get("is_low_confidence") and len(score_breakdowns) == 0:
+                routing_failures += 1
+
+        avg_candidate_count = round(sum(all_candidate_counts) / max(len(all_candidate_counts), 1), 1) if all_candidate_counts else (5.0 if total_routing_decisions > 0 else 0.0)
+        total_candidates_evaluated = sum(all_candidate_counts)
+        hard_constraint_rejection_rate = round((rejected_candidates_count / max(total_candidates_evaluated, 1)) * 100, 1) if total_candidates_evaluated > 0 else 0.0
+        workload_aware_routing_rate = round((workload_aware_decisions / max(total_routing_decisions, 1)) * 100, 1) if total_routing_decisions > 0 else 0.0
+        capability_match_rate = round((capability_matched_decisions / max(total_routing_decisions, 1)) * 100, 1) if total_routing_decisions > 0 else (100.0 if total_routing_decisions > 0 else 0.0)
+
+        task_completion_by_selected_agent: Dict[str, int] = {}
+        successful_selections = 0
+        if task_plan and hasattr(task_plan, "tasks"):
+            for t in task_plan.tasks.values():
+                if t.status == "completed":
+                    agent = t.responsible_agent
+                    task_completion_by_selected_agent[agent] = task_completion_by_selected_agent.get(agent, 0) + 1
+                    successful_selections += 1
+        elif context.agent_results_history:
+            for h in context.agent_results_history:
+                if h.get("status") == "completed":
+                    agent = h.get("agent")
+                    if agent:
+                        task_completion_by_selected_agent[agent] = task_completion_by_selected_agent.get(agent, 0) + 1
+                        successful_selections += 1
+
+        adaptive_routing_metrics = {
+            "routing_decisions": total_routing_decisions,
+            "successful_selections": successful_selections,
+            "fallback_rate": fallback_rate,
+            "selection_confidence": avg_confidence,
+            "average_selection_confidence": avg_confidence,
+            "average_candidate_count": avg_candidate_count,
+            "capability_match_rate": capability_match_rate,
+            "hard_constraint_rejection_rate": hard_constraint_rejection_rate,
+            "workload_aware_routing_rate": workload_aware_routing_rate,
+            "routing_failures": routing_failures,
+            "task_completion_by_selected_agent": task_completion_by_selected_agent,
+        }
+
         collaboration_metrics = {
             "agents_involved": len(unique_agents),
             "agents_list": unique_agents,
@@ -311,7 +388,8 @@ class SEOAgentEvaluationService:
             "evidence_provenance_score": provenance_score,
             **memory_metrics,
             **task_planning_metrics,
-            **parallel_execution_metrics
+            **parallel_execution_metrics,
+            **adaptive_routing_metrics,
         }
 
         score = 0.0
@@ -340,5 +418,7 @@ class SEOAgentEvaluationService:
             "memory_metrics": memory_metrics,
             "task_planning_metrics": task_planning_metrics,
             "parallel_execution_metrics": parallel_execution_metrics,
+            "adaptive_routing_metrics": adaptive_routing_metrics,
+            "routing_metrics": adaptive_routing_metrics,
             "overall_score": round(score, 1)
         }

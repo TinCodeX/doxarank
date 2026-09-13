@@ -93,6 +93,8 @@ class SEOStrategyAgent(BaseSpecializedAgent):
 
         # Formulate recommendations based on investigation findings + strategy signals
         for inv in context.investigation_findings:
+            if not isinstance(inv, dict):
+                continue
             rec_actions = inv.get("recommended_actions", [])
             for rec in rec_actions:
                 act_type = rec.get("action_type")

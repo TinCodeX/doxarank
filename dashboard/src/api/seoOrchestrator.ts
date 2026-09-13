@@ -70,6 +70,7 @@ export interface CollaborationStateInfo {
   memory_summary?: SharedMemorySummary;
   task_plan_summary?: TaskPlanSummary;
   parallel_batches?: ParallelBatchInfo[];
+  routing_decisions?: Array<Record<string, any>>;
 }
 
 export interface ParallelBatchInfo {
@@ -79,14 +80,15 @@ export interface ParallelBatchInfo {
   concurrency_limit: number;
   overlap_detected?: boolean;
   overlap_duration_ms?: number;
+  duration_ms?: number;
+  completed_at?: string | null;
   task_timings?: Record<
     string,
     {
-      task_id: string;
-      responsible_agent: string;
+      agent_name: string;
+      duration_ms: number;
       start_time: number;
       end_time: number;
-      duration_ms: number;
       status: string;
     }
   >;
@@ -118,6 +120,7 @@ export interface OrchestrationResponse {
   handoff_history?: AgentHandoffItem[];
   collaboration_state?: CollaborationStateInfo;
   parallel_batches?: ParallelBatchInfo[];
+  routing_decisions?: Array<Record<string, any>>;
   shared_memory?: {
     summary?: SharedMemorySummary;
     facts?: Array<Record<string, any>>;

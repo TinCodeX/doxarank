@@ -104,6 +104,9 @@ class SharedContext:
     # Phase 5.4 Parallel Agent Execution & Bounded Batch Scheduling
     parallel_batches: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Phase 5.5 Adaptive Agent Coordination & Dynamic Agent Selection
+    routing_decisions: List[Dict[str, Any]] = field(default_factory=list)
+
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
     current_agent: Optional[str] = None
@@ -149,6 +152,7 @@ class SharedContext:
             "shared_memory": self.shared_memory.to_dict() if hasattr(self.shared_memory, "to_dict") else self.shared_memory,
             "task_plan": self.task_plan.to_dict() if hasattr(self.task_plan, "to_dict") else self.task_plan,
             "parallel_batches": self.parallel_batches,
+            "routing_decisions": self.routing_decisions,
             "agent_results_history": self.agent_results_history,
             "current_agent": self.current_agent,
             "status": self.status,
@@ -204,6 +208,11 @@ class BaseSpecializedAgent(ABC):
 
         logger.info(f"[{self.name}] Executing authorized tool '{tool_name}' for project #{self.project.id}")
         return self.registry.execute(tool_name=tool_name, project=self.project, arguments=arguments or {})
+
+    def get_capability_profile(self) -> Any:
+        """Retrieve the capability profile for this agent (Milestone 5.5)."""
+        from apps.seo.services.agents.adaptive_selector import CANONICAL_CAPABILITY_PROFILES
+        return CANONICAL_CAPABILITY_PROFILES.get(self.name)
 
     def _emit_event(
         self,

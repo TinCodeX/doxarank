@@ -25,6 +25,8 @@ from .task_planner import AgentTask, TaskPlan, TaskStatus
 
 logger = logging.getLogger(__name__)
 
+_sqlite_execution_lock = threading.RLock()
+
 
 @dataclass
 class TaskExecutionTiming:
@@ -159,7 +161,10 @@ class ParallelBatchExecutor:
         batch.status = "running"
 
         result = BatchExecutionResult(batch=batch, handoffs=handoffs)
+        from django.db import connection
         num_workers = min(len(tasks), self.max_parallel_tasks)
+        if connection.vendor == 'sqlite' and getattr(connection, 'in_atomic_block', False):
+            num_workers = 1
 
         def _execute_single_task(
             task: AgentTask,
@@ -199,81 +204,89 @@ class ParallelBatchExecutor:
             start_mono = time.monotonic()
             start_iso = timezone.now().isoformat()
 
-            try:
-                if threading.current_thread() is not threading.main_thread():
-                    from django.db import close_old_connections
-                    close_old_connections()
-                # Pre-execution validation
-                AgentHandoffValidator.validate(handoff, expected_project_id=context.project_id)
+            from django.db import connection, connections
+            is_sqlite = (connection.vendor == 'sqlite')
 
-                agent_result = agent.run(task_context, handoff=handoff)
-                end_mono = time.monotonic()
-                end_iso = timezone.now().isoformat()
-                dur_ms = int((end_mono - start_mono) * 1000)
+            def _do_execute():
+                try:
+                    if threading.current_thread() is not threading.main_thread():
+                        connections.close_all()
+                    # Pre-execution validation
+                    AgentHandoffValidator.validate(handoff, expected_project_id=context.project_id)
 
-                # Synchronize any agent mutations on task_context back to shared context
-                if task_context is not context:
-                    if getattr(task_context, "created_plan_id", None):
-                        context.created_plan_id = task_context.created_plan_id
-                    if getattr(task_context, "action_plan_id", None):
-                        context.action_plan_id = task_context.action_plan_id
-                    if getattr(task_context, "action_proposals", None):
-                        for ap in task_context.action_proposals:
-                            if ap not in context.action_proposals:
-                                context.action_proposals.append(ap)
-                    if getattr(task_context, "investigation_findings", None):
-                        for inv in task_context.investigation_findings:
-                            if inv not in context.investigation_findings:
-                                context.investigation_findings.append(inv)
-                    if getattr(task_context, "strategy_signals", None):
-                        context.strategy_signals.update(task_context.strategy_signals)
+                    agent_result = agent.run(task_context, handoff=handoff)
+                    end_mono = time.monotonic()
+                    end_iso = timezone.now().isoformat()
+                    dur_ms = int((end_mono - start_mono) * 1000)
 
-                timing = TaskExecutionTiming(
-                    task_id=task.task_id,
-                    agent_name=agent.name,
-                    start_time=start_mono,
-                    end_time=end_mono,
-                    duration_ms=dur_ms,
-                    start_iso=start_iso,
-                    end_iso=end_iso
-                )
-                error_msg = None
-                if agent_result.status == "failed":
-                    error_msg = "; ".join(agent_result.errors) if agent_result.errors else "Agent execution failed."
+                    # Synchronize any agent mutations on task_context back to shared context
+                    if task_context is not context:
+                        if getattr(task_context, "created_plan_id", None):
+                            context.created_plan_id = task_context.created_plan_id
+                        if getattr(task_context, "action_plan_id", None):
+                            context.action_plan_id = task_context.action_plan_id
+                        if getattr(task_context, "action_proposals", None):
+                            for ap in task_context.action_proposals:
+                                if ap not in context.action_proposals:
+                                    context.action_proposals.append(ap)
+                        if getattr(task_context, "investigation_findings", None):
+                            for inv in task_context.investigation_findings:
+                                if inv not in context.investigation_findings:
+                                    context.investigation_findings.append(inv)
+                        if getattr(task_context, "strategy_signals", None):
+                            context.strategy_signals.update(task_context.strategy_signals)
 
-                return task.task_id, agent_result, timing, error_msg
+                    timing = TaskExecutionTiming(
+                        task_id=task.task_id,
+                        agent_name=agent.name,
+                        start_time=start_mono,
+                        end_time=end_mono,
+                        duration_ms=dur_ms,
+                        start_iso=start_iso,
+                        end_iso=end_iso
+                    )
+                    error_msg = None
+                    if agent_result.status == "failed":
+                        error_msg = "; ".join(agent_result.errors) if agent_result.errors else "Agent execution failed."
 
-            except Exception as exc:
-                end_mono = time.monotonic()
-                end_iso = timezone.now().isoformat()
-                dur_ms = int((end_mono - start_mono) * 1000)
-                err = f"Task execution exception: {str(exc)}"
-                logger.exception(f"[{task.task_id}] {err}")
+                    return task.task_id, agent_result, timing, error_msg
 
-                failed_res = AgentResult(
-                    agent=agent.name,
-                    status="failed",
-                    confidence=0.0,
-                    errors=[err],
-                    duration_ms=dur_ms
-                )
-                timing = TaskExecutionTiming(
-                    task_id=task.task_id,
-                    agent_name=agent.name,
-                    start_time=start_mono,
-                    end_time=end_mono,
-                    duration_ms=dur_ms,
-                    start_iso=start_iso,
-                    end_iso=end_iso
-                )
-                return task.task_id, failed_res, timing, err
-            finally:
-                if threading.current_thread() is not threading.main_thread():
-                    try:
-                        from django.db import close_old_connections
-                        close_old_connections()
-                    except Exception:
-                        pass
+                except Exception as exc:
+                    end_mono = time.monotonic()
+                    end_iso = timezone.now().isoformat()
+                    dur_ms = int((end_mono - start_mono) * 1000)
+                    err = f"Task execution exception: {str(exc)}"
+                    logger.exception(f"[{task.task_id}] {err}")
+
+                    failed_res = AgentResult(
+                        agent=agent.name,
+                        status="failed",
+                        confidence=0.0,
+                        errors=[err],
+                        duration_ms=dur_ms
+                    )
+                    timing = TaskExecutionTiming(
+                        task_id=task.task_id,
+                        agent_name=agent.name,
+                        start_time=start_mono,
+                        end_time=end_mono,
+                        duration_ms=dur_ms,
+                        start_iso=start_iso,
+                        end_iso=end_iso
+                    )
+                    return task.task_id, failed_res, timing, err
+                finally:
+                    if threading.current_thread() is not threading.main_thread():
+                        try:
+                            connections.close_all()
+                        except Exception:
+                            pass
+
+            if is_sqlite:
+                with _sqlite_execution_lock:
+                    return _do_execute()
+            else:
+                return _do_execute()
 
         # If single task, execute synchronously on current thread to preserve caller transaction & eliminate overhead
         if len(tasks) == 1:

@@ -144,6 +144,14 @@ class AgentEventType(str, Enum):
     SEO_PARALLEL_BATCH_PARTIAL_FAILURE = "seo.agent.parallel.batch.partial_failure"
     SEO_PARALLEL_CONCURRENCY_LIMITED = "seo.agent.parallel.concurrency.limited"
 
+    # Adaptive Agent Coordination & Dynamic Agent Selection (Milestone 5.5)
+    SEO_AGENT_SELECTION_STARTED = "seo.agent.selection.started"
+    SEO_AGENT_CANDIDATE_EVALUATED = "seo.agent.candidate.evaluated"
+    SEO_AGENT_CANDIDATE_REJECTED = "seo.agent.candidate.rejected"
+    SEO_AGENT_SELECTED = "seo.agent.selected"
+    SEO_AGENT_FALLBACK = "seo.agent.fallback"
+    SEO_AGENT_SELECTION_FAILED = "seo.agent.selection.failed"
+
 
 
 
@@ -269,6 +277,12 @@ class InMemoryEventPublisher(AgentEventPublisher):
         """Retrieve list of event type strings."""
         with self._lock:
             return [e.event_type for e in self.get_events(run_id)]
+
+    def get_events_by_type(self, event_type: Any) -> List[AgentEvent]:
+        """Retrieve events matching a specific event type (Enum or string)."""
+        target = event_type.value if hasattr(event_type, "value") else str(event_type)
+        with self._lock:
+            return [e for e in self._events if e.event_type == target]
 
     def clear(self) -> None:
         """Clear all stored events."""

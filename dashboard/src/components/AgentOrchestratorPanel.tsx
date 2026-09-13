@@ -1009,6 +1009,26 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         <div style={{ fontSize: '12px', color: '#334155' }}>
                           <strong>Objective:</strong> {t.objective}
                         </div>
+                        {t.metadata?.routing_decision && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', fontSize: '11px', color: '#475569', flexWrap: 'wrap' }}>
+                            <span style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              🎯 {Math.round((t.metadata.routing_decision.confidence || 0) * 100)}% Conf
+                            </span>
+                            <span style={{ backgroundColor: '#f1f5f9', padding: '1px 6px', borderRadius: '4px' }}>
+                              Score: {t.metadata.routing_decision.score}
+                            </span>
+                            {t.metadata.routing_decision.reasons && t.metadata.routing_decision.reasons.length > 0 && (
+                              <span style={{ color: '#64748b', fontStyle: 'italic' }}>
+                                Reason: {t.metadata.routing_decision.reasons.slice(0, 2).join(' • ')}
+                              </span>
+                            )}
+                            {t.metadata.routing_decision.fallback_attempt > 0 && (
+                              <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                ⚠️ Fallback (Att #{t.metadata.routing_decision.fallback_attempt})
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {t.dependencies && t.dependencies.length > 0 && (
                           <div style={{ fontSize: '11px', color: '#64748b' }}>
                             <strong>Dependencies:</strong> {t.dependencies.join(', ')}
@@ -1130,6 +1150,83 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Phase 5.5: Adaptive Agent Coordination & Routing Card */}
+          {((orchestrationResult.routing_decisions && orchestrationResult.routing_decisions.length > 0) ||
+            (orchestrationResult.collaboration_state?.routing_decisions && orchestrationResult.collaboration_state.routing_decisions.length > 0)) && (
+            <div
+              id="adaptive-agent-routing-card"
+              style={{
+                marginTop: '16px',
+                padding: '16px',
+                backgroundColor: '#f0fdf4',
+                borderRadius: '10px',
+                border: '1px solid #bbf7d0',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>🎯</span>
+                  <strong style={{ fontSize: '14px', color: '#14532d' }}>Adaptive Agent Selection & Routing (Phase 5.5)</strong>
+                  <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                    Deterministic & Explainable
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                    Decisions: {(orchestrationResult.routing_decisions || orchestrationResult.collaboration_state?.routing_decisions || []).length}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(orchestrationResult.routing_decisions || orchestrationResult.collaboration_state?.routing_decisions || []).map((dec: any, idx: number) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #dcfce7',
+                      backgroundColor: '#ffffff',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{dec.task_id}</span>
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
+                          {dec.selected_agent}
+                        </span>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#ecfdf5', color: '#065f46', fontWeight: 700 }}>
+                          {Math.round((dec.confidence || 0) * 100)}% Confidence
+                        </span>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                          Score: {dec.score}
+                        </span>
+                      </div>
+                      {dec.fallback_attempt > 0 && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#fff7ed', color: '#c2410c', fontWeight: 700 }}>
+                          ⚠️ Fallback Attempt #{dec.fallback_attempt}
+                        </span>
+                      )}
+                    </div>
+                    {dec.reasons && dec.reasons.length > 0 && (
+                      <div style={{ fontSize: '11px', color: '#475569' }}>
+                        <strong>Reason:</strong> {dec.reasons.join(' • ')}
+                      </div>
+                    )}
+                    {dec.rejected_candidates && dec.rejected_candidates.length > 0 && (
+                      <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+                        Rejected: {dec.rejected_candidates.map((r: any) => `${r.agent} (${r.reason})`).join('; ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
