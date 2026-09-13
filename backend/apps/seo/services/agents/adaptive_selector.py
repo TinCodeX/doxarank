@@ -22,6 +22,7 @@ from apps.seo.services.agent_events import (
 )
 from apps.seo.services.tool_registry import ToolRegistry, get_tool_registry
 from .agent_handoff import KNOWN_AGENTS, KNOWN_AGENT_ALLOWED_TOOLS
+from .agent_learning import AgentPerformanceStore, HistoricalSignal
 from .task_planner import AgentTask, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -318,6 +319,7 @@ class CandidateScoreBreakdown:
     workload_score: float
     historical_score: float = 0.0
     reasons: List[str] = field(default_factory=list)
+    historical_signal_details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -330,6 +332,7 @@ class CandidateScoreBreakdown:
             "workload_score": round(self.workload_score, 4),
             "historical_score": round(self.historical_score, 4),
             "reasons": list(self.reasons),
+            "historical_signal_details": dict(self.historical_signal_details),
         }
 
 
@@ -414,7 +417,8 @@ class AdaptiveAgentSelector:
         publisher: Optional[AgentEventPublisher] = None,
         workload_tracker: Optional[WorkloadTracker] = None,
         min_confidence_threshold: float = 0.50,
-        max_concurrency: int = 3
+        max_concurrency: int = 3,
+        performance_store: Optional[AgentPerformanceStore] = None
     ):
         self.project_id = project_id
         self.tool_registry = tool_registry or get_tool_registry()
@@ -422,6 +426,7 @@ class AdaptiveAgentSelector:
         self.workload_tracker = workload_tracker or WorkloadTracker()
         self.min_confidence_threshold = min_confidence_threshold
         self.max_concurrency = max(1, max_concurrency)
+        self.performance_store = performance_store or AgentPerformanceStore.get_instance()
         self.profiles: Dict[str, AgentCapabilityProfile] = dict(CANONICAL_CAPABILITY_PROFILES)
 
     def register_profile(self, profile: AgentCapabilityProfile) -> None:
@@ -502,6 +507,25 @@ class AdaptiveAgentSelector:
             is_mutating = True
             risk_level = "high"
 
+        task_category = meta.get("task_type") or meta.get("category")
+        if not task_category:
+            if is_verification:
+                task_category = "verification"
+            elif is_investigation:
+                task_category = "investigation"
+            elif is_tech_audit:
+                task_category = "audit"
+            elif is_crawl_in_obj:
+                task_category = "crawl"
+            elif is_ranking_keyword:
+                task_category = "research"
+            elif any(matches_token_or_phrase(p, norm_text, text_tokens) for p in ["strategy", "prioritiz"]):
+                task_category = "strategy"
+            elif any(matches_token_or_phrase(p, norm_text, text_tokens) for p in ["action", "plan", "remediation"]):
+                task_category = "action_planning"
+            else:
+                task_category = "general"
+
         return {
             "required_capabilities": req_caps,
             "inferred_capabilities": inferred_caps,
@@ -514,6 +538,7 @@ class AdaptiveAgentSelector:
             "norm_obj": norm_obj,
             "text_tokens": text_tokens,
             "obj_tokens": obj_tokens,
+            "task_category": task_category,
         }
 
     def evaluate_hard_constraints(
@@ -607,10 +632,12 @@ class AdaptiveAgentSelector:
         profile: AgentCapabilityProfile,
         task: AgentTask,
         task_reqs: Dict[str, Any],
-        historical_success_rate: float = 0.0
+        historical_success_rate: Optional[float] = None,
+        context_project_id: Optional[int] = None
     ) -> CandidateScoreBreakdown:
         """
         Compute explicit, deterministic, and explainable multi-factor candidate score.
+        Incorporates bounded advisory historical performance signal (Milestone 5.6).
         """
         reasons = []
         norm_text = task_reqs.get("norm_text", normalize_text(task_reqs.get("text", "")))
@@ -683,8 +710,34 @@ class AdaptiveAgentSelector:
         else:
             reasons.append("workload_idle")
 
-        # 6. Soft Historical Performance (bounded bonus)
-        hist_score = min(0.05, max(0.0, historical_success_rate * 0.05))
+        # 6. Soft Historical Performance (Milestone 5.6: Bounded signal <= 0.08)
+        task_cat = task_reqs.get("task_category", "general")
+        target_pid = context_project_id or self.project_id
+        hist_signal = self.performance_store.compute_historical_signal(
+            agent_name=profile.agent_name,
+            task_type=task_cat,
+            project_id=target_pid
+        )
+
+        hist_signal_details: Dict[str, Any] = {}
+        if historical_success_rate is not None and not hist_signal.signal_applied:
+            # Legacy parameter compatibility (e.g. tests passing explicit rates)
+            hist_score = min(0.05, max(0.0, historical_success_rate * 0.05))
+            if historical_success_rate > 0.0:
+                reasons.append(f"historical_performance_lift: +{hist_score:.3f}")
+            hist_signal_details = {
+                "legacy_rate": historical_success_rate,
+                "score_contribution": hist_score,
+                "signal_applied": True,
+            }
+        elif hist_signal.signal_applied:
+            hist_score = hist_signal.score_contribution
+            reasons.append(f"historical_performance: {hist_signal.explanation}")
+            hist_signal_details = hist_signal.to_dict()
+        else:
+            hist_score = 0.0
+            reasons.append(f"historical_signal_ignored: {hist_signal.explanation}")
+            hist_signal_details = hist_signal.to_dict()
 
         total_score = (
             (self.WEIGHT_CAPABILITY * cap_score) +
@@ -705,7 +758,8 @@ class AdaptiveAgentSelector:
             tool_score=tool_score,
             workload_score=workload_score,
             historical_score=hist_score,
-            reasons=reasons
+            reasons=reasons,
+            historical_signal_details=hist_signal_details
         )
 
     def _calculate_confidence(
@@ -774,6 +828,10 @@ class AdaptiveAgentSelector:
         """
         corr_id = correlation_id or task.correlation_id or str(uuid.uuid4())
         task_reqs = self._infer_task_requirements(task)
+        if task.metadata is None:
+            task.metadata = {}
+        if not task.metadata.get("task_type"):
+            task.metadata["task_type"] = task_reqs.get("task_category", "general")
 
         # Candidate universe: exclude supervisor from worker candidates unless explicitly specified
         candidate_names = available_agents or [a for a in KNOWN_AGENTS if a != "seo_supervisor"]
@@ -827,14 +885,37 @@ class AdaptiveAgentSelector:
                 continue
 
             # Compute soft score for eligible candidate
-            hist_rate = historical_stats.get(agent_name, 0.0)
+            hist_rate = historical_stats.get(agent_name) if historical_stats else None
             score_breakdown = self.compute_candidate_score(
                 profile=profile,
                 task=task,
                 task_reqs=task_reqs,
-                historical_success_rate=hist_rate
+                historical_success_rate=hist_rate,
+                context_project_id=context_project_id
             )
             eligible_breakdowns.append(score_breakdown)
+
+            # Emit historical learning signal telemetry
+            if score_breakdown.historical_signal_details.get("signal_applied", False):
+                self._emit_telemetry(
+                    AgentEventType.SEO_HISTORICAL_SIGNAL_APPLIED,
+                    payload={
+                        "task_id": task.task_id,
+                        "agent": agent_name,
+                        "signal": score_breakdown.historical_signal_details
+                    },
+                    correlation_id=corr_id
+                )
+            else:
+                self._emit_telemetry(
+                    AgentEventType.SEO_HISTORICAL_SIGNAL_IGNORED,
+                    payload={
+                        "task_id": task.task_id,
+                        "agent": agent_name,
+                        "reason": score_breakdown.historical_signal_details.get("explanation", "insufficient evidence")
+                    },
+                    correlation_id=corr_id
+                )
 
             self._emit_telemetry(
                 AgentEventType.SEO_AGENT_CANDIDATE_EVALUATED,

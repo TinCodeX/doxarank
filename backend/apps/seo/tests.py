@@ -14911,3 +14911,950 @@ class SEOAdaptiveAgentCoordinationTests(TransactionTestCase):
         plan_decision = selector.select_agent(task=plan_task)
         self.assertEqual(plan_decision.selected_agent, "seo_action_planner")
         self.assertGreater(plan_decision.score, 0.75)
+
+
+class SEOAgentLearningTests(TransactionTestCase):
+    """
+    Milestone 5.6 Test Suite: Agent Learning & Performance Optimization.
+    Verifies:
+    1. Performance record creation, serialization, and sanitization.
+    2. Deterministic statistical metric calculations (success, verification, reassignment, latency, calibration).
+    3. Historical performance influences eligible-agent ranking with soft preference.
+    4. Low-performing agent penalized safely without negative underflow.
+    5. Cold-start behavior when insufficient history falls back to baseline routing.
+    6. Minimum sample threshold enforced at exact observation boundaries.
+    7. Historical soft signal is strictly bounded within [-0.08, +0.08].
+    8. Hard constraints always override historical performance scores.
+    9. Unauthorized agent cannot become eligible via high historical score.
+    10. Historical learning cannot grant ToolRegistry or MCP permissions.
+    11. HITL governance remains mandatory for mutating tasks regardless of historical scores.
+    12. Human rejection is classified as human_rejection and not treated as simple agent failure.
+    13. Safety-blocked tasks are classified correctly and do not degrade capability standing.
+    14. Multi-tenant isolation: private tenant data (URLs, keywords, queries) is never leaked.
+    15. Explainability: routing decisions state historical metrics when applied or reason when ignored.
+    16. Complete deterministic runtime learning feedback loop demonstrated E2E.
+    17. Safe fallback reassignment updates learning records for both initial worker and fallback worker.
+    18. Verification failure updates learning records with verification_failure category.
+    19. Runtime-derived evaluation metrics computed by SEOAgentEvaluationService.
+    20. Read-only API endpoints return structured performance stats and enforce project authorization.
+    21. Telemetry lifecycle events emitted and sensitive credentials scrubbed.
+    22. Regression across Milestones 5.1–5.5 remains 100% passing and operational.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore
+        AgentPerformanceStore.get_instance().reset()
+
+        self.client = APIClient()
+        self.user_a = User.objects.create_user(
+            email='learner_a@doxarank.com',
+            password='Password123!',
+            first_name='Learn',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='learner_b@doxarank.com',
+            password='Password123!',
+            first_name='Learn',
+            last_name='B'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Alpha Learning Project',
+            website_url='https://alpha-learning.io'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Beta Learning Project',
+            website_url='https://beta-learning.io'
+        )
+
+    def tearDown(self):
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore
+        AgentPerformanceStore.get_instance().reset()
+        super().tearDown()
+
+    def test_01_performance_record_creation(self):
+        """1. AgentPerformanceRecord creation, serialization, deserialization, and payload sanitization."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, FailureCategory
+
+        rec = AgentPerformanceRecord(
+            agent_name="seo_researcher",
+            task_id="t_learn_01",
+            task_type="research",
+            task_objective="Analyze keyword rankings for competitor domain",
+            project_id=self.project_a.id,
+            success=True,
+            execution_duration_ms=450,
+            predicted_confidence=0.92,
+            verification_status="verified",
+            reassignment_count=0,
+            tool_usage=["get_search_console_performance", "get_keyword_rankings"],
+            failure_category=FailureCategory.NONE,
+            routing_metadata={"api_key": "super_secret_key_123", "score": 0.88}
+        )
+
+        d = rec.to_dict()
+        self.assertEqual(d["agent_name"], "seo_researcher")
+        self.assertEqual(d["task_type"], "research")
+        self.assertTrue(d["success"])
+        self.assertEqual(d["verification_status"], "verified")
+        # Ensure sensitive tokens in routing_metadata are sanitized
+        self.assertEqual(d["routing_metadata"]["api_key"], "***REDACTED***")
+
+        roundtrip = AgentPerformanceRecord.from_dict(d)
+        self.assertEqual(roundtrip.agent_name, "seo_researcher")
+        self.assertEqual(roundtrip.task_id, "t_learn_01")
+        self.assertEqual(roundtrip.failure_category, FailureCategory.NONE)
+
+    def test_02_deterministic_metric_calculations(self):
+        """2. Deterministic mathematical metric calculations from historical records."""
+        from apps.seo.services.agents.agent_learning import (
+            AgentPerformanceRecord, AgentPerformanceStore, FailureCategory
+        )
+
+        store = AgentPerformanceStore.get_instance()
+        # Create 10 records: 8 successes, 2 failures, 5 verifications (4 passed, 1 failed), 2 reassignments
+        for i in range(8):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher",
+                task_id=f"t_succ_{i}",
+                task_type="research",
+                project_id=self.project_a.id,
+                success=True,
+                execution_duration_ms=200 + (i * 10),
+                predicted_confidence=0.90,
+                verification_status="verified" if i < 4 else "none",
+                reassignment_count=1 if i == 0 else 0
+            ))
+        for i in range(2):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher",
+                task_id=f"t_fail_{i}",
+                task_type="research",
+                project_id=self.project_a.id,
+                success=False,
+                execution_duration_ms=500,
+                predicted_confidence=0.60,
+                verification_status="failed" if i == 0 else "none",
+                reassignment_count=1 if i == 0 else 0,
+                failure_category=FailureCategory.AGENT_FAILURE,
+                failure_reason="Data fetch timeout"
+            ))
+
+        stats = store.get_agent_stats("seo_researcher", task_type="research", project_id=self.project_a.id)
+        self.assertEqual(stats.sample_size, 10)
+        self.assertEqual(stats.successful_tasks, 8)
+        self.assertEqual(stats.failed_tasks, 2)
+        self.assertEqual(stats.success_rate, 0.80)
+        self.assertEqual(stats.failure_rate, 0.20)
+        self.assertEqual(stats.verification_attempts, 5)
+        self.assertEqual(stats.verified_successes, 4)
+        self.assertEqual(stats.verification_success_rate, 0.80)
+        self.assertEqual(stats.reassignment_rate, 0.20)
+        self.assertTrue(stats.has_sufficient_evidence)
+        self.assertGreater(stats.routing_quality_score, 0.70)
+
+    def test_03_historical_performance_influences_eligible_ranking(self):
+        """3. Historical performance provides soft preference to high-performing eligible candidate."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        # Agent A has 60% success rate (3/5)
+        for i in range(5):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_investigator",
+                task_id=f"t_inv_{i}",
+                task_type="research",
+                project_id=self.project_a.id,
+                success=(i < 3),
+                predicted_confidence=0.75
+            ))
+        # Agent B has 100% success rate (5/5)
+        for i in range(5):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher",
+                task_id=f"t_res_{i}",
+                task_type="research",
+                project_id=self.project_a.id,
+                success=True,
+                predicted_confidence=0.95
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_rank_03",
+            objective="Gather search console keyword rankings",
+            description="Empirical research on keyword rankings",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-rank-03"
+        )
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_researcher")
+        # Verify score breakdown shows historical score lift
+        res_breakdown = decision.score_breakdowns["seo_researcher"]
+        inv_breakdown = decision.score_breakdowns["seo_investigator"]
+        self.assertGreater(res_breakdown["historical_score"], inv_breakdown["historical_score"])
+        self.assertTrue(any("historical_performance:" in r for r in decision.reasons))
+
+    def test_04_low_performing_agent_penalized_safely(self):
+        """4. Candidate with repeated failures receives bounded soft penalty without score underflow."""
+        from apps.seo.services.agents.agent_learning import (
+            AgentPerformanceRecord, AgentPerformanceStore, FailureCategory
+        )
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        # 5 straight failures with reassignments
+        for i in range(5):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher",
+                task_id=f"t_bad_{i}",
+                task_type="research",
+                project_id=self.project_a.id,
+                success=False,
+                reassignment_count=1,
+                failure_category=FailureCategory.AGENT_FAILURE,
+                failure_reason="Persistent API crash"
+            ))
+
+        signal = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertTrue(signal.signal_applied)
+        self.assertLess(signal.score_contribution, 0.0)
+        self.assertGreaterEqual(signal.score_contribution, -0.08)
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_pen_04",
+            objective="Perform keyword research",
+            description="Keyword research query",
+            responsible_agent="seo_supervisor"
+        )
+        decision = selector.select_agent(task=task)
+        # Even with penalty, score remains bounded >= 0.0
+        self.assertGreaterEqual(decision.score, 0.0)
+
+    def test_05_cold_start_insufficient_history_falls_back_to_baseline(self):
+        """5. Insufficient historical samples trigger cold-start fallback to baseline scoring."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        # Only 1 observation (below min_sample_threshold = 3)
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher",
+            task_id="t_one_05",
+            task_type="research",
+            project_id=self.project_a.id,
+            success=True
+        ))
+
+        signal = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertFalse(signal.signal_applied)
+        self.assertEqual(signal.score_contribution, 0.0)
+        self.assertIn("insufficient sample size", signal.explanation)
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_cold_05",
+            objective="Gather keyword rankings and search intent data",
+            description="Collect empirical ranking evidence",
+            responsible_agent="seo_supervisor"
+        )
+        decision = selector.select_agent(task=task)
+        # Selected agent reasons should explicitly explain cold-start signal bypass
+        self.assertTrue(any("historical_signal_ignored:" in r for r in decision.reasons))
+
+    def test_06_minimum_sample_threshold_enforced(self):
+        """6. Sample threshold boundary is enforced deterministically (2 = ignored, 3 = active)."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+        store.min_sample_threshold = 3
+
+        # 0 observations
+        sig0 = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertFalse(sig0.signal_applied)
+
+        # 1 observation
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher", task_id="t_1", task_type="research", project_id=self.project_a.id, success=True
+        ))
+        sig1 = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertFalse(sig1.signal_applied)
+
+        # 2 observations
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher", task_id="t_2", task_type="research", project_id=self.project_a.id, success=True
+        ))
+        sig2 = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertFalse(sig2.signal_applied)
+
+        # 3 observations -> threshold satisfied
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher", task_id="t_3", task_type="research", project_id=self.project_a.id, success=True
+        ))
+        sig3 = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertTrue(sig3.signal_applied)
+        self.assertGreater(sig3.score_contribution, 0.0)
+
+    def test_07_historical_signal_is_strictly_bounded(self):
+        """7. Historical soft score contribution is strictly bounded within [-0.08, +0.08]."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+        # 50 consecutive perfect outcomes
+        for i in range(50):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="perfect_agent", task_id=f"t_p_{i}", task_type="research", project_id=self.project_a.id, success=True, verification_status="verified"
+            ))
+        sig_pos = store.compute_historical_signal("perfect_agent", "research", project_id=self.project_a.id)
+        self.assertLessEqual(sig_pos.score_contribution, 0.08)
+
+        # 50 consecutive failed outcomes with 100% reassignments
+        for i in range(50):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="failing_agent", task_id=f"t_f_{i}", task_type="research", project_id=self.project_a.id, success=False, reassignment_count=2
+            ))
+        sig_neg = store.compute_historical_signal("failing_agent", "research", project_id=self.project_a.id)
+        self.assertGreaterEqual(sig_neg.score_contribution, -0.08)
+
+    def test_08_hard_constraints_always_override_historical_performance(self):
+        """8. Hard safety constraints always override high historical performance scores."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        # Researcher has 100% success rate
+        for i in range(10):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id=f"t_r_{i}", task_type="action_planning", project_id=self.project_a.id, success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        # Task requires action planning and mutation execution
+        task = AgentTask(
+            task_id="t_mut_08",
+            objective="Synthesize action plan and execute code remediation",
+            description="Mutating remediation fix",
+            responsible_agent="seo_supervisor",
+            metadata={"required_capabilities": ["action_planning"], "is_mutating": True, "risk_level": "high"}
+        )
+        decision = selector.select_agent(task=task)
+        # seo_researcher must be rejected despite 100% score because it lacks action_planning and HITL
+        self.assertNotEqual(decision.selected_agent, "seo_researcher")
+        self.assertEqual(decision.selected_agent, "seo_action_planner")
+        rejected_names = [r["agent"] for r in decision.rejected_candidates]
+        self.assertIn("seo_researcher", rejected_names)
+
+    def test_09_unauthorized_agent_cannot_become_eligible_via_learning(self):
+        """9. An agent lacking required capabilities cannot become eligible via positive learning."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        for i in range(10):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_verifier", task_id=f"t_v_{i}", task_type="investigation", project_id=self.project_a.id, success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_diag_09",
+            objective="Investigate root cause of traffic drop",
+            description="Root cause diagnosis",
+            responsible_agent="seo_supervisor",
+            metadata={"required_capabilities": ["root_cause_analysis"]}
+        )
+        decision = selector.select_agent(task=task)
+        self.assertEqual(decision.selected_agent, "seo_investigator")
+        rejected_reasons = {r["agent"]: r["hard_constraint"] for r in decision.rejected_candidates}
+        self.assertEqual(rejected_reasons.get("seo_verifier"), "missing_required_capability")
+
+    def test_10_learning_cannot_grant_tool_permissions(self):
+        """10. Learning cannot grant ToolRegistry permissions or bypass tool allowlists."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        for i in range(10):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id=f"t_tp_{i}", task_type="action_planning", project_id=self.project_a.id, success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_tool_10",
+            objective="Plan SEO action proposals",
+            description="Draft proposals",
+            responsible_agent="seo_supervisor",
+            metadata={"required_tools": ["propose_seo_action"]}
+        )
+        decision = selector.select_agent(task=task)
+        # seo_researcher forbidden/unauthorized for propose_seo_action
+        self.assertNotEqual(decision.selected_agent, "seo_researcher")
+        rejected_tools = [r["agent"] for r in decision.rejected_candidates if r["hard_constraint"] in ["tool_permission_denied", "forbidden_tool_violation"]]
+        self.assertIn("seo_researcher", rejected_tools)
+
+    def test_11_hitl_remains_mandatory_for_mutations(self):
+        """11. HITL governance invariant cannot be overridden by historical performance."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        for i in range(10):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_investigator", task_id=f"t_hitl_{i}", task_type="action_planning", project_id=self.project_a.id, success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_hitl_11",
+            objective="Apply production fix to canonical tags",
+            description="Mutating action",
+            responsible_agent="seo_supervisor",
+            metadata={"is_mutating": True, "required_capabilities": ["action_planning"]}
+        )
+        decision = selector.select_agent(task=task)
+        # Only seo_action_planner has requires_hitl=True
+        self.assertEqual(decision.selected_agent, "seo_action_planner")
+
+    def test_12_human_rejection_is_not_agent_failure(self):
+        """12. Human rejection is classified distinctly and does not degrade agent capability success rate."""
+        from apps.seo.services.agents.agent_learning import (
+            AgentPerformanceRecord, AgentPerformanceStore, FailureCategory
+        )
+
+        store = AgentPerformanceStore.get_instance()
+        # 4 successful tasks
+        for i in range(4):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_action_planner", task_id=f"t_s_{i}", task_type="action_planning", project_id=self.project_a.id, success=True
+            ))
+        # 1 human rejection
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_action_planner", task_id="t_rej_12", task_type="action_planning", project_id=self.project_a.id,
+            success=False, failure_category=FailureCategory.HUMAN_REJECTION, failure_reason="User chose alternative strategy"
+        ))
+
+        stats = store.get_agent_stats("seo_action_planner", task_type="action_planning", project_id=self.project_a.id)
+        # Success rate remains 100% for evaluable operational tasks (4/4)
+        self.assertEqual(stats.success_rate, 1.0)
+        self.assertEqual(stats.failure_breakdown.get(FailureCategory.HUMAN_REJECTION.value), 1)
+
+    def test_13_safety_block_classified_correctly(self):
+        """13. Safety-blocked tasks do not degrade agent operational standing."""
+        from apps.seo.services.agents.agent_learning import (
+            AgentPerformanceRecord, AgentPerformanceStore, FailureCategory
+        )
+
+        store = AgentPerformanceStore.get_instance()
+        for i in range(4):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id=f"t_ok_{i}", task_type="research", project_id=self.project_a.id, success=True
+            ))
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher", task_id="t_block_13", task_type="research", project_id=self.project_a.id,
+            success=False, failure_category=FailureCategory.SAFETY_BLOCK, failure_reason="Tenant boundary constraint triggered"
+        ))
+
+        stats = store.get_agent_stats("seo_researcher", task_type="research", project_id=self.project_a.id)
+        self.assertEqual(stats.success_rate, 1.0)
+        self.assertEqual(stats.failure_breakdown.get(FailureCategory.SAFETY_BLOCK.value), 1)
+
+    def test_14_tenant_isolation_no_data_leakage(self):
+        """14. Tenant isolation ensures private data (URLs, keywords, queries) never leaks across tenants."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+        # Project A records with private client info
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher",
+            task_id="t_priv_14",
+            task_type="research",
+            task_objective="Investigate private-client-keyword for https://secret-alpha.com",
+            project_id=self.project_a.id,
+            success=True
+        ))
+
+        # Project B query
+        proj_b_records = store.get_records(project_id=self.project_b.id)
+        self.assertEqual(len(proj_b_records), 0)
+
+        # Global benchmarks: verify no private tenant URLs or text exist
+        global_stats = store.get_anonymized_global_stats()
+        text_dump = str(global_stats)
+        self.assertNotIn("secret-alpha.com", text_dump)
+        self.assertNotIn("private-client-keyword", text_dump)
+        self.assertEqual(global_stats["total_records"], 1)
+
+    def test_15_explainability_in_routing_decision(self):
+        """15. Routing decisions explain historical evidence when applied and state reasons when ignored."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        # Sufficient data for researcher
+        for i in range(5):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id=f"t_e_{i}", task_type="research", project_id=self.project_a.id, success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_expl_15",
+            objective="Gather search console keyword rankings",
+            description="Collect empirical ranking evidence",
+            responsible_agent="seo_supervisor"
+        )
+        decision = selector.select_agent(task=task)
+        # Winner includes historical evidence
+        self.assertTrue(any("historical_performance: historical_success: 100%" in r for r in decision.reasons))
+
+        # Runner-up with no data explains why historical signal was ignored
+        other_candidate = [c for c in decision.ranked_candidates if c != "seo_researcher"][0]
+        other_reasons = decision.score_breakdowns[other_candidate]["reasons"]
+        self.assertTrue(any("historical_signal_ignored: insufficient sample size" in r for r in other_reasons))
+
+    def test_16_complete_runtime_learning_feedback_loop(self):
+        """16. Complete runtime learning feedback loop: initial history -> selection -> execution -> update -> future decision."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        store = AgentPerformanceStore.get_instance()
+        # Seed initial history: Researcher = 100% (4/4), Investigator = 50% (2/4)
+        for i in range(4):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id=f"init_r_{i}", task_type="research", project_id=self.project_a.id, success=True
+            ))
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_investigator", task_id=f"init_i_{i}", task_type="research", project_id=self.project_a.id, success=(i < 2)
+            ))
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        plan = TaskPlan(project_id=self.project_a.id, goal="Feedback loop test", correlation_id="corr-loop-16")
+        task = AgentTask(
+            task_id="t_loop_16",
+            objective="Research keyword query benchmarks",
+            description="Collect empirical ranking data",
+            responsible_agent="seo_supervisor",
+            correlation_id="corr-loop-16"
+        )
+        plan.add_task(task)
+
+        # 1. Execute task
+        result_ctx = supervisor.orchestrate(task="Feedback test", correlation_id="corr-loop-16", task_plan=plan)
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("t_loop_16").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("t_loop_16").responsible_agent, "seo_researcher")
+
+        # 2. Verify learning record was automatically created by supervisor
+        records = store.get_records(project_id=self.project_a.id, agent_name="seo_researcher", task_type="research")
+        self.assertEqual(len(records), 5)  # 4 initial + 1 new execution
+
+        # 3. Next equivalent task sees updated evidence (sample size 5)
+        new_signal = store.compute_historical_signal("seo_researcher", "research", project_id=self.project_a.id)
+        self.assertEqual(new_signal.sample_size, 5)
+        self.assertEqual(new_signal.success_rate, 1.0)
+
+    def test_17_fallback_reassignment_updates_learning(self):
+        """17. Safe fallback updates learning records for both failing and fallback workers."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore, FailureCategory
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        store = AgentPerformanceStore.get_instance()
+        plan = TaskPlan(project_id=self.project_a.id, goal="Fallback learning test", correlation_id="corr-fbl-17")
+        task = AgentTask(
+            task_id="t_fbl_17",
+            objective="Inspect site crawl health and search diagnostics",
+            description="Diagnose crawl issues",
+            responsible_agent="seo_researcher",
+            correlation_id="corr-fbl-17"
+        )
+        plan.add_task(task)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Mock researcher failure triggering fallback to investigator
+        def mock_fail(*args, **kwargs):
+            return AgentResult(agent="seo_researcher", status="failed", confidence=0.0, errors=["API quota exceeded"])
+
+        with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=mock_fail):
+            result_ctx = supervisor.orchestrate(task="Fallback learning", correlation_id="corr-fbl-17", task_plan=plan)
+
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("t_fbl_17").responsible_agent, "seo_investigator")
+
+        # Verify failing agent recorded reassignment failure
+        researcher_recs = store.get_records(project_id=self.project_a.id, agent_name="seo_researcher")
+        self.assertGreaterEqual(len(researcher_recs), 1)
+        r_rec = researcher_recs[-1]
+        self.assertFalse(r_rec.success)
+        self.assertTrue(r_rec.was_fallback)
+        self.assertEqual(r_rec.failure_category, FailureCategory.AGENT_FAILURE)
+
+        # Verify fallback agent recorded successful completion
+        investigator_recs = store.get_records(project_id=self.project_a.id, agent_name="seo_investigator")
+        self.assertGreaterEqual(len(investigator_recs), 1)
+        i_rec = investigator_recs[-1]
+        self.assertTrue(i_rec.success)
+
+    def test_18_verification_failure_updates_learning(self):
+        """18. Technical verification failure updates learning records with verification failure classification."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore, FailureCategory
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        store = AgentPerformanceStore.get_instance()
+        plan = TaskPlan(project_id=self.project_a.id, goal="Verification learning test", correlation_id="corr-ver-18")
+        task = AgentTask(
+            task_id="t_ver_18",
+            objective="Verify post-action SEO outcome",
+            description="Measure ranking lift and verify title tag changes",
+            responsible_agent="seo_verifier",
+            correlation_id="corr-ver-18"
+        )
+        plan.add_task(task)
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        # Mock verifier reporting discrepancy (failed verification)
+        def mock_verif_failed(*args, **kwargs):
+            return AgentResult(
+                agent="seo_verifier",
+                status="completed",
+                confidence=0.85,
+                findings=["Live title tag did not match proposed changes; verification failed"],
+                evidence={"verification_status": "failed"}
+            )
+
+        with patch.object(supervisor._agents["seo_verifier"], "run", side_effect=mock_verif_failed):
+            supervisor.orchestrate(task="Verify outcome", correlation_id="corr-ver-18", task_plan=plan)
+
+        verif_recs = store.get_records(project_id=self.project_a.id, agent_name="seo_verifier")
+        self.assertGreaterEqual(len(verif_recs), 1)
+        v_rec = verif_recs[-1]
+        self.assertEqual(v_rec.verification_status, "failed")
+
+    def test_19_runtime_derived_evaluation_metrics(self):
+        """19. SEOAgentEvaluationService computes runtime-derived learning evaluation metrics."""
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord
+
+        ctx = SharedContext(
+            project_id=self.project_a.id,
+            project_name=self.project_a.name,
+            website_url=self.project_a.website_url,
+            status="completed"
+        )
+        # Mock 2 routing decisions
+        ctx.routing_decisions = [
+            {
+                "task_id": "t1",
+                "selected_agent": "seo_researcher",
+                "reasons": ["historical_performance: historical_success: 100% (n=5)"],
+                "score_breakdowns": {"seo_researcher": {"historical_signal_details": {"signal_applied": True}}}
+            },
+            {
+                "task_id": "t2",
+                "selected_agent": "seo_investigator",
+                "reasons": ["historical_signal_ignored: insufficient sample size"],
+                "score_breakdowns": {"seo_investigator": {"historical_signal_details": {"signal_applied": False}}}
+            }
+        ]
+        # Mock 2 learning records
+        ctx.learning_records = [
+            AgentPerformanceRecord(
+                agent_name="seo_researcher", task_id="t1", task_type="research", project_id=self.project_a.id,
+                success=True, verification_status="verified", predicted_confidence=0.90
+            ).to_dict(),
+            AgentPerformanceRecord(
+                agent_name="seo_investigator", task_id="t2", task_type="investigation", project_id=self.project_a.id,
+                success=False, verification_status="failed", predicted_confidence=0.70
+            ).to_dict()
+        ]
+
+        eval_res = SEOAgentEvaluationService.evaluate_shared_context(ctx)
+        learning_metrics = eval_res["learning_metrics"]
+
+        self.assertEqual(learning_metrics["total_learning_records"], 2)
+        self.assertEqual(learning_metrics["learning_coverage"], 50.0)
+        self.assertEqual(learning_metrics["historical_signal_usage"], 1)
+        self.assertEqual(learning_metrics["cold_start_coverage"], 50.0)
+        self.assertEqual(learning_metrics["success_rate_by_agent"]["seo_researcher"], 1.0)
+        self.assertEqual(learning_metrics["success_rate_by_agent"]["seo_investigator"], 0.0)
+        self.assertEqual(learning_metrics["verification_success_rate"], 50.0)
+
+    def test_20_read_only_api_endpoints(self):
+        """20. Read-only performance and collaboration learning API endpoints enforce tenant safety."""
+        from rest_framework import status
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+        store.record_outcome(AgentPerformanceRecord(
+            agent_name="seo_researcher", task_id="t_api_20", task_type="research", project_id=self.project_a.id, success=True
+        ))
+
+        self.client.force_authenticate(user=self.user_a)
+
+        # 1. Authorized project query
+        res_auth = self.client.get(f"/api/seo/ai/learning/performance/?project_id={self.project_a.id}")
+        self.assertEqual(res_auth.status_code, status.HTTP_200_OK)
+        self.assertIn("agent_performance", res_auth.data)
+        self.assertEqual(res_auth.data["project_id"], self.project_a.id)
+
+        # 2. Unauthorized cross-tenant query yields 404
+        res_unauth = self.client.get(f"/api/seo/ai/learning/performance/?project_id={self.project_b.id}")
+        self.assertEqual(res_unauth.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 3. Global benchmarks accessible
+        res_global = self.client.get("/api/seo/ai/learning/performance/")
+        self.assertEqual(res_global.status_code, status.HTTP_200_OK)
+        self.assertIn("global_benchmarks", res_global.data)
+
+        # 4. Collaboration run learning view
+        res_run = self.client.get(f"/api/seo/ai/orchestrate/corr-test-20/learning/")
+        # When run is not found, handled cleanly
+        self.assertIn(res_run.status_code, [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND])
+
+    def test_21_telemetry_events_emitted_and_sanitized(self):
+        """21. Learning events are published with structured fields and credentials scrubbed."""
+        from apps.seo.services.agent_events import get_event_publisher, AgentEventType
+        from apps.seo.services.agents.agent_learning import AgentLearningService
+
+        pub = get_event_publisher()
+        pub.clear()
+
+        service = AgentLearningService(publisher=pub)
+        service.record_task_outcome(
+            agent_name="seo_researcher",
+            task_id="t_tel_21",
+            task_type="research",
+            task_objective="Gather Search Console metrics",
+            project_id=self.project_a.id,
+            success=True,
+            routing_metadata={"secret_token": "super_secret_bearer_token", "score": 0.95},
+            correlation_id="corr-tel-21"
+        )
+
+        event_types = pub.get_event_types()
+        self.assertIn(AgentEventType.SEO_LEARNING_RECORD_CREATED.value, event_types)
+        self.assertIn(AgentEventType.SEO_AGENT_PERFORMANCE_UPDATED.value, event_types)
+        self.assertIn(AgentEventType.SEO_ROUTING_OUTCOME_RECORDED.value, event_types)
+
+        # Verify token was scrubbed
+        events = pub.get_events()
+        for ev in events:
+            payload_str = str(ev.payload)
+            self.assertNotIn("super_secret_bearer_token", payload_str)
+
+    def test_22_regression_across_milestones_5_1_to_5_5(self):
+        """22. Complete regression across Milestones 5.1–5.5 remains 100% operational with learning active."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, TaskStatus
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a, max_parallel_tasks=2)
+        plan = TaskPlan(project_id=self.project_a.id, goal="Full 5.1-5.6 cycle", correlation_id="corr-reg-22")
+
+        t1 = AgentTask("reg_res", "Gather keyword rankings", "Keywords", "seo_supervisor", dependencies=[], correlation_id="corr-reg-22")
+        t2 = AgentTask("reg_diag", "Diagnose technical audit issues", "Audit", "seo_supervisor", dependencies=[], correlation_id="corr-reg-22")
+        t3 = AgentTask("reg_strat", "Prioritize strategic SEO recommendations", "Strategy", "seo_supervisor", dependencies=["reg_res", "reg_diag"], correlation_id="corr-reg-22")
+        plan.add_task(t1)
+        plan.add_task(t2)
+        plan.add_task(t3)
+
+        result_ctx = supervisor.orchestrate(task="Full regression cycle", correlation_id="corr-reg-22", task_plan=plan)
+        self.assertEqual(result_ctx.status, "completed")
+        self.assertEqual(plan.get_task("reg_res").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("reg_diag").status, TaskStatus.COMPLETED.value)
+        self.assertEqual(plan.get_task("reg_strat").status, TaskStatus.COMPLETED.value)
+
+        # Verify parallel batch execution occurred
+        self.assertGreaterEqual(len(result_ctx.parallel_batches), 1)
+        # Verify dynamic agent assignments occurred
+        self.assertEqual(plan.get_task("reg_res").responsible_agent, "seo_researcher")
+        self.assertEqual(plan.get_task("reg_diag").responsible_agent, "seo_investigator")
+        self.assertEqual(plan.get_task("reg_strat").responsible_agent, "seo_strategist")
+        # Verify learning records populated
+        self.assertGreaterEqual(len(result_ctx.learning_records), 3)
+
+    def test_23_routing_improvement_detection_modes(self):
+        """23. DEF-01: Verify detection of top-level, nested, positive, negative, and zero/missing historical scores."""
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.services.agents.base_agent import SharedContext
+
+        def _evaluate_single(routing_metadata: dict, agent_name: str = "seo_researcher", success: bool = True):
+            ctx = SharedContext(
+                project_id=self.project_a.id,
+                project_name="Test",
+                website_url="https://test.com",
+                task_goal="Eval single"
+            )
+            ctx.learning_records = [
+                {
+                    "record_id": "r_test",
+                    "agent_name": agent_name,
+                    "task_type": "research",
+                    "success": success,
+                    "predicted_confidence": 0.90,
+                    "verification_status": "none",
+                    "reassignment_count": 0,
+                    "routing_metadata": routing_metadata
+                }
+            ]
+            eval_res = SEOAgentEvaluationService.evaluate_shared_context(ctx)
+            learning_metrics = eval_res["agent_learning_metrics"]
+            return learning_metrics["routing_improvement"]
+
+        # 1. Top-level positive historical score detected as assisted (100% improvement over 0% baseline)
+        imp_top_pos = _evaluate_single({"historical_score": 0.045})
+        self.assertEqual(imp_top_pos, 100.0)
+
+        # 2. Top-level negative historical score detected as assisted
+        imp_top_neg = _evaluate_single({"historical_score": -0.045})
+        self.assertEqual(imp_top_neg, 100.0)
+
+        # 3. Nested positive historical score in score_breakdowns detected as assisted (actual supervisor format)
+        nested_pos_meta = {
+            "score": 0.76,
+            "score_breakdowns": {
+                "seo_researcher": {"historical_score": 0.045},
+                "seo_investigator": {"historical_score": -0.02}
+            }
+        }
+        imp_nest_pos = _evaluate_single(nested_pos_meta, agent_name="seo_researcher")
+        self.assertEqual(imp_nest_pos, 100.0)
+
+        # 4. Nested negative historical score in score_breakdowns detected as assisted
+        nested_neg_meta = {
+            "score": 0.70,
+            "score_breakdowns": {
+                "seo_investigator": {"historical_score": -0.035}
+            }
+        }
+        imp_nest_neg = _evaluate_single(nested_neg_meta, agent_name="seo_investigator")
+        self.assertEqual(imp_nest_neg, 100.0)
+
+        # 5. Zero historical score treated as unassisted baseline (0% assisted, 100% baseline -> -100.0 improvement)
+        imp_zero = _evaluate_single({"historical_score": 0.0})
+        self.assertEqual(imp_zero, -100.0)
+
+        # 6. Nested zero historical score treated as unassisted baseline
+        nested_zero_meta = {
+            "score_breakdowns": {
+                "seo_researcher": {"historical_score": 0.0}
+            }
+        }
+        imp_nest_zero = _evaluate_single(nested_zero_meta, agent_name="seo_researcher")
+        self.assertEqual(imp_nest_zero, -100.0)
+
+        # 7. Missing routing metadata safely defaults to baseline
+        imp_missing = _evaluate_single({})
+        self.assertEqual(imp_missing, -100.0)
+
+    def test_24_bayesian_smoothing_and_evidence_weighting_numerical_verification(self):
+        """24. DEF-02: Deterministic numerical verification of Bayesian smoothing and evidence weighting across sample sizes."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceRecord, AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+
+        # Helper to seed N records with k successes
+        def _seed(agent: str, n: int, k: int):
+            store.reset()
+            for i in range(n):
+                store.record_outcome(AgentPerformanceRecord(
+                    agent_name=agent,
+                    task_id=f"num_{agent}_{i}",
+                    task_type="research",
+                    project_id=self.project_a.id,
+                    success=(i < k)
+                ))
+
+        # 1. N = 3, k = 3
+        # p_hat = (3 + 2) / (3 + 4) = 5/7 ≈ 0.7142857
+        # w_evidence = 3 / 10 = 0.3
+        # success_component = (5/7 - 0.70) * 0.15 * 0.3 ≈ 0.0006428
+        _seed("agent_n3", n=3, k=3)
+        sig_n3 = store.compute_historical_signal("agent_n3", "research", project_id=self.project_a.id)
+        self.assertTrue(sig_n3.signal_applied)
+        expected_p_hat_n3 = 5.0 / 7.0
+        expected_w_n3 = 0.3
+        expected_contrib_n3 = (expected_p_hat_n3 - 0.70) * 0.15 * expected_w_n3
+        self.assertAlmostEqual(sig_n3.smoothed_success_rate, expected_p_hat_n3, places=4)
+        self.assertAlmostEqual(sig_n3.evidence_weight, expected_w_n3, places=4)
+        self.assertAlmostEqual(sig_n3.score_contribution, expected_contrib_n3, places=4)
+        # Gentle lift at N=3, strictly positive and smooth
+        self.assertGreater(sig_n3.score_contribution, 0.0)
+        self.assertLess(sig_n3.score_contribution, 0.005)
+
+        # 2. N = 5, k = 5 (high success)
+        # p_hat = (5 + 2) / (5 + 4) = 7/9 ≈ 0.7777778
+        # w_evidence = 5 / 10 = 0.5
+        # success_component = (7/9 - 0.70) * 0.15 * 0.5 ≈ 0.0058333
+        _seed("agent_n5_hi", n=5, k=5)
+        sig_n5_hi = store.compute_historical_signal("agent_n5_hi", "research", project_id=self.project_a.id)
+        expected_p_hat_n5_hi = 7.0 / 9.0
+        expected_w_n5_hi = 0.5
+        expected_contrib_n5_hi = (expected_p_hat_n5_hi - 0.70) * 0.15 * expected_w_n5_hi
+        self.assertAlmostEqual(sig_n5_hi.smoothed_success_rate, expected_p_hat_n5_hi, places=4)
+        self.assertAlmostEqual(sig_n5_hi.evidence_weight, expected_w_n5_hi, places=4)
+        self.assertAlmostEqual(sig_n5_hi.score_contribution, expected_contrib_n5_hi, places=4)
+
+        # 3. N = 5, k = 0 (low success)
+        # p_hat = (0 + 2) / (5 + 4) = 2/9 ≈ 0.2222222
+        # w_evidence = 5 / 10 = 0.5
+        # success_component = (2/9 - 0.70) * 0.15 * 0.5 ≈ -0.0358333
+        _seed("agent_n5_lo", n=5, k=0)
+        sig_n5_lo = store.compute_historical_signal("agent_n5_lo", "research", project_id=self.project_a.id)
+        expected_p_hat_n5_lo = 2.0 / 9.0
+        expected_contrib_n5_lo = (expected_p_hat_n5_lo - 0.70) * 0.15 * 0.5
+        self.assertAlmostEqual(sig_n5_lo.smoothed_success_rate, expected_p_hat_n5_lo, places=4)
+        self.assertAlmostEqual(sig_n5_lo.evidence_weight, 0.5, places=4)
+        self.assertAlmostEqual(sig_n5_lo.score_contribution, expected_contrib_n5_lo, places=4)
+
+        # 4. N = 10, k = 10 (evidence weight reaches 1.0)
+        # p_hat = (10 + 2) / (10 + 4) = 12/14 = 6/7 ≈ 0.8571429
+        # w_evidence = min(1.0, 10/10) = 1.0
+        # success_component = (6/7 - 0.70) * 0.15 * 1.0 ≈ 0.0235714
+        _seed("agent_n10", n=10, k=10)
+        sig_n10 = store.compute_historical_signal("agent_n10", "research", project_id=self.project_a.id)
+        expected_p_hat_n10 = 6.0 / 7.0
+        expected_contrib_n10 = (expected_p_hat_n10 - 0.70) * 0.15 * 1.0
+        self.assertAlmostEqual(sig_n10.smoothed_success_rate, expected_p_hat_n10, places=4)
+        self.assertEqual(sig_n10.evidence_weight, 1.0)
+        self.assertAlmostEqual(sig_n10.score_contribution, expected_contrib_n10, places=4)
+
+        # 5. N = 15, k = 15 (N > 10: evidence weight remains 1.0)
+        _seed("agent_n15", n=15, k=15)
+        sig_n15 = store.compute_historical_signal("agent_n15", "research", project_id=self.project_a.id)
+        expected_p_hat_n15 = 17.0 / 19.0
+        expected_contrib_n15 = (expected_p_hat_n15 - 0.70) * 0.15 * 1.0
+        self.assertAlmostEqual(sig_n15.smoothed_success_rate, expected_p_hat_n15, places=4)
+        self.assertEqual(sig_n15.evidence_weight, 1.0)
+        self.assertAlmostEqual(sig_n15.score_contribution, expected_contrib_n15, places=4)
+
+        # 6. N = 100, k = 100 (large sample size: evidence weight does not grow beyond 1.0)
+        _seed("agent_n100", n=100, k=100)
+        sig_n100 = store.compute_historical_signal("agent_n100", "research", project_id=self.project_a.id)
+        self.assertEqual(sig_n100.evidence_weight, 1.0)
+        expected_p_hat_n100 = 102.0 / 104.0
+        expected_contrib_n100 = (expected_p_hat_n100 - 0.70) * 0.15 * 1.0
+        self.assertAlmostEqual(sig_n100.score_contribution, expected_contrib_n100, places=4)
+        self.assertLessEqual(sig_n100.score_contribution, 0.08)

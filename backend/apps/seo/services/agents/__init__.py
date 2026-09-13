@@ -46,6 +46,16 @@ from .seo_investigation_agent import SEOInvestigationAgent
 from .seo_strategy_agent import SEOStrategyAgent
 from .seo_action_agent import SEOActionPlanningAgent
 from .seo_verification_agent import SEOVerificationAgent
+from .parallel_executor import ParallelExecutionBatch, ParallelBatchExecutor, BatchExecutionResult
+from .adaptive_selector import (
+    AdaptiveAgentSelector, AgentCapabilityProfile, RoutingDecision, WorkloadTracker,
+    CandidateScoreBreakdown, RejectedCandidate
+)
+from .agent_learning import (
+    AgentPerformanceRecord, AgentPerformanceStats, HistoricalSignal,
+    AgentPerformanceStore, AgentLearningService, FailureCategory,
+    get_agent_learning_service
+)
 from .seo_supervisor import SEOSupervisorAgent, SEOSupervisor, ROUTING_WORKFLOWS
 
 __all__ = [
@@ -84,6 +94,22 @@ __all__ = [
     "InvalidTaskTransitionError",
     "PlanLimitExceededError",
     "PlanBudgetExceededError",
+    "ParallelExecutionBatch",
+    "ParallelBatchExecutor",
+    "BatchExecutionResult",
+    "AdaptiveAgentSelector",
+    "AgentCapabilityProfile",
+    "RoutingDecision",
+    "WorkloadTracker",
+    "CandidateScoreBreakdown",
+    "RejectedCandidate",
+    "AgentPerformanceRecord",
+    "AgentPerformanceStats",
+    "HistoricalSignal",
+    "AgentPerformanceStore",
+    "AgentLearningService",
+    "FailureCategory",
+    "get_agent_learning_service",
     "SEOResearchAgent",
     "SEOInvestigationAgent",
     "SEOStrategyAgent",

@@ -152,6 +152,13 @@ class AgentEventType(str, Enum):
     SEO_AGENT_FALLBACK = "seo.agent.fallback"
     SEO_AGENT_SELECTION_FAILED = "seo.agent.selection.failed"
 
+    # Agent Learning & Optimization (Milestone 5.6)
+    SEO_LEARNING_RECORD_CREATED = "seo.agent.learning.record_created"
+    SEO_AGENT_PERFORMANCE_UPDATED = "seo.agent.learning.performance_updated"
+    SEO_HISTORICAL_SIGNAL_APPLIED = "seo.agent.learning.signal_applied"
+    SEO_HISTORICAL_SIGNAL_IGNORED = "seo.agent.learning.signal_ignored"
+    SEO_ROUTING_OUTCOME_RECORDED = "seo.agent.learning.outcome_recorded"
+
 
 
 

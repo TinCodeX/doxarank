@@ -107,6 +107,9 @@ class SharedContext:
     # Phase 5.5 Adaptive Agent Coordination & Dynamic Agent Selection
     routing_decisions: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Phase 5.6 Agent Learning & Optimization
+    learning_records: List[Dict[str, Any]] = field(default_factory=list)
+
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
     current_agent: Optional[str] = None

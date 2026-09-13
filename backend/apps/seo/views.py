@@ -1989,3 +1989,107 @@ class SEOCollaborationTasksGraphView(APIView):
         if err_response:
             return err_response
         return Response(plan.to_graph(), status=status.HTTP_200_OK)
+
+
+class SEOAgentLearningPerformanceView(APIView):
+    """
+    Read-only view for agent historical performance and learning metrics (Milestone 5.6).
+    GET /api/seo/ai/learning/performance/?project_id=<id>&agent_name=<name>&task_type=<type>
+    Guarantees multi-tenant isolation; private tenant data is never leaked.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.projects.models import Project
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore
+
+        store = AgentPerformanceStore.get_instance()
+        project_id_param = request.query_params.get("project_id")
+        agent_name = request.query_params.get("agent_name")
+        task_type = request.query_params.get("task_type")
+
+        target_project_id = None
+        if project_id_param:
+            try:
+                p_id = int(project_id_param)
+                if not Project.objects.filter(id=p_id, owner=request.user).exists():
+                    return Response(
+                        {"detail": "Project not found or access denied."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                target_project_id = p_id
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid project_id parameter."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Global anonymized benchmarks (safe across all tenants)
+        global_stats = store.get_anonymized_global_stats()
+
+        # Project-scoped stats if requested
+        project_stats = {}
+        if target_project_id is not None:
+            project_stats = store.get_project_stats(target_project_id)
+
+        # Agent-specific detail if queried
+        agent_stats = None
+        if agent_name:
+            agent_stats = store.get_agent_stats(
+                agent_name=agent_name,
+                task_type=task_type,
+                project_id=target_project_id
+            ).to_dict()
+
+        return Response({
+            "project_id": target_project_id,
+            "min_sample_threshold": store.min_sample_threshold,
+            "max_signal_magnitude": store.max_signal_magnitude,
+            "agent_performance": agent_stats or project_stats.get("agent_performance") or global_stats.get("agent_performance", {}),
+            "task_type_performance": global_stats.get("task_type_performance", {}),
+            "global_benchmarks": {
+                "total_records": global_stats.get("total_records", 0),
+                "overall_success_rate": global_stats.get("overall_success_rate", 0.0),
+            },
+            "project_stats": project_stats,
+        }, status=status.HTTP_200_OK)
+
+
+class SEOCollaborationLearningView(APIView):
+    """
+    Read-only view for learning signals and records generated during an orchestrated run.
+    GET /api/seo/ai/orchestrate/<run_id>/learning/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        from apps.projects.models import Project
+        from apps.seo.models import AgentRun
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore
+
+        target_project_id = None
+        # 1. Resolve run if numeric
+        if str(run_id).isdigit():
+            try:
+                run = AgentRun.objects.get(id=int(run_id), project__owner=request.user)
+                target_project_id = run.project_id
+            except AgentRun.DoesNotExist:
+                pass
+
+        if target_project_id is None:
+            plan, err_response = _resolve_task_plan_for_run(request, run_id)
+            if err_response:
+                return err_response
+            target_project_id = plan.project_id
+
+        store = AgentPerformanceStore.get_instance()
+        records = store.get_records(project_id=target_project_id)
+        serialized_records = [r.to_dict() for r in records]
+
+        return Response({
+            "run_id": run_id,
+            "project_id": target_project_id,
+            "total_records": len(serialized_records),
+            "learning_records": serialized_records,
+            "performance_summary": store.get_project_stats(target_project_id),
+        }, status=status.HTTP_200_OK)

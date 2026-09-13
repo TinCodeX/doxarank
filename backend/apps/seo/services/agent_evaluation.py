@@ -376,6 +376,126 @@ class SEOAgentEvaluationService:
             "task_completion_by_selected_agent": task_completion_by_selected_agent,
         }
 
+        # Phase 5.6 Agent Learning & Optimization Evaluation Metrics
+        learning_recs = list(getattr(context, "learning_records", []))
+        if not learning_recs and getattr(context, "collaboration_state", None):
+            learning_recs = list(getattr(context.collaboration_state, "learning_records", []))
+        if not learning_recs:
+            from apps.seo.services.agents.agent_learning import AgentPerformanceStore
+            learning_recs = [r.to_dict() for r in AgentPerformanceStore.get_instance().get_records(project_id=context.project_id)]
+
+        total_learning_records = len(learning_recs)
+
+        # 1. Learning Coverage & Historical Signal Usage from routing decisions
+        decisions_with_signal = 0
+        decisions_cold_start = 0
+        for d in routing_decisions:
+            reasons = d.get("reasons", [])
+            breakdowns = d.get("score_breakdowns", {})
+            has_signal = any("historical_performance:" in str(r) for r in reasons) or any(
+                b.get("historical_signal_details", {}).get("signal_applied", False) for b in breakdowns.values()
+            )
+            if has_signal:
+                decisions_with_signal += 1
+            else:
+                decisions_cold_start += 1
+
+        learning_coverage = round((decisions_with_signal / max(total_routing_decisions, 1)) * 100, 1) if total_routing_decisions > 0 else 0.0
+        historical_signal_usage = decisions_with_signal
+        historical_signal_usage_rate = round((decisions_with_signal / max(total_routing_decisions, 1)) * 100, 1) if total_routing_decisions > 0 else 0.0
+        cold_start_coverage = round((decisions_cold_start / max(total_routing_decisions, 1)) * 100, 1) if total_routing_decisions > 0 else 0.0
+
+        # 2. Success Rates by Agent and Task Type from actual records
+        success_by_agent: Dict[str, float] = {}
+        success_by_type: Dict[str, float] = {}
+        agent_counts: Dict[str, Tuple[int, int]] = {}
+        type_counts: Dict[str, Tuple[int, int]] = {}
+
+        verif_attempts = 0
+        verif_successes = 0
+        calibration_diffs: List[float] = []
+        learning_assisted_successes = 0
+        learning_assisted_total = 0
+        baseline_successes = 0
+        baseline_total = 0
+
+        for r in learning_recs:
+            a_name = r.get("agent_name", "")
+            t_type = r.get("task_type", "general")
+            s = bool(r.get("success", False))
+
+            routing_meta = r.get("routing_metadata") or {}
+            hist_score = routing_meta.get("historical_score")
+            if hist_score is None or hist_score == 0.0:
+                breakdowns = routing_meta.get("score_breakdowns") or {}
+                agent_breakdown = breakdowns.get(a_name) or {}
+                if agent_breakdown.get("historical_score") is not None:
+                    hist_score = agent_breakdown.get("historical_score")
+
+            try:
+                hist_score_val = float(hist_score) if hist_score is not None else 0.0
+            except (ValueError, TypeError):
+                hist_score_val = 0.0
+
+            was_assisted = bool(hist_score_val != 0.0)
+
+            if was_assisted:
+                learning_assisted_total += 1
+                if s:
+                    learning_assisted_successes += 1
+            else:
+                baseline_total += 1
+                if s:
+                    baseline_successes += 1
+
+            if a_name:
+                succ, tot = agent_counts.get(a_name, (0, 0))
+                agent_counts[a_name] = (succ + (1 if s else 0), tot + 1)
+
+            if t_type:
+                succ, tot = type_counts.get(t_type, (0, 0))
+                type_counts[t_type] = (succ + (1 if s else 0), tot + 1)
+
+            v_stat = r.get("verification_status")
+            if v_stat in ["verified", "failed"]:
+                verif_attempts += 1
+                if v_stat == "verified":
+                    verif_successes += 1
+
+            pred_conf = r.get("predicted_confidence", 0.85)
+            actual_val = 1.0 if s else 0.0
+            calibration_diffs.append(abs(pred_conf - actual_val))
+
+        for a_name, (succ, tot) in agent_counts.items():
+            success_by_agent[a_name] = round(succ / max(tot, 1), 3)
+
+        for t_type, (succ, tot) in type_counts.items():
+            success_by_type[t_type] = round(succ / max(tot, 1), 3)
+
+        verification_success_rate = round((verif_successes / max(verif_attempts, 1)) * 100, 1) if verif_attempts > 0 else 0.0
+        reassignments_count = sum(r.get("reassignment_count", 0) for r in learning_recs)
+        reassignment_rate = round((reassignments_count / max(total_learning_records, 1)) * 100, 1) if total_learning_records > 0 else 0.0
+
+        confidence_calibration_error = round(sum(calibration_diffs) / max(len(calibration_diffs), 1), 3) if calibration_diffs else 0.0
+
+        assisted_rate = (learning_assisted_successes / max(learning_assisted_total, 1)) if learning_assisted_total > 0 else 0.0
+        base_rate = (baseline_successes / max(baseline_total, 1)) if baseline_total > 0 else 0.0
+        routing_improvement = round((assisted_rate - base_rate) * 100, 1)
+
+        agent_learning_metrics = {
+            "total_learning_records": total_learning_records,
+            "learning_coverage": learning_coverage,
+            "historical_signal_usage": historical_signal_usage,
+            "historical_signal_usage_rate": historical_signal_usage_rate,
+            "cold_start_coverage": cold_start_coverage,
+            "routing_improvement": routing_improvement,
+            "success_rate_by_agent": success_by_agent,
+            "success_rate_by_task_type": success_by_type,
+            "verification_success_rate": verification_success_rate,
+            "reassignment_rate": reassignment_rate,
+            "confidence_calibration_error": confidence_calibration_error,
+        }
+
         collaboration_metrics = {
             "agents_involved": len(unique_agents),
             "agents_list": unique_agents,
@@ -390,6 +510,7 @@ class SEOAgentEvaluationService:
             **task_planning_metrics,
             **parallel_execution_metrics,
             **adaptive_routing_metrics,
+            **agent_learning_metrics,
         }
 
         score = 0.0
@@ -420,5 +541,7 @@ class SEOAgentEvaluationService:
             "parallel_execution_metrics": parallel_execution_metrics,
             "adaptive_routing_metrics": adaptive_routing_metrics,
             "routing_metrics": adaptive_routing_metrics,
+            "agent_learning_metrics": agent_learning_metrics,
+            "learning_metrics": agent_learning_metrics,
             "overall_score": round(score, 1)
         }

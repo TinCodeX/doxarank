@@ -286,6 +286,7 @@ class CollaborationState:
     task_plan_summary: Optional[Dict[str, Any]] = None
     parallel_batches: List[Dict[str, Any]] = field(default_factory=list)
     routing_decisions: List[Dict[str, Any]] = field(default_factory=list)
+    learning_records: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -309,6 +310,7 @@ class CollaborationState:
             "task_plan_summary": self.task_plan_summary,
             "parallel_batches": self.parallel_batches,
             "routing_decisions": self.routing_decisions,
+            "learning_records": self.learning_records,
         }
 
 

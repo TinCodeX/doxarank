@@ -51,6 +51,10 @@ from .parallel_executor import ParallelExecutionBatch, ParallelBatchExecutor, Ba
 from .adaptive_selector import (
     AdaptiveAgentSelector, AgentCapabilityProfile, RoutingDecision, WorkloadTracker
 )
+from .agent_learning import (
+    AgentLearningService, AgentPerformanceStore, AgentPerformanceRecord,
+    FailureCategory, get_agent_learning_service
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +104,8 @@ class SEOSupervisorAgent:
         tool_registry: Optional[ToolRegistry] = None,
         project_id: Optional[int] = None,
         user_id: Optional[int] = None,
-        max_parallel_tasks: int = 3
+        max_parallel_tasks: int = 3,
+        learning_service: Optional[AgentLearningService] = None
     ):
         if project is None and project_id is not None:
             project = Project.objects.get(id=project_id)
@@ -115,12 +120,14 @@ class SEOSupervisorAgent:
         self.max_parallel_tasks = max(1, int(max_parallel_tasks))
         self.parallel_executor = ParallelBatchExecutor(max_parallel_tasks=self.max_parallel_tasks)
         self.workload_tracker = WorkloadTracker()
+        self.learning_service = learning_service or get_agent_learning_service()
         self.agent_selector = AdaptiveAgentSelector(
             project_id=self.project.id if self.project else 0,
             tool_registry=self.tool_registry,
             publisher=self.publisher,
             workload_tracker=self.workload_tracker,
-            max_concurrency=self.max_parallel_tasks
+            max_concurrency=self.max_parallel_tasks,
+            performance_store=self.learning_service.store
         )
 
         # Initialize specialized sub-agents
@@ -440,6 +447,24 @@ class SEOSupervisorAgent:
                         f"[{self.name}] Routing failed for task '{task_to_select.task_id}': {err_reason}. "
                         "Failing task deterministically."
                     )
+                    # Milestone 5.6: Record safety block / hard constraint elimination in learning store
+                    task_cat = task_to_select.metadata.get("task_type") or self.agent_selector._infer_task_requirements(task_to_select).get("task_category", "general")
+                    safety_rec = self.learning_service.record_task_outcome(
+                        agent_name=routing_decision.selected_agent or "unassigned",
+                        task_id=task_to_select.task_id,
+                        task_type=task_cat,
+                        task_objective=task_to_select.objective,
+                        project_id=self.project.id if self.project else 0,
+                        success=False,
+                        failure_category=FailureCategory.SAFETY_BLOCK,
+                        failure_reason=err_reason,
+                        routing_metadata=routing_decision.to_dict(),
+                        correlation_id=corr_id
+                    )
+                    context.learning_records.append(safety_rec.to_dict())
+                    if hasattr(collaboration_state, "learning_records"):
+                        collaboration_state.learning_records.append(safety_rec.to_dict())
+
                     context.errors.append(f"Routing failed for task '{task_to_select.task_id}': {err_reason}")
                     collaboration_state.errors.append(f"Routing failed for task '{task_to_select.task_id}': {err_reason}")
                     task_plan.handle_task_failure(task_to_select.task_id, err_reason)
@@ -655,6 +680,28 @@ class SEOSupervisorAgent:
                                 f"[{self.name}] Attempting safe fallback reassignment for task '{tid}' "
                                 f"from '{agent_key}' to '{fallback_agent_key}' (Attempt {fallback_decision.fallback_attempt})."
                             )
+                            # Milestone 5.6: Record reassignment and initial failure in learning store
+                            fail_rec = self.learning_service.record_task_outcome(
+                                agent_name=agent_key,
+                                task_id=tid,
+                                task_type=task_to_execute.metadata.get("task_type") or self.agent_selector._infer_task_requirements(task_to_execute).get("task_category", "general"),
+                                task_objective=task_to_execute.objective,
+                                project_id=self.project.id if self.project else 0,
+                                success=False,
+                                duration_ms=duration_ms,
+                                predicted_confidence=prev_routing.get("confidence", 0.85) if prev_routing else 0.85,
+                                reassignment_count=fallback_decision.fallback_attempt,
+                                tool_usage=list(agent.allowed_tools) if agent else [],
+                                failure_category=FailureCategory.AGENT_FAILURE,
+                                failure_reason=err_detail,
+                                was_fallback=True,
+                                routing_metadata=prev_routing or {},
+                                correlation_id=corr_id
+                            )
+                            context.learning_records.append(fail_rec.to_dict())
+                            if hasattr(collaboration_state, "learning_records"):
+                                collaboration_state.learning_records.append(fail_rec.to_dict())
+
                             task_to_execute.responsible_agent = fallback_agent_key
                             task_to_execute.metadata["routing_decision"] = fallback_decision.to_dict()
                             context.routing_decisions.append(fallback_decision.to_dict())
@@ -719,6 +766,42 @@ class SEOSupervisorAgent:
                         collaboration_state.failed_agents.append(agent_key)
                     collaboration_state.status = "degraded"
 
+                    # Milestone 5.6: Record unrecovered task failure in learning store
+                    fail_cat = FailureCategory.AGENT_FAILURE
+                    if "tool" in err_detail.lower():
+                        fail_cat = FailureCategory.TOOL_FAILURE
+                    elif "depend" in err_detail.lower() or "prereq" in err_detail.lower():
+                        fail_cat = FailureCategory.DEPENDENCY_FAILURE
+                    elif "safety" in err_detail.lower() or "unauthorized" in err_detail.lower() or "permission" in err_detail.lower():
+                        fail_cat = FailureCategory.SAFETY_BLOCK
+                    elif "human" in err_detail.lower() or "reject" in err_detail.lower():
+                        fail_cat = FailureCategory.HUMAN_REJECTION
+                    elif "verif" in err_detail.lower():
+                        fail_cat = FailureCategory.VERIFICATION_FAILURE
+
+                    current_routing = task_to_execute.metadata.get("routing_decision", {})
+                    fail_rec = self.learning_service.record_task_outcome(
+                        agent_name=agent_key,
+                        task_id=tid,
+                        task_type=task_to_execute.metadata.get("task_type") or self.agent_selector._infer_task_requirements(task_to_execute).get("task_category", "general"),
+                        task_objective=task_to_execute.objective,
+                        project_id=self.project.id if self.project else 0,
+                        success=False,
+                        duration_ms=duration_ms,
+                        predicted_confidence=current_routing.get("confidence", 0.85),
+                        verification_status="failed" if fail_cat == FailureCategory.VERIFICATION_FAILURE else "none",
+                        reassignment_count=current_routing.get("fallback_attempt", 0),
+                        tool_usage=list(agent.allowed_tools) if agent else [],
+                        failure_category=fail_cat,
+                        failure_reason=err_detail,
+                        was_fallback=bool(current_routing.get("fallback_attempt", 0) > 0),
+                        routing_metadata=current_routing,
+                        correlation_id=corr_id
+                    )
+                    context.learning_records.append(fail_rec.to_dict())
+                    if hasattr(collaboration_state, "learning_records"):
+                        collaboration_state.learning_records.append(fail_rec.to_dict())
+
                 else:
                     # Success step
                     task_to_execute.transition_to(
@@ -746,6 +829,37 @@ class SEOSupervisorAgent:
                         collaboration_state.completed_agents.append(agent_key)
                     collaboration_state.current_evidence.update(agent_result.evidence)
                     context.evidence.update(agent_result.evidence)
+
+                    # Milestone 5.6: Record task success and verification outcome in learning store
+                    verif_status = "none"
+                    if agent_key == "seo_verifier" or "verif" in task_to_execute.objective.lower():
+                        verif_data = agent_result.evidence.get("verification_status") if agent_result else None
+                        if verif_data in ["verified", "passed"] or any("verified" in str(f).lower() for f in (agent_result.findings if agent_result else [])):
+                            verif_status = "verified"
+                        else:
+                            verif_status = "failed"
+
+                    current_routing = task_to_execute.metadata.get("routing_decision", {})
+                    succ_rec = self.learning_service.record_task_outcome(
+                        agent_name=agent_key,
+                        task_id=tid,
+                        task_type=task_to_execute.metadata.get("task_type") or self.agent_selector._infer_task_requirements(task_to_execute).get("task_category", "general"),
+                        task_objective=task_to_execute.objective,
+                        project_id=self.project.id if self.project else 0,
+                        success=True,
+                        duration_ms=duration_ms,
+                        predicted_confidence=current_routing.get("confidence", 0.85),
+                        verification_status=verif_status,
+                        reassignment_count=current_routing.get("fallback_attempt", 0),
+                        tool_usage=list(agent.allowed_tools) if agent else [],
+                        failure_category=FailureCategory.NONE,
+                        was_fallback=bool(current_routing.get("fallback_attempt", 0) > 0),
+                        routing_metadata=current_routing,
+                        correlation_id=corr_id
+                    )
+                    context.learning_records.append(succ_rec.to_dict())
+                    if hasattr(collaboration_state, "learning_records"):
+                        collaboration_state.learning_records.append(succ_rec.to_dict())
 
                     if agent_key == "seo_investigator" or "investigation" in agent_key:
                         for f_item in agent_result.findings:
