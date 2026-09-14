@@ -2093,3 +2093,120 @@ class SEOCollaborationLearningView(APIView):
             "learning_records": serialized_records,
             "performance_summary": store.get_project_stats(target_project_id),
         }, status=status.HTTP_200_OK)
+
+
+class SEOReasoningCaseDetailView(APIView):
+    """
+    Read-only view for multi-agent reasoning case details.
+    GET /api/seo/ai/reasoning/<case_id>/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, case_id):
+        from apps.projects.models import Project
+        from apps.seo.models import AgentRun
+        from apps.seo.services.agents.advanced_reasoning import ReasoningRegistry
+
+        # 1. Check in-memory ReasoningRegistry
+        case = ReasoningRegistry.get_instance().get_case(case_id)
+        if case:
+            if not Project.objects.filter(id=case.project_id, owner=request.user).exists():
+                return Response(
+                    {"detail": "Permission denied for this reasoning case."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            return Response(case.to_dict(), status=status.HTTP_200_OK)
+
+        # 2. Check historical AgentRun snapshots for the authenticated user's projects
+        runs = AgentRun.objects.filter(project__owner=request.user).order_by('-created_at')[:25]
+        for run in runs:
+            if isinstance(run.context_snapshot, dict):
+                sm = run.context_snapshot.get("shared_memory", {})
+                cases_list = sm.get("reasoning_cases", []) if isinstance(sm, dict) else []
+                if not cases_list:
+                    cases_list = run.context_snapshot.get("reasoning_cases", [])
+                for c in cases_list:
+                    if isinstance(c, dict) and c.get("case_id") == case_id:
+                        return Response(c, status=status.HTTP_200_OK)
+                    elif hasattr(c, "case_id") and getattr(c, "case_id") == case_id:
+                        return Response(c.to_dict(), status=status.HTTP_200_OK)
+
+        return Response(
+            {"detail": "Reasoning case not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+class SEOCollaborationReasoningView(APIView):
+    """
+    Read-only view for multi-agent reasoning cases and consensus results of an orchestration run.
+    GET /api/seo/ai/orchestrate/<run_id>/reasoning/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        from apps.projects.models import Project
+        from apps.seo.models import AgentRun
+        from apps.seo.services.agents.advanced_reasoning import ReasoningRegistry
+
+        target_project_id = None
+        corr_id = str(run_id)
+        cases = []
+
+        # 1. Check if numeric run_id
+        if str(run_id).isdigit():
+            try:
+                run = AgentRun.objects.get(id=int(run_id), project__owner=request.user)
+                target_project_id = run.project_id
+                if isinstance(run.context_snapshot, dict):
+                    corr_id = run.context_snapshot.get("correlation_id", str(run_id))
+            except AgentRun.DoesNotExist:
+                pass
+
+        # 2. Check registry by correlation_id
+        reg_cases = ReasoningRegistry.get_instance().get_cases_for_correlation(corr_id)
+        if not reg_cases and str(run_id) != corr_id:
+            reg_cases = ReasoningRegistry.get_instance().get_cases_for_correlation(str(run_id))
+
+        if reg_cases:
+            first_case = reg_cases[0]
+            if target_project_id is None:
+                target_project_id = first_case.project_id
+            if not Project.objects.filter(id=target_project_id, owner=request.user).exists():
+                return Response(
+                    {"detail": "Permission denied for this collaboration session."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            cases.extend([c.to_dict() for c in reg_cases])
+
+        # 3. If no cases from registry, fallback to SharedWorkingMemory
+        if not cases:
+            mem, err_response = _resolve_memory_for_run(request, run_id)
+            if not err_response and mem:
+                target_project_id = mem.project_id
+                mem_cases = mem.get_reasoning_cases()
+                cases.extend([c.to_dict() if hasattr(c, "to_dict") else c for c in mem_cases])
+
+        if not cases and target_project_id is None:
+            return Response(
+                {"detail": "No reasoning cases found for this orchestration run."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        reached = sum(1 for c in cases if c.get("consensus_result", {}).get("consensus_state") in ["reached", "consensus"])
+        escalated = sum(1 for c in cases if c.get("consensus_result", {}).get("consensus_state") == "escalated")
+        failed = sum(1 for c in cases if c.get("consensus_result", {}).get("consensus_state") == "failed")
+
+        return Response({
+            "run_id": run_id,
+            "correlation_id": corr_id,
+            "project_id": target_project_id,
+            "total_cases": len(cases),
+            "cases": cases,
+            "consensus_summary": {
+                "reached": reached,
+                "escalated": escalated,
+                "failed": failed,
+                "open": len(cases) - (reached + escalated + failed),
+            },
+        }, status=status.HTTP_200_OK)

@@ -68,8 +68,8 @@ class SharedContext:
     Maintains strict tenant isolation and explicit, auditable data propagation.
     """
     project_id: int
-    project_name: str
-    website_url: str
+    project_name: str = ""
+    website_url: str = ""
     user_id: Optional[int] = None
     task_type: str = "general"
     task_goal: str = ""
@@ -109,6 +109,10 @@ class SharedContext:
 
     # Phase 5.6 Agent Learning & Optimization
     learning_records: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Phase 5.7 Advanced Multi-Agent Reasoning & Consensus
+    reasoning_cases: List[Dict[str, Any]] = field(default_factory=list)
+    active_case_id: Optional[str] = None
 
     # Telemetry and Execution State
     agent_results_history: List[Dict[str, Any]] = field(default_factory=list)
@@ -156,11 +160,31 @@ class SharedContext:
             "task_plan": self.task_plan.to_dict() if hasattr(self.task_plan, "to_dict") else self.task_plan,
             "parallel_batches": self.parallel_batches,
             "routing_decisions": self.routing_decisions,
+            "learning_records": self.learning_records,
+            "reasoning_cases": self.reasoning_cases,
+            "active_case_id": self.active_case_id,
             "agent_results_history": self.agent_results_history,
             "current_agent": self.current_agent,
             "status": self.status,
             "errors": self.errors
         }
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "reasoning_case":
+            return self.reasoning_cases[0] if self.reasoning_cases else None
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        if key == "reasoning_case":
+            return bool(self.reasoning_cases)
+        return hasattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in self:
+            return self[key]
+        return default
 
 
 

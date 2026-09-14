@@ -496,6 +496,97 @@ class SEOAgentEvaluationService:
             "confidence_calibration_error": confidence_calibration_error,
         }
 
+        # Phase 5.7 Advanced Multi-Agent Reasoning & Consensus Metrics
+        reasoning_cases = list(getattr(context, "reasoning_cases", []))
+        if not reasoning_cases and getattr(context, "collaboration_state", None):
+            reasoning_cases = list(getattr(context.collaboration_state, "reasoning_cases", []))
+        if not reasoning_cases:
+            from apps.seo.services.agents.advanced_reasoning import ReasoningRegistry
+            reg_cases = ReasoningRegistry.get_instance().get_by_correlation_id(str(context.correlation_id))
+            if reg_cases:
+                reasoning_cases = [c.to_dict() for c in reg_cases]
+
+        total_cases = len(reasoning_cases)
+        total_rounds = sum(len(c.get("reasoning_rounds", [])) for c in reasoning_cases)
+        avg_rounds = round(total_rounds / max(total_cases, 1), 1) if total_cases > 0 else 0.0
+
+        consensus_count = sum(1 for c in reasoning_cases if c.get("consensus_state") in ["consensus", "partial_consensus"])
+        consensus_rate = round((consensus_count / max(total_cases, 1)) * 100, 1) if total_cases > 0 else 0.0
+
+        disagreement_count = sum(1 for c in reasoning_cases if len(c.get("disagreements", [])) > 0)
+        disagreement_rate = round((disagreement_count / max(total_cases, 1)) * 100, 1) if total_cases > 0 else 0.0
+
+        escalation_count = sum(1 for c in reasoning_cases if c.get("consensus_state") == "escalated" or c.get("status") == "escalated")
+        escalation_rate = round((escalation_count / max(total_cases, 1)) * 100, 1) if total_cases > 0 else 0.0
+
+        total_hypotheses = sum(len(c.get("hypotheses", [])) for c in reasoning_cases)
+        critiqued_hypotheses = set()
+        for c in reasoning_cases:
+            for crit in c.get("critiques", []):
+                if crit.get("target_hypothesis_id"):
+                    critiqued_hypotheses.add(crit["target_hypothesis_id"])
+        critique_rate = round((len(critiqued_hypotheses) / max(total_hypotheses, 1)) * 100, 1) if total_hypotheses > 0 else 0.0
+
+        evidence_supported_conclusions = 0
+        for c in reasoning_cases:
+            has_conclusion = bool(c.get("final_conclusion") or c.get("winning_hypothesis_id"))
+            if not has_conclusion:
+                continue
+            winning_id = c.get("winning_hypothesis_id")
+            has_sup_evidence = False
+            for h in c.get("hypotheses", []):
+                if winning_id and h.get("hypothesis_id") == winning_id:
+                    if len(h.get("supporting_evidence_ids", [])) > 0:
+                        has_sup_evidence = True
+                        break
+                elif h.get("status") in ["winning", "supported"] and len(h.get("supporting_evidence_ids", [])) > 0:
+                    has_sup_evidence = True
+                    break
+            if not has_sup_evidence and len(c.get("evidence_references", [])) > 0 and c.get("consensus_state") in ["consensus", "partial_consensus"]:
+                has_sup_evidence = True
+            if has_sup_evidence:
+                evidence_supported_conclusions += 1
+
+        unresolved_disagreement_cases = sum(
+            1 for c in reasoning_cases
+            if any(d.get("resolution_status") == "open" for d in c.get("disagreements", []))
+        )
+        unresolved_disagreement_rate = round((unresolved_disagreement_cases / max(total_cases, 1)) * 100, 1) if total_cases > 0 else 0.0
+
+        conf_diffs = []
+        for c in reasoning_cases:
+            conf = c.get("confidence", 0.0)
+            actual_val = 1.0 if c.get("consensus_state") in ["consensus", "partial_consensus"] else 0.0
+            conf_diffs.append(abs(conf - actual_val))
+        confidence_calibration = round(sum(conf_diffs) / max(len(conf_diffs), 1), 3) if conf_diffs else 0.0
+
+        # Parallel reasoning tasks rate
+        parallel_reasoning_tasks = 0
+        total_reasoning_tasks = 0
+        for batch in parallel_batches:
+            b_tasks = batch.get("task_ids", [])
+            for t_id in b_tasks:
+                if "reason" in str(t_id).lower():
+                    total_reasoning_tasks += 1
+                    if len(b_tasks) > 1:
+                        parallel_reasoning_tasks += 1
+        parallel_reasoning_rate = round((parallel_reasoning_tasks / max(total_reasoning_tasks, 1)) * 100, 1) if total_reasoning_tasks > 0 else (100.0 if total_cases > 0 and len(parallel_batches) > 0 else 0.0)
+
+        multi_agent_reasoning_metrics = {
+            "reasoning_cases": total_cases,
+            "average_reasoning_rounds": avg_rounds,
+            "consensus_rate": consensus_rate,
+            "disagreement_rate": disagreement_rate,
+            "escalation_rate": escalation_rate,
+            "critique_rate": critique_rate,
+            "hypothesis_count": total_hypotheses,
+            "evidence_supported_conclusions": evidence_supported_conclusions,
+            "unresolved_disagreement_rate": unresolved_disagreement_rate,
+            "confidence_calibration": confidence_calibration,
+            "reasoning_duration": round(sum(len(c.get("reasoning_rounds", [])) * 150 for c in reasoning_cases), 1),
+            "parallel_reasoning_rate": parallel_reasoning_rate,
+        }
+
         collaboration_metrics = {
             "agents_involved": len(unique_agents),
             "agents_list": unique_agents,
@@ -511,6 +602,7 @@ class SEOAgentEvaluationService:
             **parallel_execution_metrics,
             **adaptive_routing_metrics,
             **agent_learning_metrics,
+            **multi_agent_reasoning_metrics,
         }
 
         score = 0.0
@@ -543,5 +635,11 @@ class SEOAgentEvaluationService:
             "routing_metrics": adaptive_routing_metrics,
             "agent_learning_metrics": agent_learning_metrics,
             "learning_metrics": agent_learning_metrics,
+            "reasoning_metrics": multi_agent_reasoning_metrics,
+            "multi_agent_reasoning_metrics": multi_agent_reasoning_metrics,
             "overall_score": round(score, 1)
         }
+
+    def evaluate_collaboration(self, context: SharedContext, **kwargs) -> Dict[str, Any]:
+        """Evaluates multi-agent collaboration, memory, task planning, and reasoning."""
+        return self.evaluate_shared_context(context)

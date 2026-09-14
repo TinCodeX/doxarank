@@ -8,8 +8,13 @@ import {
   createAgentRun,
   resumeAgentRun,
 } from '../api/agentRuns';
-import { orchestrateTask } from '../api/seoOrchestrator';
-import type { OrchestrationResponse } from '../api/seoOrchestrator';
+import {
+  orchestrateTask,
+  getCollaborationReasoning,
+  type OrchestrationResponse,
+  type CollaborationReasoningResponse,
+  type ReasoningCaseInfo,
+} from '../api/seoOrchestrator';
 
 import { useAgentEvents } from '../hooks/useAgentEvents';
 
@@ -40,7 +45,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedStepId, setExpandedStepId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'steps' | 'events'>('steps');
+  const [viewMode, setViewMode] = useState<'steps' | 'events' | 'reasoning'>('steps');
+  const [reasoningData, setReasoningData] = useState<CollaborationReasoningResponse | null>(null);
+  const [isLoadingReasoning, setIsLoadingReasoning] = useState<boolean>(false);
   const [orchestrationResult, setOrchestrationResult] = useState<OrchestrationResponse | null>(null);
   const [isOrchestrating, setIsOrchestrating] = useState<boolean>(false);
 
@@ -157,6 +164,46 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       setIsLoadingRuns(false);
     }
   };
+
+  const fetchReasoning = useCallback(async () => {
+    if (!activeRun?.id) {
+      setReasoningData(null);
+      return;
+    }
+    setIsLoadingReasoning(true);
+    try {
+      const data = await getCollaborationReasoning(activeRun.id);
+      setReasoningData(data);
+    } catch (err) {
+      const snap = activeRun.context_snapshot;
+      const cases = snap?.reasoning_cases || snap?.shared_memory?.reasoning_cases || [];
+      if (cases && cases.length > 0) {
+        setReasoningData({
+          run_id: activeRun.id,
+          correlation_id: snap?.correlation_id || String(activeRun.id),
+          project_id: project.id,
+          total_cases: cases.length,
+          cases: cases,
+          consensus_summary: {
+            reached: cases.filter((c: any) => c.consensus_result?.consensus_state === 'reached').length,
+            escalated: cases.filter((c: any) => c.consensus_result?.consensus_state === 'escalated').length,
+            failed: cases.filter((c: any) => c.consensus_result?.consensus_state === 'failed').length,
+            open: 0,
+          },
+        });
+      } else {
+        setReasoningData(null);
+      }
+    } finally {
+      setIsLoadingReasoning(false);
+    }
+  }, [activeRun?.id, activeRun?.context_snapshot, project.id]);
+
+  useEffect(() => {
+    if (viewMode === 'reasoning' && activeRun?.id) {
+      fetchReasoning();
+    }
+  }, [viewMode, activeRun?.id, fetchReasoning]);
 
   const handleStartRun = async () => {
     if (!goal.trim()) {
@@ -1378,6 +1425,19 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                 >
                   📡 Event Log ({liveEvents.length} Events)
                 </button>
+                <button
+                  onClick={() => {
+                    setViewMode('reasoning');
+                    fetchReasoning();
+                  }}
+                  style={{
+                    ...tabBtnStyle,
+                    backgroundColor: viewMode === 'reasoning' ? '#4338ca' : '#f1f5f9',
+                    color: viewMode === 'reasoning' ? '#ffffff' : '#475569',
+                  }}
+                >
+                  🧠 Multi-Agent Reasoning {reasoningData?.total_cases ? `(${reasoningData.total_cases})` : ''}
+                </button>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1579,6 +1639,267 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                 <div style={emptyStepsStyle}>
                   <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     No real-time events logged for this run yet.
+                  </p>
+                </div>
+              )
+            )}
+
+            {/* View Mode: Multi-Agent Reasoning & Consensus */}
+            {viewMode === 'reasoning' && (
+              isLoadingReasoning ? (
+                <div style={emptyStepsStyle}>
+                  <p style={{ margin: 0, color: '#4338ca', fontSize: '13px', fontWeight: 600 }}>
+                    ⏳ Loading multi-agent reasoning cases & consensus analysis...
+                  </p>
+                </div>
+              ) : reasoningData?.cases && reasoningData.cases.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {reasoningData.cases.map((rc: ReasoningCaseInfo) => {
+                    const consensusState = rc.consensus_result?.consensus_state || 'no_consensus';
+                    const isReached = consensusState === 'reached';
+                    const isEscalated = consensusState === 'escalated';
+                    const badgeBg = isReached ? '#dcfce7' : isEscalated ? '#fee2e2' : '#ffedd5';
+                    const badgeColor = isReached ? '#166534' : isEscalated ? '#991b1b' : '#9a3412';
+                    const badgeLabel = isReached
+                      ? '✓ Consensus Reached'
+                      : isEscalated
+                      ? '⚠️ Escalated to Human (HITL)'
+                      : '⚡ No Consensus';
+
+                    return (
+                      <div
+                        key={rc.case_id}
+                        style={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '12px',
+                          padding: '18px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        }}
+                      >
+                        {/* Case Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4338ca', backgroundColor: '#e0e7ff', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                                CASE: {rc.case_id}
+                              </span>
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                Initiator: <strong>{rc.initiating_agent}</strong>
+                              </span>
+                            </div>
+                            <h4 style={{ margin: 0, fontSize: '15px', color: '#0f172a', fontWeight: 700 }}>
+                              {rc.objective}
+                            </h4>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px', backgroundColor: badgeBg, color: badgeColor }}>
+                              {badgeLabel}
+                            </span>
+                            {rc.consensus_result?.confidence !== undefined && (
+                              <span style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                                Confidence: {Math.round(rc.consensus_result.confidence * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Participating Agents */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Participating Agents:</span>
+                          {(rc.participating_agents || []).map((ag: string) => (
+                            <span key={ag} style={{ fontSize: '11px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', padding: '2px 6px', borderRadius: '4px', color: '#334155' }}>
+                              🤖 {ag}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Consensus Result Card */}
+                        {rc.consensus_result && (
+                          <div style={{
+                            backgroundColor: isReached ? '#f0fdf4' : isEscalated ? '#fff1f2' : '#fffbeb',
+                            border: `1px solid ${isReached ? '#bbf7d0' : isEscalated ? '#fecdd3' : '#fde68a'}`,
+                            borderRadius: '8px',
+                            padding: '12px 14px',
+                            marginBottom: '16px',
+                          }}>
+                            <div style={{ fontSize: '12px', fontWeight: 800, color: badgeColor, textTransform: 'uppercase', marginBottom: '4px' }}>
+                              Arbitrated Conclusion & Decision
+                            </div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', marginBottom: '6px' }}>
+                              {rc.consensus_result.selected_conclusion || 'No single hypothesis prevailed.'}
+                            </div>
+                            {rc.consensus_result.rationale && (
+                              <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#475569', lineHeight: 1.5 }}>
+                                <strong>Rationale:</strong> {rc.consensus_result.rationale}
+                              </p>
+                            )}
+                            {rc.consensus_result.escalation_reason && (
+                              <div style={{ fontSize: '12px', color: '#991b1b', fontWeight: 600, marginTop: '4px' }}>
+                                ⚠️ Escalation Note: {rc.consensus_result.escalation_reason}
+                              </div>
+                            )}
+                            {rc.consensus_result.unresolved_uncertainty && rc.consensus_result.unresolved_uncertainty.length > 0 && (
+                              <div style={{ marginTop: '6px' }}>
+                                <span style={{ fontSize: '11px', color: '#9a3412', fontWeight: 700 }}>Unresolved Uncertainties:</span>
+                                <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: '12px', color: '#7c2d12' }}>
+                                  {rc.consensus_result.unresolved_uncertainty.map((u: string, idx: number) => (
+                                    <li key={idx}>{u}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Competing Hypotheses */}
+                        <div style={{ marginBottom: '16px' }}>
+                          <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            💡 Competing Hypotheses ({rc.hypotheses?.length || 0})
+                          </h5>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px' }}>
+                            {(rc.hypotheses || []).map((hyp: any) => {
+                              const isSelected = rc.consensus_result?.selected_hypothesis_id === hyp.hypothesis_id;
+                              return (
+                                <div
+                                  key={hyp.hypothesis_id}
+                                  style={{
+                                    border: `1px solid ${isSelected ? '#4338ca' : '#e2e8f0'}`,
+                                    backgroundColor: isSelected ? '#f8faff' : '#ffffff',
+                                    borderRadius: '8px',
+                                    padding: '10px 12px',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca' }}>
+                                      {hyp.agent}
+                                    </span>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                      <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>
+                                        {hyp.epistemic_type}
+                                      </span>
+                                      {isSelected && (
+                                        <span style={{ fontSize: '10px', backgroundColor: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                          Winner
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', marginBottom: '4px' }}>
+                                    {hyp.summary}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', lineHeight: 1.4 }}>
+                                    {hyp.rationale}
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#475569', borderTop: '1px solid #f1f5f9', paddingTop: '6px' }}>
+                                    <span>Evidence: +{hyp.supporting_evidence?.length || 0} / -{hyp.contradicting_evidence?.length || 0}</span>
+                                    <span>Conf: {Math.round((hyp.confidence || 0) * 100)}%</span>
+                                  </div>
+                                  {hyp.supporting_evidence && hyp.supporting_evidence.length > 0 && (
+                                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#059669', backgroundColor: '#f0fdf4', padding: '4px 6px', borderRadius: '4px' }}>
+                                      📎 {hyp.supporting_evidence.map((e: any) => e.claim).join('; ')}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Cross-Agent Critiques & Challenges */}
+                        {rc.rounds && rc.rounds.some((r: any) => r.critiques && r.critiques.length > 0) && (
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              ⚔️ Cross-Agent Critiques & Challenges
+                            </h5>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {rc.rounds.flatMap((r: any) => r.critiques || []).map((crit: any) => {
+                                const isHighSev = crit.severity === 'high' || crit.severity === 'critical';
+                                return (
+                                  <div
+                                    key={crit.critique_id}
+                                    style={{
+                                      fontSize: '12px',
+                                      backgroundColor: isHighSev ? '#fef2f2' : '#f8fafc',
+                                      border: `1px solid ${isHighSev ? '#fecaca' : '#e2e8f0'}`,
+                                      borderRadius: '6px',
+                                      padding: '8px 10px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '3px',
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ fontWeight: 700, color: '#1e293b' }}>
+                                        🤖 {crit.critique_agent} ➔ 🎯 {crit.target_agent}
+                                      </span>
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <span style={{ fontSize: '10px', color: '#64748b' }}>{crit.challenge_type}</span>
+                                        <span style={{ fontSize: '10px', fontWeight: 700, color: isHighSev ? '#b91c1c' : '#475569' }}>
+                                          [{crit.severity}]
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div style={{ color: '#334155' }}>
+                                      {crit.critique_text}
+                                    </div>
+                                    {crit.suggested_verification && (
+                                      <div style={{ fontSize: '11px', color: '#0369a1' }}>
+                                        🔍 Suggested verification: {crit.suggested_verification}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Disagreements */}
+                        {rc.rounds && rc.rounds.some((r: any) => r.disagreements && r.disagreements.length > 0) && (
+                          <div>
+                            <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              ⚠️ Detected Disagreements
+                            </h5>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {rc.rounds.flatMap((r: any) => r.disagreements || []).map((dis: any) => (
+                                <div
+                                  key={dis.disagreement_id}
+                                  style={{
+                                    fontSize: '12px',
+                                    backgroundColor: '#fffbeb',
+                                    border: '1px solid #fde68a',
+                                    borderRadius: '6px',
+                                    padding: '8px 10px',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                                    <span style={{ fontWeight: 700, color: '#92400e' }}>
+                                      {dis.agent_a} vs {dis.agent_b}: {dis.topic}
+                                    </span>
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
+                                      {dis.severity} ({dis.status})
+                                    </span>
+                                  </div>
+                                  {dis.evidence_discrepancy && (
+                                    <div style={{ color: '#78350f', fontSize: '11px' }}>
+                                      {dis.evidence_discrepancy}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={emptyStepsStyle}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                    No multi-agent reasoning cases recorded for this run. Launch a multi-agent reasoning mission above to analyze competing hypotheses.
                   </p>
                 </div>
               )

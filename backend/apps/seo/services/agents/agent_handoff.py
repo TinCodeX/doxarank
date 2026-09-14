@@ -196,6 +196,11 @@ class AgentHandoffContext:
     current_task_id: Optional[str] = None
     task_objective: Optional[str] = None
 
+    # Phase 5.7 Advanced Multi-Agent Reasoning & Consensus
+    current_case_id: Optional[str] = None
+    reasoning_hypotheses: List[Dict[str, Any]] = field(default_factory=list)
+    reasoning_round: Optional[int] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "project_id": self.project_id,
@@ -225,6 +230,9 @@ class AgentHandoffContext:
             "pending_questions": self.pending_questions,
             "current_task_id": self.current_task_id,
             "task_objective": self.task_objective,
+            "current_case_id": self.current_case_id,
+            "reasoning_hypotheses": self.reasoning_hypotheses,
+            "reasoning_round": self.reasoning_round,
         }
 
     @classmethod
@@ -257,6 +265,9 @@ class AgentHandoffContext:
             pending_questions=data.get("pending_questions", []),
             current_task_id=data.get("current_task_id"),
             task_objective=data.get("task_objective"),
+            current_case_id=data.get("current_case_id"),
+            reasoning_hypotheses=data.get("reasoning_hypotheses", []),
+            reasoning_round=data.get("reasoning_round"),
         )
 
 
@@ -287,6 +298,7 @@ class CollaborationState:
     parallel_batches: List[Dict[str, Any]] = field(default_factory=list)
     routing_decisions: List[Dict[str, Any]] = field(default_factory=list)
     learning_records: List[Dict[str, Any]] = field(default_factory=list)
+    reasoning_cases: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -311,6 +323,7 @@ class CollaborationState:
             "parallel_batches": self.parallel_batches,
             "routing_decisions": self.routing_decisions,
             "learning_records": self.learning_records,
+            "reasoning_cases": self.reasoning_cases,
         }
 
 

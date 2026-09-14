@@ -73,6 +73,7 @@ class ParallelExecutionBatch:
     overlap_duration_ms: int = 0
     duration_ms: int = 0
     task_timings: Dict[str, Any] = field(default_factory=dict)
+    results: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

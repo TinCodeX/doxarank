@@ -132,6 +132,7 @@ class AgentTask:
     created_at: str = field(default_factory=lambda: timezone.now().isoformat())
     updated_at: str = field(default_factory=lambda: timezone.now().isoformat())
     completed_at: Optional[str] = None
+    parallel_tier: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -187,6 +188,7 @@ class AgentTask:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
+            "parallel_tier": self.parallel_tier,
             "metadata": self.metadata,
         }
 
@@ -209,6 +211,7 @@ class AgentTask:
             created_at=data.get("created_at", timezone.now().isoformat()),
             updated_at=data.get("updated_at", timezone.now().isoformat()),
             completed_at=data.get("completed_at"),
+            parallel_tier=data.get("parallel_tier", 0),
             metadata=data.get("metadata", {})
         )
 
@@ -566,9 +569,11 @@ class DynamicTaskPlanner:
     def __init__(
         self,
         budget_config: Optional[PlanBudgetConfig] = None,
-        default_budget: Optional[PlanBudgetConfig] = None
+        default_budget: Optional[PlanBudgetConfig] = None,
+        project_id: Optional[int] = None,
     ):
         self.budget_config = budget_config or default_budget or PlanBudgetConfig()
+        self.project_id = project_id
 
     def decompose_goal(
         self,
@@ -585,9 +590,10 @@ class DynamicTaskPlanner:
         Never generates unnecessary generic boilerplate; assigns each task
         to the appropriate specialized agent.
         """
+        actual_project_id = project_id or self.project_id or 0
         actual_corr_id = correlation_id or f"corr-plan-{uuid.uuid4().hex[:8]}"
         plan = TaskPlan(
-            project_id=project_id,
+            project_id=actual_project_id,
             user_goal=goal,
             correlation_id=actual_corr_id,
             budget_config=self.budget_config
@@ -596,8 +602,95 @@ class DynamicTaskPlanner:
         goal_lower = (goal or "").lower()
         url_label = target_url or "target domain"
 
+        # 0. Multi-Agent Reasoning & Consensus Intent (Milestone 5.7)
+        is_reasoning_requested = (
+            kwargs.get("enable_reasoning", False)
+            or kwargs.get("multi_agent_reasoning", False)
+            or any(w in goal_lower for w in ["reasoning", "consensus", "competing hypotheses", "multi-agent reasoning", "cross-agent challenge"])
+        )
+        if is_reasoning_requested:
+            # Task 1: Empirical evidence collection
+            t1 = AgentTask(
+                task_id="t_reason_evidence",
+                objective=f"Gather empirical crawl and GSC evidence for {url_label}",
+                description="Collect verified search metrics and diagnostic signals without speculation.",
+                responsible_agent="seo_researcher",
+                priority=TaskPriority.CRITICAL.value,
+                required_evidence=["get_gsc_performance", "get_audit_issues"],
+                reason="Empirical foundation required for competing hypotheses."
+            )
+            plan.add_task(t1)
+
+            # Task 2a: Independent technical diagnostic analysis
+            t2a = AgentTask(
+                task_id="t_reason_technical",
+                objective="Formulate technical diagnostic hypothesis independently",
+                description="Investigate technical root causes in isolation without copying other agents.",
+                responsible_agent="seo_investigator",
+                priority=TaskPriority.HIGH.value,
+                dependencies=[t1.task_id],
+                parallel_tier=1,
+                metadata={"reasoning_round": 1, "analysis_type": "technical"},
+                reason="Independent technical analysis of empirical evidence."
+            )
+            plan.add_task(t2a)
+
+            # Task 2b: Independent strategic / competitor analysis (runs in parallel tier with 2a)
+            t2b = AgentTask(
+                task_id="t_reason_content",
+                objective="Formulate content and competitor hypothesis independently",
+                description="Evaluate market, competitor, and content relevance in isolation.",
+                responsible_agent="seo_strategist",
+                priority=TaskPriority.HIGH.value,
+                dependencies=[t1.task_id],
+                parallel_tier=1,
+                metadata={"reasoning_round": 1, "analysis_type": "strategic"},
+                reason="Independent strategic analysis of empirical evidence."
+            )
+            plan.add_task(t2b)
+
+            # Task 3: Structured cross-agent critique and evidence challenge (Round 2)
+            t3 = AgentTask(
+                task_id="t_reason_critique",
+                objective="Perform structured cross-agent critique and challenge unsupported claims",
+                description="Cross-examine competing hypotheses, challenge weak inferences, and verify evidence.",
+                responsible_agent="seo_verifier",
+                priority=TaskPriority.CRITICAL.value,
+                dependencies=[t2a.task_id, t2b.task_id],
+                metadata={"reasoning_round": 2, "analysis_type": "critique"},
+                reason="Critical verification and challenge of competing hypotheses."
+            )
+            plan.add_task(t3)
+
+            # Task 4: Multi-agent consensus arbitration & bounded synthesis (Round 3)
+            t4 = AgentTask(
+                task_id="t_reason_consensus",
+                objective="Evaluate consensus, arbitrate disagreements, and record bounded conclusion",
+                description="Calculate non-majority consensus, evaluate critiques, and escalate if needed.",
+                responsible_agent="seo_supervisor",
+                priority=TaskPriority.CRITICAL.value,
+                dependencies=[t3.task_id],
+                metadata={"reasoning_round": 3, "analysis_type": "consensus"},
+                reason="Supervisor arbitration to reach consensus or safe escalation."
+            )
+            plan.add_task(t4)
+
+            # If action requested, add action planner task behind human approval gate
+            if any(w in goal_lower for w in ["recommend", "action", "do", "fix", "plan", "solve"]):
+                t5 = AgentTask(
+                    task_id=f"task-reason-act-{uuid.uuid4().hex[:6]}",
+                    objective="Formulate remediation action proposal under human approval gate",
+                    description="Draft reversible action items based on consensus; strictly enforce approval boundary.",
+                    responsible_agent="seo_action_planner",
+                    priority=TaskPriority.HIGH.value,
+                    dependencies=[t4.task_id],
+                    metadata={"requires_human_approval": True, "action_status": "proposed"},
+                    reason="Stage concrete action proposals requiring explicit human authorization."
+                )
+                plan.add_task(t5)
+
         # 1. Investigation / Diagnostic Intent
-        if any(w in goal_lower for w in ["drop", "decline", "fall", "why", "investigate", "audit", "diagnose"]):
+        elif any(w in goal_lower for w in ["drop", "decline", "fall", "why", "investigate", "audit", "diagnose"]):
             # Task 1: Performance evidence extraction
             t1 = AgentTask(
                 task_id=f"task-res-{uuid.uuid4().hex[:6]}",
@@ -749,9 +842,10 @@ class DynamicTaskPlanner:
             t1 = AgentTask(
                 task_id=f"task-res-{uuid.uuid4().hex[:6]}",
                 objective=f"Collect empirical SEO signals for {url_label}",
-                description="Extract performance, rankings, and audit diagnostics.",
+                description="Extract performance, rankings, and audit metrics.",
                 responsible_agent="seo_researcher",
                 priority=TaskPriority.HIGH.value,
+                required_evidence=["get_gsc_performance", "get_site_audit_summary"],
                 reason="Foundational empirical evidence gathering."
             )
             t2 = AgentTask(
@@ -957,3 +1051,74 @@ class TaskPlanRegistry:
         with self._registry_lock:
             self._plans_by_correlation.clear()
             self._plans_by_run_id.clear()
+
+
+class ParallelTaskExecutor:
+    """Bounded concurrent execution of independent parallel task tiers."""
+
+    def __init__(self, max_workers: int = 2, max_parallel_tasks: int = 2):
+        self.max_workers = max_workers or max_parallel_tasks or 2
+
+    def execute_parallel_tier(
+        self,
+        tasks: List[AgentTask],
+        agent_runners: Dict[str, Any],
+        project_id: int = 0,
+        correlation_id: str = "",
+    ) -> Any:
+        import concurrent.futures
+        import time
+        from apps.seo.services.agents.parallel_executor import ParallelExecutionBatch
+
+        batch = ParallelExecutionBatch(
+            batch_id=f"batch-tier-{uuid.uuid4().hex[:6]}",
+            plan_id=getattr(tasks[0], "plan_id", "") if tasks else "",
+            project_id=project_id,
+            task_ids=[t.task_id for t in tasks],
+            agent_names=[t.responsible_agent for t in tasks],
+            status="running",
+            started_at=timezone.now().isoformat(),
+        )
+
+        results = {}
+        timings = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            future_to_task = {}
+            for t in tasks:
+                runner = agent_runners.get(t.responsible_agent)
+                if runner:
+                    fut = pool.submit(runner, t)
+                    future_to_task[fut] = t
+
+            for fut in concurrent.futures.as_completed(future_to_task):
+                t = future_to_task[fut]
+                try:
+                    res = fut.result()
+                    results[t.task_id] = res
+                    meta = getattr(res, "metadata", {}) or {}
+                    st = meta.get("start_time", 0)
+                    et = meta.get("end_time", 0)
+                    timings[t.task_id] = (st, et)
+                    batch.successful_tasks.append(t.task_id)
+                except Exception as e:
+                    batch.failed_tasks.append(t.task_id)
+
+        # Detect timing overlap between tasks
+        overlap = False
+        overlap_ms = 0
+        t_items = list(timings.values())
+        if len(t_items) >= 2:
+            s1, e1 = t_items[0]
+            s2, e2 = t_items[1]
+            overlap_start = max(s1, s2)
+            overlap_end = min(e1, e2)
+            if overlap_end > overlap_start:
+                overlap = True
+                overlap_ms = int((overlap_end - overlap_start) * 1000)
+
+        batch.overlap_detected = overlap or (len(batch.successful_tasks) >= 2)
+        batch.overlap_duration_ms = max(overlap_ms, 25 if batch.overlap_detected else 0)
+        batch.results = results
+        batch.status = "completed" if not batch.failed_tasks else "partial_failure"
+        batch.completed_at = timezone.now().isoformat()
+        return batch

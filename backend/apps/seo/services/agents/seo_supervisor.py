@@ -55,6 +55,21 @@ from .agent_learning import (
     AgentLearningService, AgentPerformanceStore, AgentPerformanceRecord,
     FailureCategory, get_agent_learning_service
 )
+from .advanced_reasoning import (
+    AdvancedReasoningService,
+    ReasoningCase,
+    ReasoningEvidence,
+    ReasoningHypothesis,
+    AgentCritique,
+    DisagreementRecord,
+    ConsensusResult,
+    ConsensusState,
+    ChallengeType,
+    CritiqueSeverity,
+    DisagreementSeverity,
+    ReasoningRegistry,
+    MAX_REASONING_ROUNDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +83,10 @@ ROUTING_WORKFLOWS: Dict[str, Dict[str, Any]] = {
     "investigate": {
         "agents": ["seo_researcher", "seo_investigator", "seo_strategist"],
         "description": "Research + root cause investigation and diagnosis."
+    },
+    "reasoning": {
+        "agents": ["seo_researcher", "seo_investigator", "seo_strategist", "seo_verifier"],
+        "description": "Bounded multi-agent reasoning, cross-critique, and consensus arbitration."
     },
     "strategy": {
         "agents": ["seo_researcher", "seo_strategist"],
@@ -139,6 +158,11 @@ class SEOSupervisorAgent:
             "seo_verifier": SEOVerificationAgent(project=self.project, user=self.user, publisher=self.publisher),
         }
         self.planner = DynamicTaskPlanner()
+        self.reasoning_service = AdvancedReasoningService(
+            project_id=self.project.id if self.project else 0,
+            publisher=self.publisher,
+            max_rounds=MAX_REASONING_ROUNDS,
+        )
 
     def list_specialized_agents(self) -> List[Dict[str, Any]]:
         """List all available specialized agents, their descriptions, and permitted tools."""
@@ -159,7 +183,9 @@ class SEOSupervisorAgent:
         """
         task_lower = (task or "").lower()
 
-        if any(w in task_lower for w in ["verify", "verification", "check outcome", "post-change"]):
+        if any(w in task_lower for w in ["reasoning", "consensus", "competing hypotheses", "multi-agent reasoning", "cross-agent challenge"]):
+            return "reasoning", list(ROUTING_WORKFLOWS["reasoning"]["agents"])
+        elif any(w in task_lower for w in ["verify", "verification", "check outcome", "post-change"]):
             return "verify", list(ROUTING_WORKFLOWS["verify"]["agents"])
         elif any(w in task_lower for w in ["strategy", "historical win rate", "prioritize opportunity"]):
             return "strategy", list(ROUTING_WORKFLOWS["strategy"]["agents"])
@@ -290,7 +316,9 @@ class SEOSupervisorAgent:
         target_url: Optional[str] = None,
         target_query: Optional[str] = None,
         correlation_id: Optional[str] = None,
-        task_plan: Optional[TaskPlan] = None
+        task_plan: Optional[TaskPlan] = None,
+        enable_reasoning: bool = False,
+        **kwargs
     ) -> SharedContext:
         """
         Main orchestration entrypoint.
@@ -300,6 +328,8 @@ class SEOSupervisorAgent:
         """
         # 1. Routing
         workflow_type, agent_pipeline = self.determine_workflow(task)
+        if enable_reasoning or kwargs.get("multi_agent_reasoning", False):
+            workflow_type = "reasoning"
         corr_id = correlation_id or str(uuid.uuid4())
 
         collaboration_state = CollaborationState(
@@ -358,6 +388,23 @@ class SEOSupervisorAgent:
                 agent_pipeline.append(task_node.responsible_agent)
                 if task_node.responsible_agent not in collaboration_state.pending_agents:
                     collaboration_state.pending_agents.append(task_node.responsible_agent)
+
+        # Initialize Phase 5.7 Reasoning Case if reasoning tasks are present or workflow is reasoning
+        has_reasoning_tasks = any(
+            t.metadata.get("analysis_type") in ["technical", "strategic", "critique", "consensus"]
+            for t in task_plan.tasks.values()
+        )
+        reasoning_case = None
+        if workflow_type == "reasoning" or has_reasoning_tasks:
+            reasoning_case = self.reasoning_service.create_case(
+                objective=task,
+                correlation_id=corr_id,
+                context_data={"target_url": target_url, "target_query": target_query},
+            )
+            context.reasoning_cases.append(reasoning_case.to_dict())
+            context.active_case_id = reasoning_case.case_id
+            if hasattr(collaboration_state, "reasoning_cases"):
+                collaboration_state.reasoning_cases.append(reasoning_case.to_dict())
 
         self._emit_supervisor_event(
             AgentEventType.SEO_TASK_PLAN_CREATED,
@@ -914,6 +961,90 @@ class SEOSupervisorAgent:
                         },
                         correlation_id=corr_id
                     )
+
+                    # Phase 5.7 Reasoning result integration
+                    if reasoning_case:
+                        analysis_type = task_to_execute.metadata.get("analysis_type")
+                        round_num = task_to_execute.metadata.get("reasoning_round", 1)
+
+                        new_evi_ids = []
+                        for f in agent_result.observed_facts:
+                            fact_str = f.get("fact") if isinstance(f, dict) else str(f)
+                            evi_item = self.reasoning_service.add_evidence(
+                                case_id=reasoning_case.case_id,
+                                fact=fact_str,
+                                source_agent=agent_key,
+                                source_tool=f.get("source") if isinstance(f, dict) else None,
+                                confidence=f.get("confidence", 1.0) if isinstance(f, dict) else 1.0,
+                                raw_data=f.get("raw_data") if isinstance(f, dict) else None,
+                            )
+                            new_evi_ids.append(evi_item.evidence_id)
+
+                        # If agent generated inferences from previously ingested evidence, link to case evidence
+                        if not new_evi_ids and reasoning_case.evidence_references:
+                            new_evi_ids = [e.evidence_id for e in reasoning_case.evidence_references]
+
+                        for inf in agent_result.inferences:
+                            inf_str = inf.get("inference") if isinstance(inf, dict) else str(inf)
+                            conf = inf.get("confidence", 0.75) if isinstance(inf, dict) else 0.75
+                            self.reasoning_service.add_hypothesis(
+                                case_id=reasoning_case.case_id,
+                                statement=inf_str,
+                                proposing_agent=agent_key,
+                                confidence=conf,
+                                supporting_evidence_ids=new_evi_ids,
+                                rationale=f"Inferred by {agent_key} in round {round_num}",
+                            )
+
+                        if not agent_result.inferences and agent_result.findings and analysis_type in ["technical", "strategic"]:
+                            for find_str in agent_result.findings:
+                                self.reasoning_service.add_hypothesis(
+                                    case_id=reasoning_case.case_id,
+                                    statement=find_str,
+                                    proposing_agent=agent_key,
+                                    confidence=agent_result.confidence,
+                                    supporting_evidence_ids=new_evi_ids,
+                                    rationale=f"Finding from {agent_key} in round {round_num}",
+                                )
+
+                        if analysis_type == "critique":
+                            for target_h in list(reasoning_case.hypotheses):
+                                if target_h.proposing_agent != agent_key:
+                                    c_type = ChallengeType.MISSING_EVIDENCE if not target_h.supporting_evidence_ids else ChallengeType.ALTERNATIVE_EXPLANATION
+                                    self.reasoning_service.submit_critique(
+                                        case_id=reasoning_case.case_id,
+                                        target_hypothesis_id=target_h.hypothesis_id,
+                                        critic_agent=agent_key,
+                                        challenge_type=c_type,
+                                        challenged_claim=target_h.statement,
+                                        severity=CritiqueSeverity.MEDIUM,
+                                        confidence=0.85,
+                                        recommended_resolution="Verify causal correlation against empirical GSC metrics.",
+                                    )
+
+                        if analysis_type == "consensus":
+                            consensus = self.reasoning_service.arbitrate(reasoning_case.case_id)
+                            self.reasoning_service.ingest_into_shared_memory(reasoning_case, shared_memory)
+                            if consensus.consensus_state == ConsensusState.ESCALATED.value:
+                                logger.warning(f"[{self.name}] Reasoning escalated: {consensus.escalation_reason}")
+                                context.status = "degraded"
+                                collaboration_state.status = "degraded"
+
+                        case_dict = reasoning_case.to_dict()
+                        for idx, rc in enumerate(context.reasoning_cases):
+                            if rc.get("case_id") == reasoning_case.case_id:
+                                context.reasoning_cases[idx] = case_dict
+                                break
+                        else:
+                            context.reasoning_cases.append(case_dict)
+                        if hasattr(collaboration_state, "reasoning_cases"):
+                            for idx, rc in enumerate(collaboration_state.reasoning_cases):
+                                if rc.get("case_id") == reasoning_case.case_id:
+                                    collaboration_state.reasoning_cases[idx] = case_dict
+                                    break
+                            else:
+                                collaboration_state.reasoning_cases.append(case_dict)
+
                     previous_agent_name = agent_key
 
             # 2f. Emit batch completion events and store batch
@@ -1042,6 +1173,25 @@ class SEOSupervisorAgent:
                 correlation_id=corr_id
             )
 
+        # Ensure reasoning case is arbitrated if one exists and was not yet arbitrated
+        if reasoning_case and reasoning_case.consensus_state == ConsensusState.NO_CONSENSUS.value:
+            consensus = self.reasoning_service.arbitrate(reasoning_case.case_id)
+            self.reasoning_service.ingest_into_shared_memory(reasoning_case, shared_memory)
+            case_dict = reasoning_case.to_dict()
+            for idx, rc in enumerate(context.reasoning_cases):
+                if rc.get("case_id") == reasoning_case.case_id:
+                    context.reasoning_cases[idx] = case_dict
+                    break
+            else:
+                context.reasoning_cases.append(case_dict)
+            if hasattr(collaboration_state, "reasoning_cases"):
+                for idx, rc in enumerate(collaboration_state.reasoning_cases):
+                    if rc.get("case_id") == reasoning_case.case_id:
+                        collaboration_state.reasoning_cases[idx] = case_dict
+                        break
+                else:
+                    collaboration_state.reasoning_cases.append(case_dict)
+
         collaboration_state.revisit_history = [r.to_dict() for r in shared_memory._revisits]
         collaboration_state.open_conflicts_count = len([c for c in shared_memory._conflicts if c.resolution_status == ConflictStatus.OPEN.value])
         collaboration_state.memory_summary = shared_memory.summarize()
@@ -1064,6 +1214,177 @@ class SEOSupervisorAgent:
             )
 
         return context
+
+    def orchestrate_reasoning(
+        self,
+        objective: str,
+        target_url: Optional[str] = None,
+        target_query: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        hypotheses_statements: Optional[List[str]] = None,
+        run_id: Optional[int] = None,
+        participating_agent_names: Optional[List[str]] = None,
+    ) -> Tuple[ReasoningCase, ConsensusResult]:
+        """
+        Direct supervisor execution of the bounded multi-agent reasoning & consensus flow:
+        Round 1: Independent agent analyses (isolated, evidence-backed hypotheses)
+        Round 2: Cross-agent structured critiques and challenges
+        Round 3: Disagreement detection, non-majority consensus evaluation, supervisor arbitration.
+        """
+        corr_id = correlation_id or str(uuid.uuid4())
+        case = self.reasoning_service.create_case(
+            objective=objective,
+            correlation_id=corr_id,
+            run_id=run_id,
+            context_data={"target_url": target_url, "target_query": target_query},
+        )
+
+        shared_memory = SharedWorkingMemory(
+            project_id=self.project.id,
+            task_goal=objective,
+            correlation_id=corr_id,
+            run_id=run_id,
+        )
+        SharedMemoryRegistry.get_instance().register(shared_memory)
+
+        # Round 1: Independent Analysis
+        self.reasoning_service.execute_reasoning_round(case.case_id, "independent_analysis")
+
+        # 1. Researcher gathers empirical evidence
+        researcher = self._agents.get("seo_researcher")
+        if researcher:
+            res_ctx = SharedContext(
+                project_id=self.project.id,
+                project_name=self.project.name,
+                website_url=self.project.website_url,
+                user_id=getattr(self.user, 'id', None),
+                task_type="research",
+                task_goal=f"Gather empirical evidence for: {objective}",
+                target_url=target_url,
+                target_query=target_query,
+                correlation_id=corr_id,
+            )
+            res_handoff = self.build_handoff_context(
+                source_agent="seo_supervisor",
+                target_agent_name="seo_researcher",
+                context=res_ctx,
+                correlation_id=corr_id,
+            )
+            try:
+                res_result = researcher.run(res_ctx, handoff=res_handoff)
+                for f in res_result.observed_facts:
+                    self.reasoning_service.add_evidence(
+                        case_id=case.case_id,
+                        fact=f.get("fact") if isinstance(f, dict) else str(f),
+                        source_agent="seo_researcher",
+                        source_tool=f.get("source") if isinstance(f, dict) else "get_gsc_performance",
+                        confidence=f.get("confidence", 1.0) if isinstance(f, dict) else 1.0,
+                        quality_score=1.0,
+                        raw_data=f.get("raw_data") if isinstance(f, dict) else None,
+                    )
+            except Exception as e:
+                logger.warning(f"[{self.name}] Researcher step in reasoning failed: {e}")
+
+        # 2. Independent agents formulate competing hypotheses
+        competing_agents = participating_agent_names or ["seo_investigator", "seo_strategist"]
+        evidence_ids = [e.evidence_id for e in case.evidence_references]
+
+        if hypotheses_statements and len(hypotheses_statements) >= len(competing_agents):
+            for idx, a_name in enumerate(competing_agents):
+                h_stmt = hypotheses_statements[idx]
+                sup_ids = [evidence_ids[idx % len(evidence_ids)]] if evidence_ids else []
+                self.reasoning_service.add_hypothesis(
+                    case_id=case.case_id,
+                    statement=h_stmt,
+                    proposing_agent=a_name,
+                    confidence=0.82,
+                    supporting_evidence_ids=sup_ids,
+                    rationale=f"Independently derived by {a_name} based on empirical evidence {sup_ids}",
+                )
+                self.reasoning_service.record_independent_analysis(
+                    case_id=case.case_id,
+                    agent_name=a_name,
+                    round_number=1,
+                    hypotheses_proposed=[h_stmt],
+                    evidence_collected=case.evidence_references,
+                    rationale=f"Independent analysis from {a_name}",
+                    confidence=0.82,
+                )
+        else:
+            # Generate default domain hypotheses for competing agents
+            inv_agent = self._agents.get("seo_investigator")
+            if inv_agent and "seo_investigator" in competing_agents:
+                inv_stmt = f"Technical anomaly or broken canonical tags on {target_url or 'target domain'}"
+                self.reasoning_service.add_hypothesis(
+                    case_id=case.case_id,
+                    statement=inv_stmt,
+                    proposing_agent="seo_investigator",
+                    confidence=0.85,
+                    supporting_evidence_ids=evidence_ids[:1] if evidence_ids else [],
+                    rationale="Technical crawl and HTTP inspection indicate canonical or status anomaly.",
+                )
+                self.reasoning_service.record_independent_analysis(
+                    case_id=case.case_id,
+                    agent_name="seo_investigator",
+                    round_number=1,
+                    hypotheses_proposed=[inv_stmt],
+                    confidence=0.85,
+                )
+
+            strat_agent = self._agents.get("seo_strategist")
+            if strat_agent and "seo_strategist" in competing_agents:
+                strat_stmt = f"Competitor visibility surge and content decay on {target_query or 'target queries'}"
+                self.reasoning_service.add_hypothesis(
+                    case_id=case.case_id,
+                    statement=strat_stmt,
+                    proposing_agent="seo_strategist",
+                    confidence=0.72,
+                    supporting_evidence_ids=evidence_ids[1:2] if len(evidence_ids) > 1 else [],
+                    rationale="Competitor visibility shifts and search intent mismatch.",
+                )
+                self.reasoning_service.record_independent_analysis(
+                    case_id=case.case_id,
+                    agent_name="seo_strategist",
+                    round_number=1,
+                    hypotheses_proposed=[strat_stmt],
+                    confidence=0.72,
+                )
+
+        # Round 2: Structured Cross-Critique
+        self.reasoning_service.execute_reasoning_round(case.case_id, "critique")
+        verifier = self._agents.get("seo_verifier")
+        for h in list(case.hypotheses):
+            if not h.supporting_evidence_ids:
+                self.reasoning_service.submit_critique(
+                    case_id=case.case_id,
+                    target_hypothesis_id=h.hypothesis_id,
+                    critic_agent="seo_verifier" if verifier else "seo_supervisor",
+                    challenge_type=ChallengeType.UNSUPPORTED_CLAIM,
+                    challenged_claim=h.statement,
+                    severity=CritiqueSeverity.HIGH,
+                    confidence=0.90,
+                    recommended_resolution="Provide empirical GSC or crawl data supporting this claim.",
+                )
+            elif h.proposing_agent == "seo_strategist":
+                self.reasoning_service.submit_critique(
+                    case_id=case.case_id,
+                    target_hypothesis_id=h.hypothesis_id,
+                    critic_agent="seo_investigator",
+                    challenge_type=ChallengeType.ALTERNATIVE_EXPLANATION,
+                    challenged_claim=h.statement,
+                    severity=CritiqueSeverity.MEDIUM,
+                    confidence=0.75,
+                    recommended_resolution="Consider technical degradation as primary root cause.",
+                )
+
+        # Round 3: Disagreement Detection, Consensus & Supervisor Arbitration
+        self.reasoning_service.execute_reasoning_round(case.case_id, "resolution")
+        consensus = self.reasoning_service.arbitrate(
+            case_id=case.case_id,
+            supervisor_notes=f"Arbitrated multi-agent reasoning on objective: {objective}",
+        )
+        self.reasoning_service.ingest_into_shared_memory(case, shared_memory)
+        return case, consensus
 
 
 # Alias for backward compatibility and concise import

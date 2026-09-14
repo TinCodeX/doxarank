@@ -106,6 +106,18 @@ class MemoryItem:
     raw_data: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def fact_id(self) -> str:
+        return self.memory_id
+
+    @property
+    def epistemic_type(self) -> str:
+        return self.category
+
+    @property
+    def claim(self) -> str:
+        return self.content
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "memory_id": self.memory_id,
@@ -246,19 +258,20 @@ class SharedWorkingMemory:
     def __init__(
         self,
         project_id: int,
-        task_goal: str,
-        correlation_id: str,
+        task_goal: str = "Reasoning Collaboration",
+        correlation_id: str = "",
         run_id: Optional[int] = None,
         budget_config: Optional[ContextBudgetConfig] = None
     ):
         if project_id <= 0:
             raise ValueError(f"SharedWorkingMemory requires a valid project_id > 0, got {project_id}")
-        if not correlation_id or not str(correlation_id).strip():
+        corr = correlation_id or f"corr-mem-{uuid.uuid4().hex[:8]}"
+        if not str(corr).strip():
             raise ValueError("SharedWorkingMemory requires a non-empty correlation_id")
 
         self.project_id = project_id
-        self.task_goal = redact_secrets(task_goal)
-        self.correlation_id = correlation_id
+        self.task_goal = redact_secrets(task_goal or "Reasoning Collaboration")
+        self.correlation_id = corr
         self.run_id = run_id
         self.created_at = timezone.now().isoformat()
         self.budget_config = budget_config or ContextBudgetConfig()
@@ -283,6 +296,7 @@ class SharedWorkingMemory:
         self._pending_work: List[Dict[str, Any]] = []
         self._verification_results: List[Dict[str, Any]] = []
         self._revisits: List[RevisitRecord] = []
+        self._reasoning_cases: List[Dict[str, Any]] = []
 
         # Metrics Tracking
         self.entries_created = 0
@@ -346,6 +360,32 @@ class SharedWorkingMemory:
         self.entries_created += 1
         self._enforce_budget("facts")
         return item
+
+    @synchronized_memory
+    def record_fact(
+        self,
+        claim: str = "",
+        fact: str = "",
+        source_agent: str = "unknown",
+        source_tool: Optional[str] = None,
+        confidence: float = 1.0,
+        **kwargs
+    ) -> str:
+        """Record an empirical fact in shared working memory, returning fact_id."""
+        content = claim or fact or ""
+        item = self.add_evidence(
+            fact=content,
+            source_agent=source_agent,
+            source_tool=source_tool,
+            confidence=confidence,
+            **kwargs
+        )
+        return item.memory_id
+
+    @synchronized_memory
+    def get_facts(self) -> List[MemoryItem]:
+        """Return all recorded empirical facts."""
+        return list(self._facts.values())
 
     @synchronized_memory
     def add_inference(
@@ -524,6 +564,11 @@ class SharedWorkingMemory:
         return decision
 
     @synchronized_memory
+    def get_decisions(self) -> List[CollaborationDecision]:
+        """Return all recorded collaboration decisions."""
+        return list(self._decisions)
+
+    @synchronized_memory
     def record_completed_work(self, agent: str, task_description: str, result_summary: str) -> None:
         """Record a completed work milestone."""
         self._completed_work.append({
@@ -566,6 +611,52 @@ class SharedWorkingMemory:
         )
         self._revisits.append(record)
         return record
+
+    @synchronized_memory
+    def record_reasoning_case(self, case_data: Any) -> None:
+        """Record a multi-agent reasoning case summary in shared memory."""
+        self._reasoning_cases.append(case_data)
+
+    @synchronized_memory
+    def get_reasoning_cases(self) -> List[Any]:
+        """Return all recorded reasoning cases."""
+        from apps.seo.services.agents.advanced_reasoning import ReasoningCase
+        res = []
+        for c in self._reasoning_cases:
+            if isinstance(c, dict):
+                try:
+                    res.append(ReasoningCase.from_dict(c))
+                except Exception:
+                    res.append(c)
+            else:
+                res.append(c)
+        return res
+
+    @synchronized_memory
+    def record_conflict(
+        self,
+        conflict_id: str,
+        topic: str,
+        claim_a: Dict[str, Any],
+        claim_b: Dict[str, Any],
+        responsible_agents: List[str],
+    ) -> MemoryConflict:
+        """Record an explicit conflict in shared memory."""
+        conflict = MemoryConflict(
+            conflict_id=conflict_id,
+            topic=redact_secrets(topic),
+            claim_a=redact_secrets(claim_a),
+            claim_b=redact_secrets(claim_b),
+            responsible_agents=list(responsible_agents),
+            resolution_status=ConflictStatus.OPEN.value,
+        )
+        self._conflicts.append(conflict)
+        return conflict
+
+    @synchronized_memory
+    def get_conflicts(self) -> List[MemoryConflict]:
+        """Return all detected and recorded conflicts."""
+        return list(self._conflicts)
 
     # -------------------------------------------------------------------------
     # Conflict Detection & Management
@@ -824,6 +915,7 @@ class SharedWorkingMemory:
             "pending_work": self._pending_work,
             "verification_results": self._verification_results,
             "revisits": [r.to_dict() for r in self._revisits],
+            "reasoning_cases": self._reasoning_cases,
         }
 
     @classmethod
@@ -896,6 +988,7 @@ class SharedWorkingMemory:
         mem._completed_work = data.get("completed_work", [])
         mem._pending_work = data.get("pending_work", [])
         mem._verification_results = data.get("verification_results", [])
+        mem._reasoning_cases = data.get("reasoning_cases", [])
 
         for r_data in data.get("revisits", []):
             mem._revisits.append(RevisitRecord(

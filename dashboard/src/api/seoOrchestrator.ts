@@ -319,3 +319,122 @@ export async function getCollaborationTasksSummary(runId: string | number): Prom
 export async function getCollaborationTasksGraph(runId: string | number): Promise<TaskGraphResponse> {
   return apiFetch<TaskGraphResponse>(`/api/seo/ai/orchestrate/${runId}/tasks/graph/`);
 }
+
+export interface ReasoningEvidenceInfo {
+  evidence_id: string;
+  source_agent: string;
+  claim: string;
+  source_tool?: string;
+  empirical: boolean;
+  provenance: Record<string, any>;
+  confidence: number;
+  timestamp?: string;
+}
+
+export interface ReasoningHypothesisInfo {
+  hypothesis_id: string;
+  agent: string;
+  summary: string;
+  rationale: string;
+  epistemic_type: string;
+  confidence: number;
+  supporting_evidence: ReasoningEvidenceInfo[];
+  contradicting_evidence: ReasoningEvidenceInfo[];
+  status: string;
+}
+
+export interface AgentCritiqueInfo {
+  critique_id: string;
+  critique_agent: string;
+  target_hypothesis_id: string;
+  target_agent: string;
+  challenge_type: string;
+  critique_text: string;
+  severity: string;
+  suggested_verification?: string;
+  timestamp?: string;
+}
+
+export interface DisagreementRecordInfo {
+  disagreement_id: string;
+  hypothesis_a_id: string;
+  hypothesis_b_id: string;
+  agent_a: string;
+  agent_b: string;
+  topic: string;
+  severity: string;
+  status: string;
+  evidence_discrepancy?: string;
+  resolution_summary?: string;
+}
+
+export interface ConsensusResultInfo {
+  consensus_state: 'reached' | 'no_consensus' | 'escalated' | 'failed';
+  selected_hypothesis_id?: string;
+  selected_conclusion?: string;
+  confidence: number;
+  supporting_evidence: ReasoningEvidenceInfo[];
+  contradicting_evidence: ReasoningEvidenceInfo[];
+  critiques: AgentCritiqueInfo[];
+  unresolved_uncertainty: string[];
+  participating_agents: string[];
+  rationale: string;
+  escalation_reason?: string;
+}
+
+export interface ReasoningCaseInfo {
+  case_id: string;
+  project_id: number;
+  correlation_id: string;
+  objective: string;
+  initiating_agent: string;
+  participating_agents: string[];
+  hypotheses: ReasoningHypothesisInfo[];
+  rounds: Array<{
+    round_number: number;
+    agent_results: Array<{
+      agent: string;
+      hypotheses: ReasoningHypothesisInfo[];
+      critiques: AgentCritiqueInfo[];
+      challenges_raised: AgentCritiqueInfo[];
+      evidence_submitted: ReasoningEvidenceInfo[];
+      confidence: number;
+    }>;
+    critiques: AgentCritiqueInfo[];
+    disagreements: DisagreementRecordInfo[];
+    consensus_attempted: boolean;
+    consensus_state: string;
+  }>;
+  consensus_result?: ConsensusResultInfo;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CollaborationReasoningResponse {
+  run_id: string | number;
+  correlation_id: string;
+  project_id: number;
+  total_cases: number;
+  cases: ReasoningCaseInfo[];
+  consensus_summary: {
+    reached: number;
+    escalated: number;
+    failed: number;
+    open: number;
+  };
+}
+
+/**
+ * Retrieve multi-agent reasoning cases and consensus results for an orchestration run.
+ */
+export async function getCollaborationReasoning(runId: string | number): Promise<CollaborationReasoningResponse> {
+  return apiFetch<CollaborationReasoningResponse>(`/api/seo/ai/orchestrate/${runId}/reasoning/`);
+}
+
+/**
+ * Retrieve details of a specific reasoning case by ID.
+ */
+export async function getReasoningCaseDetail(caseId: string): Promise<ReasoningCaseInfo> {
+  return apiFetch<ReasoningCaseInfo>(`/api/seo/ai/reasoning/${caseId}/`);
+}

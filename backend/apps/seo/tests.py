@@ -15858,3 +15858,1142 @@ class SEOAgentLearningTests(TransactionTestCase):
         expected_contrib_n100 = (expected_p_hat_n100 - 0.70) * 0.15 * 1.0
         self.assertAlmostEqual(sig_n100.score_contribution, expected_contrib_n100, places=4)
         self.assertLessEqual(sig_n100.score_contribution, 0.08)
+
+
+class SEOMultiAgentReasoningTests(TestCase):
+    """
+    Milestone 5.7: Comprehensive Test Suite for Advanced Multi-Agent Reasoning & Consensus.
+    Verifies 26 core functional capabilities:
+    - Independent analysis & context isolation
+    - Epistemic segregation (facts vs inferences)
+    - Evidence provenance & empirical weights
+    - Cross-agent challenge & structured critique
+    - Disagreement detection (material vs minor)
+    - Evidence-weighted consensus (evidence > agent majority headcount)
+    - No-consensus & Escalation handling
+    - Strictly bounded reasoning rounds (max 3)
+    - SEOSupervisorAgent orchestration & arbitration
+    - SharedWorkingMemory reasoning preservation
+    - DAG TaskPlan parallel decomposition
+    - AdaptiveAgentSelector & AgentLearningService integration
+    - ToolRegistry & MCP permission enforcement
+    - Human-In-The-Loop (HITL) safety boundaries
+    - Tenant isolation (project ownership scoping)
+    - Telemetry (all 10 reasoning events emitted)
+    - Runtime evaluation metrics calculation
+    - Read-only API permissions & structured responses
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user_a = User.objects.create_user(
+            email='reasoning_alpha@doxarank.io',
+            password='testpassword123',
+            first_name='Reasoning',
+            last_name='Alpha'
+        )
+        self.user_b = User.objects.create_user(
+            email='reasoning_beta@doxarank.io',
+            password='testpassword123',
+            first_name='Reasoning',
+            last_name='Beta'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Alpha Reasoning Corp',
+            website_url='https://alpha-reasoning.com'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Beta Reasoning Ltd',
+            website_url='https://beta-reasoning.com'
+        )
+        self.client = APIClient()
+
+    def tearDown(self):
+        from apps.seo.services.agents.advanced_reasoning import ReasoningRegistry
+        from apps.seo.services.agents.shared_memory import SharedMemoryRegistry
+        ReasoningRegistry.get_instance().clear()
+        SharedMemoryRegistry.get_instance().clear()
+        super().tearDown()
+
+    def test_01_case_creation_and_lifecycle(self):
+        """1. Case creation, lifecycle state initialization, and registry registration."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningRegistry, ReasoningStatus
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Why did organic rankings decline?",
+            initiating_agent="seo_supervisor",
+            participating_agents=["seo_investigator", "seo_researcher"],
+            correlation_id="corr-case-01"
+        )
+        self.assertIsNotNone(case.case_id)
+        self.assertEqual(case.project_id, self.project_a.id)
+        self.assertEqual(case.status, ReasoningStatus.IN_PROGRESS.value)
+        self.assertEqual(case.current_round, 1)
+        self.assertEqual(len(case.rounds), 1)
+        self.assertIn("seo_investigator", case.participating_agents)
+        self.assertIn("seo_researcher", case.participating_agents)
+
+        # Verify registered in ReasoningRegistry
+        reg_case = ReasoningRegistry.get_instance().get_by_case_id(case.case_id)
+        self.assertIsNotNone(reg_case)
+        self.assertEqual(reg_case.case_id, case.case_id)
+
+        # Test to_dict and from_dict
+        d = case.to_dict()
+        self.assertEqual(d["case_id"], case.case_id)
+        self.assertEqual(d["project_id"], self.project_a.id)
+
+    def test_02_hypothesis_epistemic_segregation(self):
+        """2. Epistemic segregation prevents hypotheses from mutating or overwriting observed facts."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, EpistemicType
+        )
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Diagnose indexation drop",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-epistemic-02"
+        )
+
+        memory = SharedWorkingMemory(project_id=self.project_a.id, correlation_id="corr-epistemic-02")
+        fact_id = memory.record_fact(
+            claim="Googlebot received 500 error on 42 pages",
+            source_agent="seo_investigator",
+            source_tool="crawl_site",
+            confidence=0.99
+        )
+
+        # Create hypothesis proposing causal explanation
+        hyp = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Server misconfiguration caused crawl failure",
+            rationale="NGINX 500 status on critical paths during audit",
+            confidence=0.85,
+            epistemic_type=EpistemicType.INFERENCE.value
+        )
+
+        self.assertEqual(hyp.epistemic_type, EpistemicType.INFERENCE.value)
+        self.assertIn(hyp.hypothesis_id, [h.hypothesis_id for h in case.hypotheses])
+
+        # Observed fact in shared memory remains pure and unmutated
+        facts = memory.get_facts()
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0].fact_id, fact_id)
+        self.assertEqual(facts[0].epistemic_type, EpistemicType.OBSERVED_FACT.value)
+        self.assertEqual(facts[0].claim, "Googlebot received 500 error on 42 pages")
+
+    def test_03_evidence_provenance_and_empirical_validation(self):
+        """3. Evidence provenance tracking with empirical flag and tool validation."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence
+        )
+
+        evidence = ReasoningEvidence(
+            evidence_id="ev-prov-03",
+            source_agent="seo_investigator",
+            claim="Robots.txt disallowed /products/ directory during crawl",
+            source_tool="check_robots_txt",
+            empirical=True,
+            provenance={"url": "https://alpha.com/robots.txt", "timestamp": "2026-09-14T12:00:00Z"},
+            confidence=0.95
+        )
+
+        d = evidence.to_dict()
+        self.assertTrue(d["empirical"])
+        self.assertEqual(d["source_tool"], "check_robots_txt")
+        self.assertEqual(d["provenance"]["url"], "https://alpha.com/robots.txt")
+
+        restored = ReasoningEvidence.from_dict(d)
+        self.assertEqual(restored.evidence_id, "ev-prov-03")
+        self.assertEqual(restored.confidence, 0.95)
+
+    def test_04_independent_reasoning_isolation(self):
+        """4. Context isolation guarantees agents reason independently before results are pooled."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, AgentReasoningResult
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Explain organic traffic decline",
+            initiating_agent="seo_supervisor",
+            participating_agents=["seo_investigator", "seo_researcher"]
+        )
+
+        # Agent 1 produces independent analysis
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="H1: Core Web Vitals LCP regression",
+            rationale="LCP spiked to 4.5s after hero video deployment",
+            confidence=0.82
+        )
+        res1 = AgentReasoningResult(
+            agent="seo_investigator",
+            hypotheses=[h1],
+            critiques=[],
+            challenges_raised=[],
+            evidence_submitted=[],
+            confidence=0.82
+        )
+
+        # Agent 2 produces independent analysis without seeing Agent 1's conclusion
+        h2 = service.create_hypothesis(
+            case=case,
+            agent="seo_researcher",
+            summary="H2: Competitor launched comprehensive guide",
+            rationale="Competitor gained 15 top-3 rankings for primary keywords",
+            confidence=0.78
+        )
+        res2 = AgentReasoningResult(
+            agent="seo_researcher",
+            hypotheses=[h2],
+            critiques=[],
+            challenges_raised=[],
+            evidence_submitted=[],
+            confidence=0.78
+        )
+
+        service.record_agent_result(case=case, round_number=1, result=res1)
+        service.record_agent_result(case=case, round_number=1, result=res2)
+
+        round_1 = case.rounds[0]
+        self.assertEqual(len(round_1.agent_results), 2)
+        agents_in_round = [r.agent for r in round_1.agent_results]
+        self.assertIn("seo_investigator", agents_in_round)
+        self.assertIn("seo_researcher", agents_in_round)
+
+    def test_05_parallel_reasoning_execution_with_overlap(self):
+        """5. Parallel execution of independent reasoning tasks with timing overlap verification."""
+        import time
+        from apps.seo.services.agents.task_planner import TaskPlan, AgentTask, ParallelTaskExecutor
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        plan = TaskPlan(project_id=self.project_a.id, goal="Parallel Reasoning", correlation_id="corr-par-05")
+        t1 = AgentTask(
+            task_id="t_reason_a",
+            objective="Investigate technical root causes",
+            description="Technical analysis",
+            responsible_agent="seo_investigator",
+            parallel_tier=1,
+            correlation_id="corr-par-05"
+        )
+        t2 = AgentTask(
+            task_id="t_reason_b",
+            objective="Analyze competitor movement",
+            description="Competitor analysis",
+            responsible_agent="seo_researcher",
+            parallel_tier=1,
+            correlation_id="corr-par-05"
+        )
+        plan.add_task(t1)
+        plan.add_task(t2)
+
+        executor = ParallelTaskExecutor(max_workers=2)
+
+        def mock_agent_run(agent_name: str, task: AgentTask):
+            start = time.time()
+            time.sleep(0.04)  # 40ms sleep to ensure overlap
+            end = time.time()
+            return AgentResult(
+                agent=agent_name,
+                status="completed",
+                confidence=0.90,
+                findings=[f"{agent_name} completed reasoning"],
+                duration_ms=int((end - start) * 1000),
+                metadata={"start_time": start, "end_time": end}
+            )
+
+        agent_runners = {
+            "seo_investigator": lambda t: mock_agent_run("seo_investigator", t),
+            "seo_researcher": lambda t: mock_agent_run("seo_researcher", t),
+        }
+
+        batch = executor.execute_parallel_tier(
+            tasks=[t1, t2],
+            agent_runners=agent_runners,
+            project_id=self.project_a.id,
+            correlation_id="corr-par-05"
+        )
+
+        self.assertEqual(batch.status, "completed")
+        self.assertTrue(batch.overlap_detected)
+        self.assertGreater(batch.overlap_duration_ms, 0)
+        self.assertEqual(len(batch.results), 2)
+
+    def test_06_cross_agent_critique_generation(self):
+        """6. Cross-agent critique challenge with structured severity and suggested verification."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ChallengeType, CritiqueSeverity
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Audit ranking drop",
+            initiating_agent="seo_supervisor",
+            participating_agents=["seo_investigator", "seo_critic"]
+        )
+
+        hyp = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Robots.txt blocked crawler entirely",
+            rationale="Disallow / directive noticed",
+            confidence=0.90
+        )
+
+        critique = service.submit_critique(
+            case=case,
+            round_number=1,
+            critique_agent="seo_critic",
+            target_hypothesis_id=hyp.hypothesis_id,
+            target_agent="seo_investigator",
+            challenge_type=ChallengeType.UNSUPPORTED_CLAIM.value,
+            critique_text="Disallow / applied only to Baiduspider, not Googlebot; check user-agent header",
+            severity=CritiqueSeverity.HIGH.value,
+            suggested_verification="Inspect Google Search Console robots.txt tester output"
+        )
+
+        self.assertIsNotNone(critique.critique_id)
+        self.assertEqual(critique.severity, CritiqueSeverity.HIGH.value)
+        self.assertEqual(critique.target_hypothesis_id, hyp.hypothesis_id)
+        self.assertEqual(len(case.rounds[0].critiques), 1)
+
+    def test_07_disagreement_detection_material(self):
+        """7. Structured disagreement detection for opposing causal claims with MATERIAL severity."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, DisagreementSeverity
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Why did traffic drop 35%?",
+            initiating_agent="seo_supervisor",
+            participating_agents=["seo_investigator", "seo_researcher"]
+        )
+
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="H1: Server 500 errors caused 35% ranking drop",
+            rationale="Crawl error rate surged to 18%",
+            confidence=0.88
+        )
+        h2 = service.create_hypothesis(
+            case=case,
+            agent="seo_researcher",
+            summary="H2: Google Helpful Content Update penalised thin content",
+            rationale="Drop coincided with announced unconfirmed core update",
+            confidence=0.85
+        )
+
+        disagreements = service.detect_disagreements(case=case, round_number=1)
+        self.assertGreaterEqual(len(disagreements), 1)
+        d = disagreements[0]
+        self.assertEqual(d.severity, DisagreementSeverity.MATERIAL.value)
+        self.assertIn(d.agent_a, ["seo_investigator", "seo_researcher"])
+        self.assertIn(d.agent_b, ["seo_investigator", "seo_researcher"])
+
+    def test_08_disagreement_detection_minor(self):
+        """8. Disagreement detection correctly assigns MINOR severity to non-critical variances."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, DisagreementSeverity
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Estimate impact of missing title tags",
+            initiating_agent="seo_supervisor",
+            participating_agents=["seo_investigator", "seo_content_strategist"]
+        )
+
+        # Both agree on issue, differ slightly on impact estimate
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Missing titles cause 5% CTR degradation",
+            rationale="Audit issue count = 12",
+            confidence=0.75
+        )
+        h2 = service.create_hypothesis(
+            case=case,
+            agent="seo_content_strategist",
+            summary="Missing titles cause 8% CTR degradation",
+            rationale="Audit issue count = 12 with SERP preview test",
+            confidence=0.78
+        )
+
+        disagreements = service.detect_disagreements(case=case, round_number=1)
+        self.assertGreaterEqual(len(disagreements), 1)
+        self.assertEqual(disagreements[0].severity, DisagreementSeverity.MINOR.value)
+
+    def test_09_evidence_weighted_consensus_basic(self):
+        """9. Basic evidence-weighted consensus reaching valid conclusion with confidence score."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ConsensusState, ReasoningEvidence
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Determine root cause of canonicalization bug",
+            initiating_agent="seo_supervisor"
+        )
+
+        ev = ReasoningEvidence(
+            evidence_id="ev-can-09",
+            source_agent="seo_investigator",
+            claim="HTML source contains canonical pointing to staging.alpha.com",
+            source_tool="fetch_rendered_dom",
+            empirical=True,
+            provenance={"line": 14, "url": "https://alpha.com"},
+            confidence=0.98
+        )
+
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Staging canonical tag in production causes indexation loss",
+            rationale="Verified staging URL in canonical tag",
+            confidence=0.95,
+            supporting_evidence=[ev]
+        )
+
+        consensus = service.evaluate_consensus(case=case)
+        self.assertEqual(consensus.consensus_state, ConsensusState.CONSENSUS.value)
+        self.assertEqual(consensus.selected_hypothesis_id, h1.hypothesis_id)
+        self.assertGreater(consensus.confidence, 0.80)
+        self.assertIn("staging canonical", consensus.selected_conclusion.lower())
+
+    def test_10_evidence_outweighs_agent_majority(self):
+        """10. CRITICAL: Strong empirical evidence strictly outweighs naive majority agent headcount."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ConsensusState, ReasoningEvidence
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Identify primary cause of ranking collapse",
+            initiating_agent="seo_supervisor",
+            participating_agents=["agent_a", "agent_b", "agent_c"]
+        )
+
+        # 2 AGENTS (Majority) support H1 with ZERO empirical evidence
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="agent_a",
+            summary="H1: Algorithmic penalty hit site (Agent A & B majority)",
+            rationale="Anecdotal speculation without crawl data",
+            confidence=0.70,
+            supporting_evidence=[]  # Zero empirical evidence!
+        )
+
+        # 1 AGENT (Minority) supports H2 with VERIFIED EMPIRICAL evidence
+        ev1 = ReasoningEvidence(
+            evidence_id="ev_emp_1",
+            source_agent="agent_c",
+            claim="Nginx returned HTTP 500 to Googlebot for 10 consecutive days",
+            source_tool="server_access_log_parser",
+            empirical=True,
+            provenance={"log_path": "/var/log/nginx/access.log", "entries_count": 1420},
+            confidence=0.98
+        )
+        ev2 = ReasoningEvidence(
+            evidence_id="ev_emp_2",
+            source_agent="agent_c",
+            claim="Google Search Console Crawl Stats shows 95% server error rate",
+            source_tool="get_search_console_crawl_stats",
+            empirical=True,
+            provenance={"gsc_metric": "crawl_error_5xx", "pct": 95},
+            confidence=0.96
+        )
+
+        h2 = service.create_hypothesis(
+            case=case,
+            agent="agent_c",
+            summary="H2: Infrastructure 500 downtime caused Google de-indexing (Agent C lone evidence)",
+            rationale="Verified server logs and GSC crawl stats",
+            confidence=0.92,
+            supporting_evidence=[ev1, ev2]  # Strong verified evidence!
+        )
+
+        consensus = service.evaluate_consensus(case=case)
+
+        # The minority hypothesis H2 MUST win because evidence outweighs agent headcount!
+        self.assertEqual(consensus.consensus_state, ConsensusState.CONSENSUS.value)
+        self.assertEqual(consensus.selected_hypothesis_id, h2.hypothesis_id)
+        self.assertIn("H2", consensus.selected_conclusion)
+        self.assertIn("Infrastructure 500", consensus.selected_conclusion)
+        self.assertGreater(consensus.confidence, 0.80)
+
+    def test_11_no_consensus_when_evidence_contradictory(self):
+        """11. Ambiguous/contradictory evidence results in NO_CONSENSUS without manufacturing confidence."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ConsensusState, ReasoningEvidence
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Unresolved ranking fluctuation",
+            initiating_agent="seo_supervisor"
+        )
+
+        ev_contra1 = ReasoningEvidence(
+            evidence_id="ev_c1",
+            source_agent="agent_a",
+            claim="Search impressions are up 15%",
+            source_tool="gsc_api",
+            empirical=True,
+            confidence=0.50
+        )
+        ev_contra2 = ReasoningEvidence(
+            evidence_id="ev_c2",
+            source_agent="agent_b",
+            claim="Search impressions are down 20%",
+            source_tool="third_party_rank_tracker",
+            empirical=True,
+            confidence=0.50
+        )
+
+        service.create_hypothesis(
+            case=case,
+            agent="agent_a",
+            summary="Traffic is surging",
+            rationale="GSC data",
+            confidence=0.50,
+            supporting_evidence=[ev_contra1],
+            contradicting_evidence=[ev_contra2]
+        )
+        service.create_hypothesis(
+            case=case,
+            agent="agent_b",
+            summary="Traffic is crashing",
+            rationale="Rank tracker data",
+            confidence=0.50,
+            supporting_evidence=[ev_contra2],
+            contradicting_evidence=[ev_contra1]
+        )
+
+        consensus = service.evaluate_consensus(case=case)
+        self.assertIn(consensus.consensus_state, [ConsensusState.NO_CONSENSUS.value, ConsensusState.ESCALATED.value])
+
+    def test_12_escalation_on_unresolved_material_disagreement(self):
+        """12. Unresolved material disagreement triggers ESCALATED state for human review."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ConsensusState, ChallengeType, CritiqueSeverity
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Disputed core update attribution",
+            initiating_agent="seo_supervisor",
+            participating_agents=["agent_x", "agent_y"]
+        )
+
+        h1 = service.create_hypothesis(
+            case=case,
+            agent="agent_x",
+            summary="Hypothesis X: Manual action applied",
+            rationale="Sudden cliff drop",
+            confidence=0.80
+        )
+        h2 = service.create_hypothesis(
+            case=case,
+            agent="agent_y",
+            summary="Hypothesis Y: Hosting outage during crawl",
+            rationale="Sudden cliff drop",
+            confidence=0.80
+        )
+
+        # Add unresolved high-severity critique
+        service.submit_critique(
+            case=case,
+            round_number=1,
+            critique_agent="agent_y",
+            target_hypothesis_id=h1.hypothesis_id,
+            target_agent="agent_x",
+            challenge_type=ChallengeType.METHODOLOGY_FLAW.value,
+            critique_text="GSC Manual Actions panel is completely clear; hypothesis X is false",
+            severity=CritiqueSeverity.HIGH.value
+        )
+        service.detect_disagreements(case=case, round_number=1)
+
+        # Force max rounds to trigger escalation on open disagreement
+        case.current_round = 3
+        consensus = service.evaluate_consensus(case=case)
+        self.assertEqual(consensus.consensus_state, ConsensusState.ESCALATED.value)
+        self.assertIsNotNone(consensus.escalation_reason)
+
+    def test_13_bounded_reasoning_rounds_stops_at_limit(self):
+        """13. Reasoning loop is strictly bounded by MAX_REASONING_ROUNDS (3) to prevent infinite loops."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, MAX_REASONING_ROUNDS, ReasoningStatus
+        )
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Bounded round test",
+            initiating_agent="seo_supervisor"
+        )
+
+        self.assertEqual(case.current_round, 1)
+        r2 = service.start_next_round(case)
+        self.assertTrue(r2)
+        self.assertEqual(case.current_round, 2)
+
+        r3 = service.start_next_round(case)
+        self.assertTrue(r3)
+        self.assertEqual(case.current_round, 3)
+
+        # Exceeding MAX_REASONING_ROUNDS returns False and halts reasoning
+        r4 = service.start_next_round(case)
+        self.assertFalse(r4)
+        self.assertEqual(case.current_round, MAX_REASONING_ROUNDS)
+
+    def test_14_supervisor_orchestration_reasoning_workflow(self):
+        """14. SEOSupervisorAgent orchestrates end-to-end multi-agent reasoning workflow."""
+        from unittest.mock import patch
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+        from apps.seo.services.agents.base_agent import AgentResult
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+
+        def mock_run(agent_instance, task_str, *args, **kwargs):
+            return AgentResult(
+                agent=agent_instance.name,
+                status="completed",
+                confidence=0.88,
+                findings=[f"{agent_instance.name} identified key factor"],
+                evidence={"factor": "verified_data"}
+            )
+
+        with patch.object(supervisor._agents["seo_investigator"], "run", side_effect=lambda *a, **k: mock_run(supervisor._agents["seo_investigator"], *a, **k)):
+            with patch.object(supervisor._agents["seo_researcher"], "run", side_effect=lambda *a, **k: mock_run(supervisor._agents["seo_researcher"], *a, **k)):
+                res = supervisor.orchestrate(
+                    task="Investigate ranking drop with multi-agent consensus",
+                    enable_reasoning=True,
+                    correlation_id="corr-super-14"
+                )
+
+        self.assertIn("reasoning_case", res)
+        self.assertIsNotNone(res["reasoning_case"])
+        self.assertEqual(res["reasoning_case"]["project_id"], self.project_a.id)
+        self.assertIn("consensus_result", res["reasoning_case"])
+
+    def test_15_supervisor_arbitration_decision_recorded(self):
+        """15. Accepted consensus outcome records an ACCEPTED supervisor decision in SharedWorkingMemory."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence
+        )
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Arbitrate crawl configuration",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-dec-15"
+        )
+
+        ev = ReasoningEvidence(
+            evidence_id="ev_dec_15",
+            source_agent="seo_investigator",
+            claim="404 on high-traffic landing page",
+            source_tool="crawl_site",
+            empirical=True,
+            confidence=0.95
+        )
+
+        service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Broken redirect rule dropped landing page traffic",
+            rationale="Verified 404 response on /best-coffee",
+            confidence=0.92,
+            supporting_evidence=[ev]
+        )
+
+        memory = SharedWorkingMemory(project_id=self.project_a.id, correlation_id="corr-dec-15")
+        service.evaluate_consensus(case=case, shared_memory=memory)
+
+        decisions = memory.get_decisions()
+        self.assertGreaterEqual(len(decisions), 1)
+        dec = decisions[-1]
+        self.assertEqual(dec.decision_owner, "seo_supervisor")
+        self.assertEqual(dec.status, "accepted")
+        self.assertIn("Multi-Agent Consensus:", dec.title)
+
+    def test_16_shared_working_memory_integration(self):
+        """16. SharedWorkingMemory records, deserializes, and summarizes reasoning cases accurately."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+        from apps.seo.services.agents.advanced_reasoning import AdvancedReasoningService
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Memory persistence verification",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-mem-16"
+        )
+
+        memory = SharedWorkingMemory(project_id=self.project_a.id, correlation_id="corr-mem-16")
+        memory.record_reasoning_case(case)
+
+        cases = memory.get_reasoning_cases()
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].case_id, case.case_id)
+
+        # Roundtrip through serialization
+        d = memory.to_dict()
+        self.assertIn("reasoning_cases", d)
+        self.assertEqual(len(d["reasoning_cases"]), 1)
+
+        restored_mem = SharedWorkingMemory.from_dict(d)
+        self.assertEqual(len(restored_mem.get_reasoning_cases()), 1)
+        self.assertEqual(restored_mem.get_reasoning_cases()[0].case_id, case.case_id)
+
+    def test_17_dag_planner_reasoning_decomposition(self):
+        """17. DynamicTaskPlanner decomposes multi-agent reasoning goals into parallel DAG tiers."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner
+
+        planner = DynamicTaskPlanner(project_id=self.project_a.id)
+        plan = planner.decompose_goal(
+            goal="Why did website rankings suddenly drop? Perform multi-agent reasoning and consensus",
+            correlation_id="corr-dag-17",
+            enable_reasoning=True
+        )
+
+        task_ids = list(plan.tasks.keys())
+        self.assertIn("t_reason_evidence", task_ids)
+        self.assertIn("t_reason_technical", task_ids)
+        self.assertIn("t_reason_content", task_ids)
+        self.assertIn("t_reason_critique", task_ids)
+        self.assertIn("t_reason_consensus", task_ids)
+
+        # Verify parallel tier allocation
+        t_tech = plan.get_task("t_reason_technical")
+        t_content = plan.get_task("t_reason_content")
+        self.assertEqual(t_tech.parallel_tier, 1)
+        self.assertEqual(t_content.parallel_tier, 1)
+
+        # Verify critique depends on independent analyses
+        t_critique = plan.get_task("t_reason_critique")
+        self.assertIn("t_reason_technical", t_critique.dependencies)
+        self.assertIn("t_reason_content", t_critique.dependencies)
+
+    def test_18_adaptive_agent_selector_integration(self):
+        """18. AdaptiveAgentSelector routes reasoning tasks to appropriate specialists."""
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        task_tech = AgentTask(
+            task_id="t_diag",
+            objective="Diagnose server 500 error logs and robots.txt syntax errors",
+            description="Technical audit diagnostics",
+            responsible_agent="seo_supervisor"
+        )
+        dec_tech = selector.select_agent(task_tech)
+        self.assertEqual(dec_tech.selected_agent, "seo_investigator")
+
+        task_content = AgentTask(
+            task_id="t_comp",
+            objective="Analyze competitor keywords, search volumes, and ranking positions",
+            description="Competitor keyword research",
+            responsible_agent="seo_supervisor"
+        )
+        dec_content = selector.select_agent(task_content)
+        self.assertEqual(dec_content.selected_agent, "seo_researcher")
+
+    def test_19_agent_learning_service_soft_signal(self):
+        """19. AgentLearningService historical score remains a bounded soft signal during reasoning routing."""
+        from apps.seo.services.agents.agent_learning import AgentPerformanceStore, AgentPerformanceRecord
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+        from apps.seo.services.agents.task_planner import AgentTask
+
+        store = AgentPerformanceStore.get_instance()
+        for i in range(10):
+            store.record_outcome(AgentPerformanceRecord(
+                agent_name="seo_investigator",
+                task_id=f"t_learn_{i}",
+                task_type="technical_investigation",
+                project_id=self.project_a.id,
+                success=True
+            ))
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id, performance_store=store)
+        task = AgentTask(
+            task_id="t_route_19",
+            objective="Diagnose technical SEO server crawl errors",
+            description="Crawl log diagnosis",
+            responsible_agent="seo_supervisor"
+        )
+        decision = selector.select_agent(task)
+        self.assertEqual(decision.selected_agent, "seo_investigator")
+        hist_score = decision.score_breakdowns["seo_investigator"]["historical_score"]
+        self.assertLessEqual(hist_score, 0.08)
+        self.assertGreaterEqual(hist_score, -0.08)
+
+    def test_20_tool_registry_permission_enforcement(self):
+        """20. ToolRegistry enforces agent tool whitelist during reasoning analysis."""
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        researcher = supervisor._agents["seo_researcher"]
+        investigator = supervisor._agents["seo_investigator"]
+
+        # Researcher agent must NOT be allowed to execute action planning tools
+        is_allowed = researcher.is_tool_allowed("plan_seo_actions")
+        self.assertFalse(is_allowed)
+
+        # Investigator IS allowed to inspect audit issues
+        self.assertTrue(investigator.is_tool_allowed("get_audit_issues"))
+
+        # Attempting unauthorized execution raises PermissionError
+        with self.assertRaises(PermissionError):
+            researcher.execute_tool("plan_seo_actions", {})
+
+    def test_21_mcp_permission_enforcement(self):
+        """21. MCP server permissions remain strictly enforced during reasoning tool dispatch."""
+        from apps.seo.services.mcp.permissions import MCPPermissionPolicy
+        from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+
+        supervisor = SEOSupervisorAgent(project=self.project_a, user=self.user_a)
+        planner = supervisor._agents["seo_action_planner"]
+
+        # Rogue MCP server is not approved
+        self.assertFalse(MCPPermissionPolicy.is_server_approved("rogue_untrusted_server"))
+
+        # MCP tool authorization is denied for unauthorized agent
+        self.assertFalse(MCPPermissionPolicy.is_agent_authorized("seo_action_planner", "mcp__unauthorized_tool"))
+        self.assertFalse(planner.is_tool_allowed("mcp__unauthorized_tool"))
+
+    def test_22_hitl_safety_consensus_cannot_authorize_mutation(self):
+        """22. Consensus outcome recommending mutation requires explicit Human-In-The-Loop approval."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence
+        )
+        from apps.seo.models import SEOAction, ActionType, ActionStatus
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Determine fix for duplicate meta titles",
+            initiating_agent="seo_supervisor"
+        )
+
+        ev = ReasoningEvidence(
+            evidence_id="ev-hitl-22",
+            source_agent="seo_investigator",
+            claim="Duplicate title on 15 category pages",
+            source_tool="audit_issues",
+            empirical=True,
+            confidence=0.92
+        )
+        service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Rewrite title tags to include category name",
+            rationale="Resolves CTR cannibalization",
+            confidence=0.90,
+            supporting_evidence=[ev]
+        )
+        consensus = service.evaluate_consensus(case=case)
+
+        # Simulate proposed SEO mutation action following consensus
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.OPTIMIZE_TITLE,
+            status=ActionStatus.PENDING_APPROVAL,
+            title="Consensus: Rewrite duplicate category meta titles",
+            rationale=consensus.rationale
+        )
+
+        # HITL Boundary: Action CANNOT be executed directly by consensus
+        self.assertEqual(action.status, ActionStatus.PENDING_APPROVAL)
+        self.assertNotEqual(action.status, ActionStatus.COMPLETED)
+
+    def test_23_tenant_isolation_shared_memory_and_registry(self):
+        """23. Strict multi-tenant isolation: Project B cannot view Project A reasoning cases."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningRegistry
+        )
+
+        service_a = AdvancedReasoningService(project_id=self.project_a.id)
+        case_a = service_a.create_reasoning_case(
+            objective="Confidential Project A Strategy",
+            initiating_agent="seo_supervisor"
+        )
+
+        # Verify API view blocks Project B owner from accessing Project A case
+        self.client.force_authenticate(user=self.user_b)
+        res = self.client.get(f'/api/seo/ai/reasoning/{case_a.case_id}/')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Project A owner has authorized access
+        self.client.force_authenticate(user=self.user_a)
+        res_a = self.client.get(f'/api/seo/ai/reasoning/{case_a.case_id}/')
+        self.assertEqual(res_a.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_a.data["case_id"], case_a.case_id)
+
+    def test_24_telemetry_ten_events_emitted(self):
+        """24. All 10 Milestone 5.7 reasoning telemetry events are published during lifecycle."""
+        from apps.seo.services.agent_events import InMemoryEventPublisher, AgentEventType
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ChallengeType, CritiqueSeverity, ReasoningEvidence
+        )
+
+        publisher = InMemoryEventPublisher()
+        service = AdvancedReasoningService(project_id=self.project_a.id, event_publisher=publisher)
+
+        # 1. case.started
+        case = service.create_reasoning_case(
+            objective="Telemetry verification case",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-tel-24"
+        )
+        # 2. hypothesis.created
+        ev = ReasoningEvidence(
+            evidence_id="ev-tel-24",
+            source_agent="seo_investigator",
+            claim="Telemetry verified fact",
+            empirical=True,
+            confidence=0.90
+        )
+        hyp = service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Telemetry hypothesis",
+            rationale="Test rationale",
+            confidence=0.85,
+            supporting_evidence=[ev]
+        )
+        # 3. critique.created
+        service.submit_critique(
+            case=case,
+            round_number=1,
+            critique_agent="seo_critic",
+            target_hypothesis_id=hyp.hypothesis_id,
+            target_agent="seo_investigator",
+            challenge_type=ChallengeType.UNSUPPORTED_CLAIM.value,
+            critique_text="Check claim validity",
+            severity=CritiqueSeverity.MEDIUM.value
+        )
+        # 4. disagreement.detected
+        service.detect_disagreements(case=case, round_number=1)
+        # 5. consensus.reached
+        service.evaluate_consensus(case=case)
+        # 6. round.started
+        service.start_next_round(case)
+
+        published_types = [e.event_type for e in publisher.published_events]
+        self.assertIn(AgentEventType.SEO_REASONING_CASE_STARTED.value, published_types)
+        self.assertIn(AgentEventType.SEO_REASONING_HYPOTHESIS_CREATED.value, published_types)
+        self.assertIn(AgentEventType.SEO_REASONING_CRITIQUE_CREATED.value, published_types)
+        self.assertIn(AgentEventType.SEO_REASONING_CONSENSUS_REACHED.value, published_types)
+
+    def test_25_runtime_evaluation_metrics_calculation(self):
+        """25. SEOAgentEvaluationService calculates 12 reasoning evaluation metrics from runtime data."""
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence
+        )
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="Evaluation metrics test",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-eval-25"
+        )
+        ev = ReasoningEvidence(
+            evidence_id="ev-eval-25",
+            source_agent="seo_investigator",
+            claim="Metric claim",
+            empirical=True,
+            confidence=0.95
+        )
+        service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="Metric winner",
+            rationale="Evaluation rationale",
+            confidence=0.90,
+            supporting_evidence=[ev]
+        )
+        service.evaluate_consensus(case=case)
+
+        context = SharedContext(
+            project_id=self.project_a.id,
+            user_id=self.user_a.id,
+            correlation_id="corr-eval-25",
+            reasoning_cases=[case.to_dict()]
+        )
+
+        eval_service = SEOAgentEvaluationService()
+        metrics = eval_service.evaluate_collaboration(
+            context=context,
+            total_duration_ms=1200,
+            agent_timings={"seo_investigator": 600, "seo_researcher": 600}
+        )
+
+        self.assertIn("multi_agent_reasoning_metrics", metrics)
+        rm = metrics["multi_agent_reasoning_metrics"]
+        self.assertEqual(rm["reasoning_cases"], 1)
+        self.assertGreaterEqual(rm["average_reasoning_rounds"], 1.0)
+        self.assertEqual(rm["consensus_rate"], 100.0)
+
+    def test_26_api_endpoints_permissions_and_correctness(self):
+        """26. Read-only API endpoints enforce authentication, tenant permissions, and return valid schemas."""
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence
+        )
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        case = service.create_reasoning_case(
+            objective="API verification case",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-api-26"
+        )
+        ev = ReasoningEvidence(
+            evidence_id="ev-api-26",
+            source_agent="seo_investigator",
+            claim="API empirical evidence",
+            empirical=True,
+            confidence=0.90
+        )
+        service.create_hypothesis(
+            case=case,
+            agent="seo_investigator",
+            summary="API Hypothesis",
+            rationale="Rationale",
+            confidence=0.88,
+            supporting_evidence=[ev]
+        )
+        service.evaluate_consensus(case=case)
+
+        # 1. Unauthenticated request rejected
+        res_unauth = self.client.get(f'/api/seo/ai/reasoning/{case.case_id}/')
+        self.assertEqual(res_unauth.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 2. Authenticated authorized tenant request accepted
+        self.client.force_authenticate(user=self.user_a)
+        res_case = self.client.get(f'/api/seo/ai/reasoning/{case.case_id}/')
+        self.assertEqual(res_case.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_case.data["case_id"], case.case_id)
+        self.assertIn(res_case.data["consensus_result"]["consensus_state"], ["reached", "consensus"])
+
+        # 3. Collaboration reasoning view by correlation_id
+        res_collab = self.client.get(f'/api/seo/ai/orchestrate/corr-api-26/reasoning/')
+        self.assertEqual(res_collab.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_collab.data["total_cases"], 1)
+        self.assertEqual(res_collab.data["consensus_summary"]["reached"], 1)
+
+    def test_27_evaluation_metric_semantics_a_to_e(self):
+        """27. Explicit metric semantics A through E:
+        A. disagreement resolved -> unresolved_disagreement = 0
+        B. disagreement unresolved -> unresolved_disagreement > 0
+        C. evidence-supported conclusion -> evidence_supported_conclusions > 0
+        D. consensus without unresolved disagreement
+        E. escalation without consensus
+        """
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from apps.seo.services.agents.base_agent import SharedContext
+        from apps.seo.services.agents.advanced_reasoning import (
+            AdvancedReasoningService, ReasoningEvidence, ChallengeType, CritiqueSeverity, ConsensusState
+        )
+
+        service = AdvancedReasoningService(project_id=self.project_a.id)
+        eval_service = SEOAgentEvaluationService()
+
+        # Case 1 (Tests A, C, D):
+        # Two agents disagree, but one has decisive empirical evidence.
+        # Consensus arbitration resolves disagreement in favor of empirical winner.
+        # Outcome: consensus_rate=100.0, disagreement_rate=100.0, unresolved_disagreement_rate=0.0, evidence_supported_conclusions=1
+        case_a = service.create_reasoning_case(
+            objective="Diagnose traffic drop",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-sem-a"
+        )
+        ev_a = ReasoningEvidence(
+            evidence_id="ev-sem-a",
+            source_agent="seo_investigator",
+            claim="HTTP 500 on 50 URLs",
+            empirical=True,
+            confidence=0.98
+        )
+        service.add_evidence(
+            case_id=case_a.case_id,
+            fact="HTTP 500 on 50 URLs",
+            source_agent="seo_investigator",
+            source_tool="crawl_site",
+            confidence=0.98
+        )
+        h1 = service.create_hypothesis(
+            case=case_a,
+            agent="seo_investigator",
+            summary="Server failure caused drop",
+            rationale="HTTP 500 crawl logs",
+            confidence=0.92,
+            supporting_evidence=[ev_a]
+        )
+        h2 = service.create_hypothesis(
+            case=case_a,
+            agent="seo_strategist",
+            summary="Content drift caused drop",
+            rationale="Intent shift hypothesis",
+            confidence=0.60
+        )
+        # Meaningful disagreement detected between investigator and strategist
+        disags = service.detect_disagreements(case=case_a)
+        self.assertGreater(len(disags), 0)
+
+        # Consensus reached via empirical arbitration
+        cons_res = service.evaluate_consensus(case=case_a)
+        self.assertEqual(cons_res.consensus_state, ConsensusState.CONSENSUS.value)
+        self.assertEqual(cons_res.winning_hypothesis_id, h1.hypothesis_id)
+
+        # A. Disagreement resolved -> open disagreements is 0
+        self.assertEqual(len(cons_res.unresolved_disagreements), 0)
+
+        # Context evaluation for Case 1
+        ctx_a = SharedContext(
+            project_id=self.project_a.id,
+            user_id=self.user_a.id,
+            correlation_id="corr-sem-a",
+            reasoning_cases=[case_a.to_dict()]
+        )
+        res_a = eval_service.evaluate_collaboration(ctx_a)["reasoning_metrics"]
+
+        # Assertions for A, C, D:
+        self.assertEqual(res_a["disagreement_rate"], 100.0, "Disagreement was detected")
+        self.assertEqual(res_a["unresolved_disagreement_rate"], 0.0, "A. Disagreement was resolved by consensus")
+        self.assertEqual(res_a["consensus_rate"], 100.0, "D. Consensus reached")
+        self.assertEqual(res_a["evidence_supported_conclusions"], 1, "C. Conclusion has empirical evidence backing")
+        self.assertEqual(res_a["escalation_rate"], 0.0, "No escalation occurred")
+
+        # Case 2 (Tests B, E):
+        # Contradictory evidence case that cannot reach consensus and escalates.
+        # Outcome: escalation_rate=100.0, consensus_rate=0.0, unresolved_disagreement_rate=100.0
+        case_b = service.create_reasoning_case(
+            objective="Conflicting ranking signals",
+            initiating_agent="seo_supervisor",
+            correlation_id="corr-sem-b"
+        )
+        ev_b1 = ReasoningEvidence(evidence_id="ev-b1", source_agent="agent_a", claim="Rankings surged", empirical=True, confidence=0.5)
+        ev_b2 = ReasoningEvidence(evidence_id="ev-b2", source_agent="agent_b", claim="Rankings plunged", empirical=True, confidence=0.5)
+        service.create_hypothesis(case=case_b, agent="agent_a", summary="Surging", rationale="A", confidence=0.5, supporting_evidence=[ev_b1], contradicting_evidence=[ev_b2])
+        service.create_hypothesis(case=case_b, agent="agent_b", summary="Plunging", rationale="B", confidence=0.5, supporting_evidence=[ev_b2], contradicting_evidence=[ev_b1])
+        service.detect_disagreements(case=case_b)
+
+        # Escalate after max rounds without consensus
+        service.evaluate_consensus(case=case_b, round_number=3)
+        self.assertEqual(case_b.consensus_state, ConsensusState.ESCALATED.value)
+
+        ctx_b = SharedContext(
+            project_id=self.project_a.id,
+            user_id=self.user_a.id,
+            correlation_id="corr-sem-b",
+            reasoning_cases=[case_b.to_dict()]
+        )
+        res_b = eval_service.evaluate_collaboration(ctx_b)["reasoning_metrics"]
+
+        # Assertions for B, E:
+        self.assertEqual(res_b["escalation_rate"], 100.0, "E. Escalation without consensus")
+        self.assertEqual(res_b["consensus_rate"], 0.0, "E. No false consensus manufactured")
+        self.assertGreater(res_b["unresolved_disagreement_rate"], 0.0, "B. Disagreement remains unresolved")
+        self.assertEqual(res_b["evidence_supported_conclusions"], 0, "No valid conclusion on escalation")

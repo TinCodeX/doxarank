@@ -14,7 +14,8 @@ from .views import (
     SEOCollaborationConflictsView,
     SEOCollaborationTasksView, SEOCollaborationTasksSummaryView,
     SEOCollaborationTasksGraphView,
-    SEOAgentLearningPerformanceView, SEOCollaborationLearningView
+    SEOAgentLearningPerformanceView, SEOCollaborationLearningView,
+    SEOReasoningCaseDetailView, SEOCollaborationReasoningView
 )
 
 app_name = 'seo'
@@ -48,6 +49,8 @@ urlpatterns = [
     path('ai/orchestrate/<str:run_id>/tasks/graph/', SEOCollaborationTasksGraphView.as_view(), name='seo-orchestrate-tasks-graph'),
     path('ai/orchestrate/<str:run_id>/tasks/', SEOCollaborationTasksView.as_view(), name='seo-orchestrate-tasks'),
     path('ai/orchestrate/<str:run_id>/learning/', SEOCollaborationLearningView.as_view(), name='seo-orchestrate-learning'),
+    path('ai/orchestrate/<str:run_id>/reasoning/', SEOCollaborationReasoningView.as_view(), name='seo-orchestrate-reasoning'),
+    path('ai/reasoning/<str:case_id>/', SEOReasoningCaseDetailView.as_view(), name='seo-reasoning-case-detail'),
     path('ai/learning/performance/', SEOAgentLearningPerformanceView.as_view(), name='seo-agent-learning-performance'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),
     path('integrations/google/authorization-url/', GoogleOAuthAuthorizationUrlView.as_view(), name='google-oauth-authorization-url'),

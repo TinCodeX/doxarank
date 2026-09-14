@@ -159,6 +159,18 @@ class AgentEventType(str, Enum):
     SEO_HISTORICAL_SIGNAL_IGNORED = "seo.agent.learning.signal_ignored"
     SEO_ROUTING_OUTCOME_RECORDED = "seo.agent.learning.outcome_recorded"
 
+    # Advanced Multi-Agent Reasoning & Consensus (Milestone 5.7)
+    SEO_REASONING_CASE_STARTED = "seo.reasoning.case.started"
+    SEO_REASONING_ROUND_STARTED = "seo.reasoning.round.started"
+    SEO_REASONING_AGENT_ANALYSIS_COMPLETED = "seo.reasoning.agent.analysis.completed"
+    SEO_REASONING_HYPOTHESIS_CREATED = "seo.reasoning.hypothesis.created"
+    SEO_REASONING_CRITIQUE_CREATED = "seo.reasoning.critique.created"
+    SEO_REASONING_DISAGREEMENT_DETECTED = "seo.reasoning.disagreement.detected"
+    SEO_REASONING_CONSENSUS_REACHED = "seo.reasoning.consensus.reached"
+    SEO_REASONING_CONSENSUS_FAILED = "seo.reasoning.consensus.failed"
+    SEO_REASONING_ESCALATED = "seo.reasoning.escalated"
+    SEO_REASONING_CASE_COMPLETED = "seo.reasoning.case.completed"
+
 
 
 
@@ -279,6 +291,11 @@ class InMemoryEventPublisher(AgentEventPublisher):
             if run_id is not None:
                 return [e for e in self._events if e.run_id == run_id]
             return list(self._events)
+
+    @property
+    def published_events(self) -> List[AgentEvent]:
+        """Convenience property for testing harnesses."""
+        return self.get_events()
 
     def get_event_types(self, run_id: Optional[int] = None) -> List[str]:
         """Retrieve list of event type strings."""

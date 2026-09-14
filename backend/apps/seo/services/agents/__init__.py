@@ -57,6 +57,28 @@ from .agent_learning import (
     get_agent_learning_service
 )
 from .seo_supervisor import SEOSupervisorAgent, SEOSupervisor, ROUTING_WORKFLOWS
+from .advanced_reasoning import (
+    ConsensusState,
+    ChallengeType,
+    CritiqueSeverity,
+    DisagreementSeverity,
+    ReasoningStatus,
+    EpistemicType,
+    ReasoningEvidence,
+    ReasoningHypothesis,
+    AgentReasoningResult,
+    AgentCritique,
+    DisagreementRecord,
+    ReasoningRound,
+    ConsensusResult,
+    ReasoningCase,
+    AdvancedReasoningService,
+    ReasoningRegistry,
+    MAX_REASONING_ROUNDS,
+    CONSENSUS_CONFIDENCE_THRESHOLD,
+    PARTIAL_CONSENSUS_THRESHOLD,
+    CONSENSUS_MARGIN_THRESHOLD,
+)
 
 __all__ = [
     "BaseSpecializedAgent",
@@ -118,4 +140,22 @@ __all__ = [
     "SEOSupervisorAgent",
     "SEOSupervisor",
     "ROUTING_WORKFLOWS",
+    "ConsensusState",
+    "ChallengeType",
+    "CritiqueSeverity",
+    "DisagreementSeverity",
+    "ReasoningEvidence",
+    "ReasoningHypothesis",
+    "AgentReasoningResult",
+    "AgentCritique",
+    "DisagreementRecord",
+    "ReasoningRound",
+    "ConsensusResult",
+    "ReasoningCase",
+    "AdvancedReasoningService",
+    "ReasoningRegistry",
+    "MAX_REASONING_ROUNDS",
+    "CONSENSUS_CONFIDENCE_THRESHOLD",
+    "PARTIAL_CONSENSUS_THRESHOLD",
+    "CONSENSUS_MARGIN_THRESHOLD",
 ]
