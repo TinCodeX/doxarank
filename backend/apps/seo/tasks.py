@@ -851,3 +851,50 @@ def execute_event_triggered_agent_run_task(self, run_id: int, event_id: int) -> 
         )
 
     return run.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=1,
+    default_retry_delay=30,
+    name='apps.seo.tasks.run_autonomous_seo_monitoring_task'
+)
+def run_autonomous_seo_monitoring_task(self, project_ids: Optional[List[int]] = None) -> Dict[str, Any]:
+    """
+    Periodic Celery task (Milestone 6.3) that executes an autonomous monitoring cycle
+    across active projects. Discovers state changes, compares against baselines,
+    and safely dispatches events to the 6.2 ingestion pipeline.
+    """
+    from apps.seo.services.autonomous_monitoring import AutonomousMonitoringService
+    service = AutonomousMonitoringService()
+    try:
+        results = service.run_monitoring_cycle(project_ids=project_ids)
+        return results
+    except Exception as exc:
+        logger.exception(f"[Celery Monitoring Task] Error running autonomous monitoring cycle: {exc}")
+        return {"error": str(exc)}
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=15,
+    name='apps.seo.tasks.run_project_monitoring_task'
+)
+def run_project_monitoring_task(self, project_id: int) -> Dict[str, Any]:
+    """
+    Asynchronous Celery task to monitor a single project with database row-level locking.
+    """
+    from apps.projects.models import Project
+    from apps.seo.services.autonomous_monitoring import AutonomousMonitoringService
+    service = AutonomousMonitoringService()
+    try:
+        with transaction.atomic():
+            project = Project.objects.select_for_update(skip_locked=True).filter(id=project_id).first()
+            if not project:
+                logger.warning(f"[Celery Project Monitoring Task] Project #{project_id} locked or not found.")
+                return {"status": "skipped", "reason": "locked_or_missing"}
+            return service.monitor_project(project)
+    except Exception as exc:
+        logger.exception(f"[Celery Project Monitoring Task] Error monitoring project #{project_id}: {exc}")
+        return {"error": str(exc)}

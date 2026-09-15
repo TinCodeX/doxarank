@@ -18,7 +18,8 @@ from .models import (
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
-    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus
+    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
+    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -34,6 +35,7 @@ from .serializers import (
     AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
     ContinuousOperationSerializer, ContinuousOperationCreateSerializer,
     SEOEventSerializer, SEOEventIngestSerializer,
+    MonitoringStateSerializer, MonitoringSnapshotSerializer, MonitoringTriggerSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
@@ -1729,6 +1731,107 @@ class SEOEventViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(SEOEventSerializer(event).data, status=status.HTTP_201_CREATED)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AutonomousMonitoringViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Autonomous SEO Monitoring (Milestone 6.3: Autonomous SEO Monitoring).
+    Provides monitoring state inspection, snapshots history, detected changes log,
+    runtime evaluation metrics, and manual monitoring trigger.
+    Enforces strict tenant isolation: users can only access monitoring data for their own projects.
+    """
+    serializer_class = MonitoringStateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = MonitoringState.objects.filter(project__owner=user).select_related('project', 'last_event')
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        monitor_type = self.request.query_params.get('monitor_type')
+        if monitor_type:
+            qs = qs.filter(monitor_type=monitor_type)
+        status_val = self.request.query_params.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+        return qs.order_by('-last_checked_at')
+
+    @action(detail=False, methods=['get'], url_path='snapshots')
+    def snapshots(self, request):
+        """
+        List historical monitoring snapshots for a project (GET /api/seo/ai/monitoring/snapshots/?project={id}).
+        """
+        user = request.user
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        qs = MonitoringSnapshot.objects.filter(project=project).order_by('-created_at')
+        monitor_type = request.query_params.get('monitor_type')
+        if monitor_type:
+            qs = qs.filter(monitor_type=monitor_type)
+        serializer = MonitoringSnapshotSerializer(qs[:100], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='changes')
+    def changes(self, request):
+        """
+        List detected anomalies / state changes for a project (GET /api/seo/ai/monitoring/changes/?project={id}).
+        """
+        user = request.user
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        qs = MonitoringSnapshot.objects.filter(project=project, is_anomaly=True).order_by('-created_at')
+        serializer = MonitoringSnapshotSerializer(qs[:100], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='metrics')
+    def metrics(self, request):
+        """
+        Retrieve runtime evaluation metrics for autonomous monitoring (GET /api/seo/ai/monitoring/metrics/?project={id}).
+        """
+        user = request.user
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        data = SEOAgentEvaluationService.evaluate_autonomous_monitoring(project=project)
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='trigger')
+    def trigger(self, request):
+        """
+        Manually run autonomous monitoring cycle for a project (POST /api/seo/ai/monitoring/trigger/).
+        """
+        serializer = MonitoringTriggerSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        project = Project.objects.get(id=project_id)
+
+        from apps.seo.services.autonomous_monitoring import AutonomousMonitoringService
+        service = AutonomousMonitoringService()
+        result = service.monitor_project(project)
+        return Response({
+            "status": "success",
+            "project_id": project.id,
+            "results": result
+        }, status=status.HTTP_200_OK)
 
 
 class GoogleOAuthAuthorizationUrlView(APIView):

@@ -790,3 +790,56 @@ class SEOAgentEvaluationService:
             "event_storm_suppressions": storm_suppressions,
             "cooldown_suppressions": cooldown_suppressions,
         }
+
+    @classmethod
+    def evaluate_autonomous_monitoring(
+        cls,
+        project: Any
+    ) -> Dict[str, Any]:
+        """
+        Milestone 6.3: Evaluate runtime-derived autonomous monitoring operational metrics.
+        Guarantees metrics are dynamically derived from actual persisted MonitoringState,
+        MonitoringSnapshot, and SEOEvent records.
+        """
+        from apps.projects.models import Project
+        from apps.seo.models import MonitoringState, MonitoringSnapshot, SEOEvent, MonitorStatus
+
+        project_obj = project if isinstance(project, Project) else Project.objects.get(id=project)
+
+        states_qs = MonitoringState.objects.filter(project=project_obj)
+        snapshots_qs = MonitoringSnapshot.objects.filter(project=project_obj)
+        events_qs = SEOEvent.objects.filter(project=project_obj, source__startswith="autonomous_monitoring")
+
+        monitored_targets_count = states_qs.count()
+        active_anomalies_count = states_qs.filter(status=MonitorStatus.ANOMALY).count()
+        recovered_targets_count = states_qs.filter(status=MonitorStatus.RECOVERED).count()
+
+        snapshots_count = snapshots_qs.count()
+        anomalies_detected_count = snapshots_qs.filter(is_anomaly=True).count()
+        recoveries_detected_count = snapshots_qs.filter(is_recovery=True).count()
+        changes_ignored_count = snapshots_qs.filter(is_anomaly=False, is_recovery=False).count()
+
+        events_generated_count = events_qs.count()
+        events_triggered_runs_count = events_qs.filter(agent_run__isnull=False).count()
+
+        # Deduplication / stability count (anomalies with consecutive_anomalies > 1)
+        duplicates_prevented = sum(max(0, s.consecutive_anomalies - 1) for s in states_qs)
+
+        event_generation_rate = round(
+            (events_generated_count / max(1, snapshots_count)) * 100, 1
+        ) if snapshots_count > 0 else 0.0
+
+        return {
+            "project_id": project_obj.id,
+            "monitored_targets": monitored_targets_count,
+            "active_anomalies": active_anomalies_count,
+            "recovered_targets": recovered_targets_count,
+            "snapshots_created": snapshots_count,
+            "changes_detected": anomalies_detected_count,
+            "changes_ignored": changes_ignored_count,
+            "events_generated": events_generated_count,
+            "events_triggered": events_triggered_runs_count,
+            "recovery_events": recoveries_detected_count,
+            "duplicate_detections": duplicates_prevented,
+            "event_generation_rate": event_generation_rate,
+        }

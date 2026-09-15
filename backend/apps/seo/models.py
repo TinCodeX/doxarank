@@ -2262,7 +2262,197 @@ class SEOEvent(models.Model):
         return f"SEOEvent #{self.id} [{self.event_type}] ({self.status}, {self.severity}) for Project #{self.project_id}"
 
 
+class MonitorType(models.TextChoices):
+    RANKING = 'ranking', 'Ranking Monitor'
+    PAGE_STATUS = 'page_status', 'Page Status Monitor'
+    SEO_AUDIT = 'seo_audit', 'SEO Audit Monitor'
+    KEYWORD_VISIBILITY = 'keyword_visibility', 'Keyword Visibility Monitor'
 
 
+class MonitorStatus(models.TextChoices):
+    HEALTHY = 'healthy', 'Healthy'
+    WARNING = 'warning', 'Warning'
+    ANOMALY = 'anomaly', 'Anomaly Detected'
+    RECOVERED = 'recovered', 'Recovered'
 
 
+class MonitoringState(models.Model):
+    """
+    MonitoringState model representing the persistent, authoritative state of a monitored
+    metric or target for an SEO project (Milestone 6.3: Autonomous SEO Monitoring).
+    Enables explainable baselines, change detection, and suppression of unchanged problems.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='monitoring_states',
+        help_text='The project this monitoring state belongs to.'
+    )
+    monitor_type = models.CharField(
+        max_length=32,
+        choices=MonitorType.choices,
+        db_index=True,
+        help_text='Specialized monitor type responsible for this metric.'
+    )
+    metric_key = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Unique identifier of the entity or metric being monitored.'
+    )
+    current_value = models.JSONField(
+        default=dict,
+        help_text='Latest observation payload for this metric.'
+    )
+    previous_value = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Observation from the preceding monitoring cycle.'
+    )
+    baseline_value = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Established baseline value used as reference for change detection.'
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=MonitorStatus.choices,
+        default=MonitorStatus.HEALTHY,
+        db_index=True,
+        help_text='Current health classification of this monitored target.'
+    )
+    consecutive_anomalies = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of consecutive cycles this metric remained in an anomaly state.'
+    )
+    snapshot_timestamp = models.DateTimeField(
+        default=timezone.now,
+        help_text='Timestamp of the active snapshot observation.'
+    )
+    last_checked_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='When this target was last inspected by the monitoring service.'
+    )
+    last_changed_at = models.DateTimeField(
+        default=timezone.now,
+        help_text='When the observed value meaningfully changed.'
+    )
+    last_event_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When an SEOEvent was last generated for this target.'
+    )
+    last_event = models.ForeignKey(
+        'SEOEvent',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='monitoring_states',
+        help_text='Most recent SEOEvent triggered from this monitoring state.'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Contextual metadata, e.g. configured thresholds, targets, and notes.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this monitoring state was first established.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when this monitoring state was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_monitoring_states'
+        verbose_name = 'monitoring state'
+        verbose_name_plural = 'monitoring states'
+        ordering = ['-last_checked_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'monitor_type', 'metric_key'],
+                name='seo_mon_proj_type_key_uniq'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['project', 'monitor_type'], name='seo_mon_proj_type_idx'),
+            models.Index(fields=['project', 'last_checked_at'], name='seo_mon_proj_checked_idx'),
+            models.Index(fields=['status', 'last_checked_at'], name='seo_mon_status_checked_idx'),
+        ]
+
+    def __str__(self):
+        return f"MonitoringState [{self.monitor_type}] '{self.metric_key}' ({self.status}) for Project #{self.project_id}"
+
+
+class MonitoringSnapshot(models.Model):
+    """
+    MonitoringSnapshot model representing an individual historical observation captured
+    during a monitoring cycle (Milestone 6.3: Autonomous SEO Monitoring).
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='monitoring_snapshots',
+        help_text='The project this snapshot belongs to.'
+    )
+    monitor_type = models.CharField(
+        max_length=32,
+        choices=MonitorType.choices,
+        db_index=True,
+        help_text='Monitor type that captured this snapshot.'
+    )
+    metric_key = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Identifier of the entity or metric being monitored.'
+    )
+    value = models.JSONField(
+        default=dict,
+        help_text='Observed snapshot value payload.'
+    )
+    baseline_value = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Baseline reference at the time of snapshot.'
+    )
+    delta = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Computed difference relative to baseline.'
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=MonitorStatus.choices,
+        default=MonitorStatus.HEALTHY,
+        db_index=True,
+        help_text='Health status classification at snapshot time.'
+    )
+    is_anomaly = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Whether this snapshot exceeded threshold and represented an anomaly.'
+    )
+    is_recovery = models.BooleanField(
+        default=False,
+        help_text='Whether this snapshot marked a transition back to healthy from anomaly.'
+    )
+    created_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when this snapshot observation was recorded.'
+    )
+
+    class Meta:
+        db_table = 'seo_monitoring_snapshots'
+        verbose_name = 'monitoring snapshot'
+        verbose_name_plural = 'monitoring snapshots'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'monitor_type', '-created_at'], name='seo_snap_proj_type_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_snap_proj_created_idx'),
+        ]
+
+    def __str__(self):
+        anomaly_str = " (ANOMALY)" if self.is_anomaly else (" (RECOVERY)" if self.is_recovery else "")
+        return f"Snapshot #{self.id} [{self.monitor_type}] '{self.metric_key}'{anomaly_str} for Project #{self.project_id}"

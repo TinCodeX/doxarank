@@ -193,6 +193,20 @@ class AgentEventType(str, Enum):
     SEO_EVENT_RUN_CREATED = "seo.event.run_created"
     SEO_EVENT_PROCESSING_FAILED = "seo.event.processing_failed"
 
+    # Autonomous SEO Monitoring (Milestone 6.3)
+    SEO_MONITORING_CYCLE_STARTED = "seo.monitoring.cycle.started"
+    SEO_MONITORING_CYCLE_COMPLETED = "seo.monitoring.cycle.completed"
+    SEO_MONITORING_CYCLE_FAILED = "seo.monitoring.cycle.failed"
+    SEO_MONITORING_PROJECT_STARTED = "seo.monitoring.project.started"
+    SEO_MONITORING_PROJECT_COMPLETED = "seo.monitoring.project.completed"
+    SEO_MONITORING_PROJECT_FAILED = "seo.monitoring.project.failed"
+    SEO_MONITORING_SNAPSHOT_CREATED = "seo.monitoring.snapshot.created"
+    SEO_MONITORING_CHANGE_DETECTED = "seo.monitoring.change.detected"
+    SEO_MONITORING_CHANGE_IGNORED = "seo.monitoring.change.ignored"
+    SEO_MONITORING_EVENT_CREATED = "seo.monitoring.event.created"
+    SEO_MONITORING_RECOVERY_DETECTED = "seo.monitoring.recovery.detected"
+    SEO_MONITORING_DUPLICATE_PREVENTED = "seo.monitoring.duplicate_prevented"
+
 
 
 

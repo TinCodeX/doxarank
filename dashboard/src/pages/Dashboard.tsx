@@ -16,6 +16,7 @@ import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AgentOrchestratorPanel } from '../components/AgentOrchestratorPanel';
 import { ContinuousOperationsPanel } from '../components/ContinuousOperationsPanel';
 import { EventActivityPanel } from '../components/EventActivityPanel';
+import { MonitoringActivityPanel } from '../components/MonitoringActivityPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -746,6 +747,13 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 6.7: EVENT-DRIVEN AGENT OPERATIONS (Milestone 6.2) */}
         {selectedProject && (
           <EventActivityPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 6.8: AUTONOMOUS SEO MONITORING (Milestone 6.3) */}
+        {selectedProject && (
+          <MonitoringActivityPanel
             project={selectedProject}
           />
         )}

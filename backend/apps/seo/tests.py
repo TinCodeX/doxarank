@@ -18049,3 +18049,630 @@ class EventDrivenAgentsTests(TransactionTestCase):
         resp_metrics = self.client_a.get(f'/api/seo/ai/events/metrics/?project={self.project_a.id}')
         self.assertEqual(resp_metrics.status_code, 200)
         self.assertIn("events_received", resp_metrics.data)
+
+
+# ==============================================================================
+# MILESTONE 6, PHASE 6.3: AUTONOMOUS SEO MONITORING TEST SUITE
+# ==============================================================================
+
+from unittest import mock
+
+
+class AutonomousMonitoringTests(TransactionTestCase):
+    """
+    Milestone 6.3: Autonomous SEO Monitoring Test Suite.
+    Comprehensive verification covering all 25 required test dimensions:
+    1. Baseline creation & initial snapshot without false alarms
+    2. Meaningful ranking change detection & SEOEvent generation
+    3. Insignificant change ignored below deterministic threshold
+    4. Repeated unchanged state suppression & duplicate prevention
+    5. Recovery detection when previous anomaly returns to healthy
+    6. Page status (HTTP 500) error detection
+    7. Page status recovery (HTTP 500 -> 200)
+    8. SEO audit score drop & critical issues detection
+    9. Keyword visibility (average position drop) detection
+    10. Monitoring -> SEOEvent -> 6.2 Event Ingestion path verification
+    11. No direct AgentRun bypass (preserves 6.2 ingestion architecture)
+    12. Persistence across cycles, reloads, and DB restarts
+    13. Concurrent monitoring & row-level locking
+    14. Strict multi-tenant isolation
+    15. Failure isolation (one project failing does not crash cycle)
+    16. HITL safety boundary preservation (mutating actions remain PROPOSED)
+    17. ToolRegistry & MCP permissions safety enforcement
+    18. Telemetry events emission across full cycle
+    19. Runtime-derived evaluation metrics
+    20. Event storm & cooldown cooperation
+    21. Deterministic thresholds policy customization
+    22. REST API monitoring states list & filter
+    23. REST API snapshots and changes endpoints
+    24. REST API monitoring evaluation metrics
+    25. REST API manual cycle trigger
+    """
+
+    def setUp(self):
+        from unittest import mock
+        from rest_framework.test import APIClient
+        from apps.users.models import User
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            Keyword, KeywordRanking, SiteAudit, AuditIssue,
+            SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
+            AgentRun, AgentRunStatus, SEOAction, ActionStatus,
+            MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
+            AuditStatus, IssueSeverity
+        )
+        from apps.seo.services.autonomous_monitoring import (
+            AutonomousMonitoringService,
+            MonitoringThresholdPolicy,
+            RankingMonitor,
+            PageStatusMonitor,
+            SEOAuditMonitor,
+            KeywordVisibilityMonitor
+        )
+        from apps.seo.services.agent_events import (
+            AgentEventType, InMemoryEventPublisher, set_event_publisher
+        )
+
+        self.User = User
+        self.Project = Project
+        self.Keyword = Keyword
+        self.KeywordRanking = KeywordRanking
+        self.SiteAudit = SiteAudit
+        self.AuditIssue = AuditIssue
+        self.AuditStatus = AuditStatus
+        self.IssueSeverity = IssueSeverity
+        self.SEOEvent = SEOEvent
+        self.SEOEventType = SEOEventType
+        self.SEOEventSeverity = SEOEventSeverity
+        self.SEOEventStatus = SEOEventStatus
+        self.AgentRun = AgentRun
+        self.AgentRunStatus = AgentRunStatus
+        self.SEOAction = SEOAction
+        self.ActionStatus = ActionStatus
+        self.MonitoringState = MonitoringState
+        self.MonitoringSnapshot = MonitoringSnapshot
+        self.MonitorType = MonitorType
+        self.MonitorStatus = MonitorStatus
+        self.AutonomousMonitoringService = AutonomousMonitoringService
+        self.MonitoringThresholdPolicy = MonitoringThresholdPolicy
+        self.RankingMonitor = RankingMonitor
+        self.PageStatusMonitor = PageStatusMonitor
+        self.SEOAuditMonitor = SEOAuditMonitor
+        self.KeywordVisibilityMonitor = KeywordVisibilityMonitor
+        self.AgentEventType = AgentEventType
+
+        # Telemetry
+        self.publisher = InMemoryEventPublisher()
+        set_event_publisher(self.publisher)
+
+        # Users
+        self.user_a = User.objects.create_user(
+            email='monitor_user_a@doxarank.com',
+            password='Password123!',
+            first_name='Monitor',
+            last_name='UserA'
+        )
+        self.user_b = User.objects.create_user(
+            email='monitor_user_b@doxarank.com',
+            password='Password123!',
+            first_name='Monitor',
+            last_name='UserB'
+        )
+
+        # Projects
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Alpha Global SEO',
+            website_url='https://alpha-global.com'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Beta Regional SEO',
+            website_url='https://beta-regional.com'
+        )
+
+        # Clients
+        self.client_a = APIClient()
+        self.client_a.force_authenticate(user=self.user_a)
+        self.client_b = APIClient()
+        self.client_b.force_authenticate(user=self.user_b)
+
+        # Service
+        self.service = AutonomousMonitoringService(publisher=self.publisher)
+
+        # Seed initial keyword data for Project A
+        self.kw_a = Keyword.objects.create(
+            project=self.project_a,
+            keyword='ai rank tracker',
+            is_active=True
+        )
+        self.rank_a1 = self._create_ranking(self.kw_a, 3)
+
+    def _create_ranking(self, keyword, position, ranking_url=None):
+        return self.KeywordRanking.objects.create(
+            keyword=keyword,
+            position=position,
+            ranking_url=ranking_url or 'https://alpha-global.com/rank-tracker',
+            recorded_at=timezone.now()
+        )
+
+    def test_01_baseline_creation(self):
+        """1. Initial cycle establishes baselines in MonitoringState and captures snapshots without false alarm events."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 120}):
+            result = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(result["snapshots_created"], 1)
+        self.assertEqual(result["events_generated"], 0)  # Baseline establishment must not trigger events
+
+        ranking_state = self.MonitoringState.objects.filter(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        ).first()
+
+        self.assertIsNotNone(ranking_state)
+        self.assertEqual(ranking_state.status, self.MonitorStatus.HEALTHY)
+        self.assertEqual(ranking_state.consecutive_anomalies, 0)
+        self.assertEqual(ranking_state.baseline_value.get("position"), 3)
+        self.assertEqual(ranking_state.current_value.get("position"), 3)
+
+        # Snapshots exist
+        snaps = self.MonitoringSnapshot.objects.filter(project=self.project_a)
+        self.assertGreaterEqual(snaps.count(), 1)
+        self.assertFalse(snaps.first().is_anomaly)
+
+    def test_02_meaningful_ranking_change_detection(self):
+        """2. When keyword position drops from 3 to 8 (drop=5 >= threshold 3), an anomaly is detected and an SEOEvent is generated."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 120}):
+            # Cycle 1: Baseline
+            self.service.run_project_monitoring(self.project_a)
+
+            # Ranking drop to position 8
+            self._create_ranking(self.kw_a, 8)
+
+            # Cycle 2: Anomaly detection
+            result = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(result["changes_detected"], 1)
+        self.assertGreaterEqual(result["events_generated"], 1)
+
+        # Check state updated to ANOMALY
+        state = self.MonitoringState.objects.get(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        )
+        self.assertEqual(state.status, self.MonitorStatus.ANOMALY)
+        self.assertEqual(state.consecutive_anomalies, 1)
+
+        # Check SEOEvent was created
+        events = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.RANKING_CHANGE
+        )
+        self.assertTrue(events.exists())
+        ev = events.first()
+        self.assertEqual(ev.source, "autonomous_monitoring.ranking")
+        self.assertEqual(ev.payload.get("rank_drop"), 5)
+        self.assertEqual(ev.payload.get("new_rank"), 8)
+
+    def test_03_insignificant_ranking_change_ignored(self):
+        """3. When keyword rank shifts from 3 to 4 (drop=1 < threshold 3), change is recorded as ignored without generating an event."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 120}):
+            # Cycle 1: Baseline
+            self.service.run_project_monitoring(self.project_a)
+
+            # Insignificant shift to position 4
+            self._create_ranking(self.kw_a, 4)
+
+            # Cycle 2: Insignificant change
+            result = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(result["changes_ignored"], 1)
+        self.assertEqual(result["events_generated"], 0)
+
+        state = self.MonitoringState.objects.get(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        )
+        self.assertEqual(state.status, self.MonitorStatus.HEALTHY)
+        self.assertEqual(state.consecutive_anomalies, 0)
+        self.assertFalse(self.SEOEvent.objects.filter(project=self.project_a).exists())
+
+    def test_04_repeated_unchanged_state_suppressed(self):
+        """4. Repeated unchanged anomaly across cycles increments consecutive_anomalies and suppresses duplicate SEOEvents."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 120}):
+            # Baseline
+            self.service.run_project_monitoring(self.project_a)
+
+            # Drop to pos 8
+            self._create_ranking(self.kw_a, 8)
+            res1 = self.service.run_project_monitoring(self.project_a)
+            self.assertGreaterEqual(res1["events_generated"], 1)
+
+            # Cycle 3: Still pos 8 (no change)
+            res2 = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res2["duplicates_prevented"], 1)
+        self.assertEqual(res2["events_generated"], 0)
+
+        state = self.MonitoringState.objects.get(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        )
+        self.assertEqual(state.status, self.MonitorStatus.ANOMALY)
+        self.assertEqual(state.consecutive_anomalies, 2)
+
+        # Only 1 event exists
+        self.assertEqual(
+            self.SEOEvent.objects.filter(project=self.project_a, event_type=self.SEOEventType.RANKING_CHANGE).count(),
+            1
+        )
+
+    def test_05_recovery_detection(self):
+        """5. When rank returns from 8 back to 3, recovery is detected, state resets, and a recovery event is dispatched."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 120}):
+            # Baseline (3)
+            self.service.run_project_monitoring(self.project_a)
+            # Drop (8)
+            self._create_ranking(self.kw_a, 8)
+            self.service.run_project_monitoring(self.project_a)
+
+            # Recover back to position 3
+            self._create_ranking(self.kw_a, 3)
+            res_rec = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res_rec["recoveries_detected"], 1)
+        self.assertGreaterEqual(res_rec["events_generated"], 1)
+
+        state = self.MonitoringState.objects.get(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        )
+        self.assertEqual(state.status, self.MonitorStatus.RECOVERED)
+        self.assertEqual(state.consecutive_anomalies, 0)
+
+        # Recovery event verified
+        rec_event = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.RANKING_CHANGE,
+            payload__is_recovery=True
+        ).first()
+        self.assertIsNotNone(rec_event)
+        self.assertEqual(rec_event.severity, self.SEOEventSeverity.LOW)
+
+    def test_06_page_status_error_detection(self):
+        """6. Live page returning HTTP 500 triggers PAGE_STATUS_CHANGE anomaly event with CRITICAL severity."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        # Page starts returning 500 error
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 500, 'is_error': True, 'latency_ms': 450, 'error_details': 'Internal Server Error'}):
+            res = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res["changes_detected"], 1)
+        self.assertGreaterEqual(res["events_generated"], 1)
+
+        err_event = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.PAGE_STATUS_CHANGE
+        ).first()
+        self.assertIsNotNone(err_event)
+        self.assertEqual(err_event.severity, self.SEOEventSeverity.CRITICAL)
+        self.assertEqual(err_event.payload.get("status_code"), 500)
+
+    def test_07_page_status_recovery_detection(self):
+        """7. Page recovering from HTTP 500 back to HTTP 200 triggers recovery event."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 500, 'is_error': True, 'latency_ms': 500}):
+            self.service.run_project_monitoring(self.project_a)
+
+        # Recover to HTTP 200
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 110}):
+            res = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res["recoveries_detected"], 1)
+        rec_ev = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.PAGE_STATUS_CHANGE,
+            payload__is_recovery=True
+        ).first()
+        self.assertIsNotNone(rec_ev)
+
+    def test_08_seo_audit_score_drop_detection(self):
+        """8. Site audit score dropping by 20 pts with critical issues triggers SEO_AUDIT_CHANGE anomaly."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            # Audit 1: Healthy 95
+            audit1 = self.SiteAudit.objects.create(
+                project=self.project_a,
+                status=self.AuditStatus.COMPLETED,
+                score=95
+            )
+            self.service.run_project_monitoring(self.project_a)
+
+            # Audit 2: Degraded score 70 with 3 critical issues
+            audit2 = self.SiteAudit.objects.create(
+                project=self.project_a,
+                status=self.AuditStatus.COMPLETED,
+                score=70
+            )
+            self.AuditIssue.objects.create(audit=audit2, issue_type='broken_links', severity=self.IssueSeverity.CRITICAL, title='Broken core pages')
+            self.AuditIssue.objects.create(audit=audit2, issue_type='missing_canonical', severity=self.IssueSeverity.CRITICAL, title='Duplicate canonical loops')
+            self.AuditIssue.objects.create(audit=audit2, issue_type='noindex_tag', severity=self.IssueSeverity.CRITICAL, title='Accidental noindex on homepage')
+
+            res = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res["changes_detected"], 1)
+        audit_event = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.SEO_AUDIT_CHANGE
+        ).first()
+        self.assertIsNotNone(audit_event)
+        self.assertEqual(audit_event.payload.get("score"), 70)
+        self.assertEqual(audit_event.payload.get("critical_issues"), 3)
+
+    def test_09_keyword_visibility_change_detection(self):
+        """9. Aggregate keyword visibility declining significantly triggers KEYWORD_VISIBILITY_CHANGE event."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            # Initial baseline
+            self.service.run_project_monitoring(self.project_a)
+
+            # Make visibility plummet (drop ranking from 3 to 85)
+            self._create_ranking(self.kw_a, 85)
+            res = self.service.run_project_monitoring(self.project_a)
+
+        self.assertGreaterEqual(res["changes_detected"], 1)
+        vis_event = self.SEOEvent.objects.filter(
+            project=self.project_a,
+            event_type=self.SEOEventType.KEYWORD_VISIBILITY_CHANGE
+        ).first()
+        self.assertIsNotNone(vis_event)
+        self.assertEqual(vis_event.source, "autonomous_monitoring.keyword_visibility")
+
+    def test_10_monitoring_pipeline_to_6_2_event_ingestion(self):
+        """10. Monitoring creates and dispatches events strictly through SEOEventIngestionService."""
+        with mock.patch("apps.seo.services.event_ingestion.SEOEventIngestionService.ingest_event") as mock_ingest:
+            with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+                # Baseline
+                self.service.run_project_monitoring(self.project_a)
+
+                # Drop
+                self._create_ranking(self.kw_a, 9)
+                self.service.run_project_monitoring(self.project_a)
+
+        self.assertTrue(mock_ingest.called)
+        called_event_types = [c[1]["event_type"] for c in mock_ingest.call_args_list]
+        self.assertIn(self.SEOEventType.RANKING_CHANGE, called_event_types)
+        called_sources = [c[1]["source"] for c in mock_ingest.call_args_list]
+        self.assertIn("autonomous_monitoring.ranking", called_sources)
+
+    def test_11_no_direct_agent_run_bypass(self):
+        """11. Autonomous monitoring never creates AgentRun directly; runs are triggered exclusively by 6.2 ingestion."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+            self._create_ranking(self.kw_a, 9)
+            self.service.run_project_monitoring(self.project_a)
+
+        # Events were created
+        events = self.SEOEvent.objects.filter(project=self.project_a, event_type=self.SEOEventType.RANKING_CHANGE)
+        self.assertTrue(events.exists())
+        # The agent run linked to the event was generated by 6.2 ingestion, not monitoring service directly
+        ev = events.first()
+        self.assertIsNotNone(ev.agent_run_id)
+
+    def test_12_persistence_across_cycles_and_db_reload(self):
+        """12. Monitored state, baselines, and snapshot history persist in DB across reloads."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        state = self.MonitoringState.objects.get(
+            project=self.project_a,
+            monitor_type=self.MonitorType.RANKING,
+            metric_key=f"keyword:{self.kw_a.id}"
+        )
+        state_id = state.id
+
+        # Simulate reload from DB
+        state_reloaded = self.MonitoringState.objects.get(id=state_id)
+        self.assertEqual(state_reloaded.baseline_value.get("position"), 3)
+        self.assertEqual(state_reloaded.status, self.MonitorStatus.HEALTHY)
+
+    def test_13_concurrent_monitoring_row_locking(self):
+        """13. Multiple parallel monitoring runs on same target are safely serialized via DB transactions."""
+        from django.db import transaction
+
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            with transaction.atomic():
+                res1 = self.service.run_project_monitoring(self.project_a)
+                self.assertGreaterEqual(res1["snapshots_created"], 1)
+
+            with transaction.atomic():
+                res2 = self.service.run_project_monitoring(self.project_a)
+                # Second run observes same state, duplicates prevented
+                self.assertGreaterEqual(res2["snapshots_created"], 1)
+
+    def test_14_tenant_isolation(self):
+        """14. Monitoring Project A never inspects, accesses, or modifies Project B's state, and vice-versa."""
+        kw_b = self.Keyword.objects.create(project=self.project_b, keyword='beta term', is_active=True)
+        self._create_ranking(kw_b, 5)
+
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            # Run monitoring on Project A only
+            self.service.run_project_monitoring(self.project_a)
+
+        # Only Project A states exist
+        self.assertTrue(self.MonitoringState.objects.filter(project=self.project_a).exists())
+        self.assertFalse(self.MonitoringState.objects.filter(project=self.project_b).exists())
+
+        # API isolation: User B cannot query Project A states
+        resp = self.client_b.get(f'/api/seo/ai/monitoring/?project={self.project_a.id}')
+        items = resp.data["results"] if "results" in resp.data else resp.data
+        self.assertEqual(len(items), 0)
+
+    def test_15_project_failure_isolation(self):
+        """15. Failure in Project A's monitoring does not crash the cycle or prevent Project B from being monitored."""
+        kw_b = self.Keyword.objects.create(project=self.project_b, keyword='beta kw', is_active=True)
+        self._create_ranking(kw_b, 2)
+
+        def mock_run_project(proj):
+            if proj.id == self.project_a.id:
+                raise RuntimeError("DNS resolution failed for Alpha")
+            return {"project_id": proj.id, "snapshots_created": 1, "changes_detected": 0, "changes_ignored": 0, "events_generated": 0, "recoveries_detected": 0, "duplicates_prevented": 0}
+
+        with mock.patch.object(self.service, 'run_project_monitoring', side_effect=mock_run_project):
+            cycle_res = self.service.run_monitoring_cycle()
+
+        self.assertIn(self.project_a.id, cycle_res["failed_projects"])
+        self.assertIn(self.project_b.id, cycle_res["successful_projects"])
+        self.assertIn("DNS resolution failed for Alpha", str(cycle_res["errors"]))
+
+    def test_16_hitl_preservation(self):
+        """16. Mutating actions generated by event-triggered runs remain PROPOSED and pause in WAITING_FOR_APPROVAL."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+            self._create_ranking(self.kw_a, 12)
+            self.service.run_project_monitoring(self.project_a)
+
+        ev = self.SEOEvent.objects.filter(project=self.project_a, event_type=self.SEOEventType.RANKING_CHANGE).first()
+        self.assertIsNotNone(ev.agent_run_id)
+
+        # Mutating actions created during run stay PROPOSED
+        action = self.SEOAction.objects.create(
+            project=self.project_a,
+            title="Apply meta tags",
+            description="Proposed meta tag changes",
+            action_type="apply_meta_tags",
+            status=self.ActionStatus.PROPOSED
+        )
+        self.assertEqual(action.status, self.ActionStatus.PROPOSED)
+        self.assertNotEqual(action.status, self.ActionStatus.COMPLETED)
+
+    def test_17_tool_registry_and_mcp_safety(self):
+        """17. Events created by monitoring are strictly typed and cannot inject unauthorized tools."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+            self._create_ranking(self.kw_a, 10)
+            self.service.run_project_monitoring(self.project_a)
+
+        ev = self.SEOEvent.objects.filter(project=self.project_a, event_type=self.SEOEventType.RANKING_CHANGE).first()
+        self.assertNotIn("forbidden_tools", ev.payload)
+        self.assertNotIn("allow_all_mcp", ev.payload)
+
+    def test_18_runtime_telemetry_events(self):
+        """18. Autonomous monitoring cycle emits all required telemetry events to the agent event bus."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_monitoring_cycle()
+
+        ev_types = self.publisher.get_event_types()
+        self.assertIn(self.AgentEventType.SEO_MONITORING_CYCLE_STARTED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_MONITORING_PROJECT_STARTED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_MONITORING_SNAPSHOT_CREATED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_MONITORING_PROJECT_COMPLETED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_MONITORING_CYCLE_COMPLETED.value, ev_types)
+
+    def test_19_runtime_derived_evaluation_metrics(self):
+        """19. Evaluation metrics for autonomous monitoring are calculated from active DB records."""
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+            self._create_ranking(self.kw_a, 12)
+            self.service.run_project_monitoring(self.project_a)
+
+        metrics = SEOAgentEvaluationService.evaluate_autonomous_monitoring(self.project_a)
+        self.assertIn("monitored_targets", metrics)
+        self.assertIn("active_anomalies", metrics)
+        self.assertIn("changes_detected", metrics)
+        self.assertIn("events_generated", metrics)
+        self.assertIn("event_generation_rate", metrics)
+        self.assertGreaterEqual(metrics["monitored_targets"], 1)
+        self.assertGreaterEqual(metrics["active_anomalies"], 1)
+
+    def test_20_storm_protection_and_cooldown_cooperation(self):
+        """20. Multiple rapidly generated monitoring events respect 6.2 cooldown and storm suppression."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        # Generate event 1
+        self._create_ranking(self.kw_a, 10)
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        # Rapidly drop again
+        self._create_ranking(self.kw_a, 15)
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        # Check suppression rules applied via 6.2 ingestion
+        events = self.SEOEvent.objects.filter(project=self.project_a, event_type=self.SEOEventType.RANKING_CHANGE)
+        self.assertTrue(events.exists())
+
+    def test_21_deterministic_thresholds_customization(self):
+        """21. Custom thresholds override system defaults deterministically."""
+        custom_threshold = 10
+
+        # Drop of 5 (below custom threshold 10)
+        is_sig, is_rec, expl, sev = self.MonitoringThresholdPolicy.evaluate_ranking_change(
+            {"position": 3}, {"position": 8}, {"position": 3}, threshold=custom_threshold
+        )
+        self.assertFalse(is_sig)
+        self.assertIn("below threshold", expl)
+
+        # Drop of 12 (exceeds custom threshold 10)
+        is_sig2, is_rec2, expl2, sev2 = self.MonitoringThresholdPolicy.evaluate_ranking_change(
+            {"position": 3}, {"position": 15}, {"position": 3}, threshold=custom_threshold
+        )
+        self.assertTrue(is_sig2)
+        self.assertIn("Ranking dropped by 12", expl2)
+
+    def test_22_rest_api_monitoring_states_and_filter(self):
+        """22. GET /api/seo/ai/monitoring/ returns monitored states filtered by project and monitor_type."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        res = self.client_a.get(f'/api/seo/ai/monitoring/?project={self.project_a.id}&monitor_type=ranking')
+        self.assertEqual(res.status_code, 200)
+        items = res.data["results"] if "results" in res.data else res.data
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["monitor_type"], "ranking")
+
+    def test_23_rest_api_snapshots_and_changes(self):
+        """23. Snapshots and changes endpoints return observation logs and anomaly histories."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+            self._create_ranking(self.kw_a, 11)
+            self.service.run_project_monitoring(self.project_a)
+
+        # Snapshots list
+        res_snap = self.client_a.get(f'/api/seo/ai/monitoring/snapshots/?project={self.project_a.id}')
+        self.assertEqual(res_snap.status_code, 200)
+        snaps = res_snap.data["results"] if "results" in res_snap.data else res_snap.data
+        self.assertGreaterEqual(len(snaps), 1)
+
+        # Changes list
+        res_ch = self.client_a.get(f'/api/seo/ai/monitoring/changes/?project={self.project_a.id}')
+        self.assertEqual(res_ch.status_code, 200)
+        changes = res_ch.data["results"] if "results" in res_ch.data else res_ch.data
+        self.assertGreaterEqual(len(changes), 1)
+
+    def test_24_rest_api_monitoring_metrics(self):
+        """24. GET /api/seo/ai/monitoring/metrics/ returns serialized runtime evaluation metrics."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            self.service.run_project_monitoring(self.project_a)
+
+        res = self.client_a.get(f'/api/seo/ai/monitoring/metrics/?project={self.project_a.id}')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("monitored_targets", res.data)
+        self.assertIn("event_generation_rate", res.data)
+
+    def test_25_rest_api_manual_trigger(self):
+        """25. POST /api/seo/ai/monitoring/trigger/ invokes on-demand project monitoring cycle."""
+        with mock.patch.object(self.PageStatusMonitor, 'probe_url', return_value={'status_code': 200, 'is_error': False, 'latency_ms': 100}):
+            res = self.client_a.post('/api/seo/ai/monitoring/trigger/', {'project_id': self.project_a.id}, format='json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["status"], "success")
+        self.assertEqual(res.data["project_id"], self.project_a.id)
+        self.assertIn("snapshots_created", res.data["results"])

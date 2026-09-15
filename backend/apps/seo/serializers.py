@@ -14,7 +14,8 @@ from .models import (
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
-    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus
+    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
+    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus
 )
 from apps.projects.models import Project
 
@@ -1612,4 +1613,78 @@ class SEOEventIngestSerializer(serializers.Serializer):
         injected = FORBIDDEN_PAYLOAD_KEYS.intersection(value.keys())
         if injected:
             raise serializers.ValidationError(f"Payload contains forbidden configuration keys: {list(injected)}")
+        return value
+
+
+class MonitoringStateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for MonitoringState model (Milestone 6.3: Autonomous SEO Monitoring).
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+    last_event_type = serializers.ReadOnlyField(source='last_event.event_type', default=None)
+    last_event_status = serializers.ReadOnlyField(source='last_event.status', default=None)
+
+    class Meta:
+        model = MonitoringState
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'monitor_type',
+            'metric_key',
+            'current_value',
+            'previous_value',
+            'baseline_value',
+            'status',
+            'consecutive_anomalies',
+            'snapshot_timestamp',
+            'last_checked_at',
+            'last_changed_at',
+            'last_event_at',
+            'last_event',
+            'last_event_type',
+            'last_event_status',
+            'metadata',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class MonitoringSnapshotSerializer(serializers.ModelSerializer):
+    """
+    Serializer for MonitoringSnapshot model (Milestone 6.3: Autonomous SEO Monitoring).
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = MonitoringSnapshot
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'monitor_type',
+            'metric_key',
+            'value',
+            'baseline_value',
+            'delta',
+            'status',
+            'is_anomaly',
+            'is_recovery',
+            'created_at',
+        )
+        read_only_fields = fields
+
+
+class MonitoringTriggerSerializer(serializers.Serializer):
+    """
+    Serializer for manual monitoring trigger endpoint (POST /api/seo/ai/monitoring/trigger/).
+    """
+    project_id = serializers.IntegerField(required=True)
+
+    def validate_project_id(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if not Project.objects.filter(id=value, owner=request.user).exists():
+                raise serializers.ValidationError("Project does not exist or you do not have permission to access it.")
         return value

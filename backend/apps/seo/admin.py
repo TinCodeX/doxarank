@@ -4,7 +4,7 @@ from .models import (
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
     SEOAction, AgentRun, AgentStep, AgentToolCall, ContinuousOperation,
-    SEOEvent
+    SEOEvent, MonitoringState, MonitoringSnapshot
 )
 
 
@@ -497,5 +497,66 @@ class SEOEventAdmin(admin.ModelAdmin):
         'processed_at',
         'created_at',
         'updated_at'
+    )
+    ordering = ('-created_at',)
+
+
+@admin.register(MonitoringState)
+class MonitoringStateAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'monitor_type',
+        'metric_key',
+        'status',
+        'consecutive_anomalies',
+        'last_checked_at',
+        'last_changed_at',
+        'last_event_at',
+        'updated_at'
+    )
+    list_filter = (
+        'monitor_type',
+        'status',
+        'last_checked_at',
+        'last_changed_at'
+    )
+    search_fields = (
+        'project__name',
+        'metric_key',
+        'monitor_type'
+    )
+    readonly_fields = (
+        'created_at',
+        'updated_at'
+    )
+    ordering = ('-last_checked_at',)
+
+
+@admin.register(MonitoringSnapshot)
+class MonitoringSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'monitor_type',
+        'metric_key',
+        'status',
+        'is_anomaly',
+        'is_recovery',
+        'created_at'
+    )
+    list_filter = (
+        'monitor_type',
+        'status',
+        'is_anomaly',
+        'is_recovery',
+        'created_at'
+    )
+    search_fields = (
+        'project__name',
+        'metric_key'
+    )
+    readonly_fields = (
+        'created_at',
     )
     ordering = ('-created_at',)
