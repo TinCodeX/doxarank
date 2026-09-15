@@ -171,6 +171,17 @@ class AgentEventType(str, Enum):
     SEO_REASONING_ESCALATED = "seo.reasoning.escalated"
     SEO_REASONING_CASE_COMPLETED = "seo.reasoning.case.completed"
 
+    # Continuous Agent Operations (Milestone 6.1)
+    SEO_OPERATION_CREATED = "seo.operation.created"
+    SEO_OPERATION_STARTED = "seo.operation.started"
+    SEO_OPERATION_PAUSED = "seo.operation.paused"
+    SEO_OPERATION_RESUMED = "seo.operation.resumed"
+    SEO_OPERATION_RUN_SCHEDULED = "seo.operation.run.scheduled"
+    SEO_OPERATION_RUN_STARTED = "seo.operation.run.started"
+    SEO_OPERATION_RUN_COMPLETED = "seo.operation.run.completed"
+    SEO_OPERATION_RUN_FAILED = "seo.operation.run.failed"
+    SEO_OPERATION_COMPLETED = "seo.operation.completed"
+
 
 
 

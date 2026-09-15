@@ -14,6 +14,7 @@ import { SearchConsolePanel } from '../components/SearchConsolePanel';
 import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalyticsPanel';
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AgentOrchestratorPanel } from '../components/AgentOrchestratorPanel';
+import { ContinuousOperationsPanel } from '../components/ContinuousOperationsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -731,6 +732,13 @@ export const Dashboard: React.FC = () => {
                 actElem.scrollIntoView({ behavior: 'smooth' });
               }
             }}
+          />
+        )}
+
+        {/* SECTION 6.6: CONTINUOUS AGENT OPERATIONS (Milestone 6.1) */}
+        {selectedProject && (
+          <ContinuousOperationsPanel
+            project={selectedProject}
           />
         )}
 

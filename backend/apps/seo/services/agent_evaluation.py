@@ -19,7 +19,7 @@ from django.utils import timezone
 from apps.seo.models import (
     AgentRun, AgentRunStatus, AgentStep, AgentToolCall,
     SEOAction, SEOActionPlan, SEOOutcome, ActionStatus, ActionPlanStatus,
-    VerificationStatus
+    VerificationStatus, ContinuousOperation, ContinuousOperationStatus
 )
 from apps.seo.services.agents.base_agent import SharedContext
 
@@ -643,3 +643,86 @@ class SEOAgentEvaluationService:
     def evaluate_collaboration(self, context: SharedContext, **kwargs) -> Dict[str, Any]:
         """Evaluates multi-agent collaboration, memory, task planning, and reasoning."""
         return self.evaluate_shared_context(context)
+
+    @classmethod
+    def evaluate_continuous_operations(
+        cls,
+        project: Any,
+        operation: Optional[ContinuousOperation] = None
+    ) -> Dict[str, Any]:
+        """
+        Milestone 6.1: Evaluate runtime-derived continuous operational metrics.
+        Guarantees metrics are dynamically derived from actual runtime state/events,
+        without hardcoded values.
+        """
+        from apps.projects.models import Project
+        project_obj = project if isinstance(project, Project) else Project.objects.get(id=project)
+
+        ops_qs = ContinuousOperation.objects.filter(project=project_obj)
+        if operation:
+            ops_qs = ops_qs.filter(id=operation.id)
+
+        operations = list(ops_qs)
+        active_operations = sum(1 for op in operations if op.status in [ContinuousOperationStatus.ACTIVE, ContinuousOperationStatus.RUNNING])
+        paused_operations = sum(1 for op in operations if op.status == ContinuousOperationStatus.PAUSED)
+        failed_operations = sum(1 for op in operations if op.status == ContinuousOperationStatus.FAILED)
+        consecutive_failures = sum(op.consecutive_failures for op in operations)
+
+        runs_qs = AgentRun.objects.filter(project=project_obj, continuous_operation__isnull=False)
+        if operation:
+            runs_qs = runs_qs.filter(continuous_operation=operation)
+
+        runs = list(runs_qs)
+        scheduled_runs = len(runs)
+        completed_runs = sum(1 for r in runs if r.status == AgentRunStatus.COMPLETED)
+        failed_runs = sum(1 for r in runs if r.status in [AgentRunStatus.FAILED, AgentRunStatus.CANCELLED])
+        human_approval_waits = sum(1 for r in runs if r.status == AgentRunStatus.WAITING_FOR_APPROVAL)
+
+        # Success rate
+        total_finished = completed_runs + failed_runs
+        operation_success_rate = round((completed_runs / total_finished) * 100, 1) if total_finished > 0 else 100.0
+
+        # Average run duration (seconds)
+        durations = []
+        for r in runs:
+            if r.completed_at and r.created_at:
+                dur = (r.completed_at - r.created_at).total_seconds()
+                if dur >= 0:
+                    durations.append(dur)
+        avg_duration = round(sum(durations) / max(1, len(durations)), 1) if durations else 0.0
+
+        # Duplicate run prevention count & approval wait count from operation metrics
+        duplicate_preventions = sum(op.metrics.get("duplicate_prevention_count", 0) for op in operations if op.metrics)
+        approval_waits_from_metrics = sum(op.metrics.get("approval_wait_count", 0) for op in operations if op.metrics)
+        total_approval_waits = max(human_approval_waits, approval_waits_from_metrics)
+
+        # Scheduling delay (seconds between scheduled_for and actual created_at)
+        delays = []
+        for r in runs:
+            if r.context_snapshot and r.context_snapshot.get("scheduled_for"):
+                try:
+                    from django.utils.dateparse import parse_datetime
+                    scheduled_time = parse_datetime(r.context_snapshot["scheduled_for"])
+                    if scheduled_time and r.created_at:
+                        diff = max(0.0, (r.created_at - scheduled_time).total_seconds())
+                        delays.append(diff)
+                except Exception:
+                    pass
+        avg_delay = round(sum(delays) / max(1, len(delays)), 1) if delays else 0.0
+
+        return {
+            "project_id": project_obj.id,
+            "operation_id": operation.id if operation else None,
+            "active_operations": active_operations,
+            "paused_operations": paused_operations,
+            "failed_operations": failed_operations,
+            "scheduled_runs": scheduled_runs,
+            "completed_runs": completed_runs,
+            "failed_runs": failed_runs,
+            "operation_success_rate": operation_success_rate,
+            "average_run_duration": avg_duration,
+            "scheduling_delay": avg_delay,
+            "duplicate_run_prevention_count": duplicate_preventions,
+            "consecutive_failures": consecutive_failures,
+            "human_approval_waits": total_approval_waits,
+        }

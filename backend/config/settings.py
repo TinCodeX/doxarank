@@ -206,6 +206,14 @@ else:
     CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
     CELERY_TASK_EAGER_PROPAGATES = config('CELERY_TASK_EAGER_PROPAGATES', default=False, cast=bool)
 
+# Celery Beat Schedule for Periodic Autonomous Operations (Milestone 6.1)
+CELERY_BEAT_SCHEDULE = {
+    'evaluate-due-continuous-operations': {
+        'task': 'apps.seo.tasks.evaluate_due_continuous_operations_task',
+        'schedule': 60.0,  # Evaluate active continuous operations every minute
+    },
+}
+
 # ASGI & Django Channels Configuration
 ASGI_APPLICATION = 'config.asgi.application'
 

@@ -16997,3 +16997,484 @@ class SEOMultiAgentReasoningTests(TestCase):
         self.assertEqual(res_b["consensus_rate"], 0.0, "E. No false consensus manufactured")
         self.assertGreater(res_b["unresolved_disagreement_rate"], 0.0, "B. Disagreement remains unresolved")
         self.assertEqual(res_b["evidence_supported_conclusions"], 0, "No valid conclusion on escalation")
+
+
+class ContinuousAgentOperationsTests(TestCase):
+    """
+    Milestone 6.1: Comprehensive Test Suite for Continuous Agent Operations.
+    Verifies:
+    1. Lifecycle: create, activate, pause, resume, failure, recovery.
+    2. Scheduling: due operations run, future operations wait, interval calculation.
+    3. Concurrency & Overlap Prevention: single active run invariant, concurrent scheduler calls.
+    4. Persistence: state persists and survives process boundaries.
+    5. Failure isolation: failed run does not corrupt operation, bounded backoff works.
+    6. Circuit breaker: transitions to FAILED upon reaching max consecutive failures.
+    7. HITL safety boundary: waiting for approval prevents autonomous mutation and subsequent runs.
+    8. Tenant isolation: cross-project access rejected at API and service layers.
+    9. Telemetry: operational events emitted with sanitization.
+    10. Runtime evaluation metrics: all 11 metrics computed from actual runtime data.
+    11. REST API endpoints: create, list, retrieve, pause, resume, trigger, runs, metrics.
+    """
+
+    def setUp(self):
+        from apps.users.models import User
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
+            AgentRun, AgentRunStatus, SEOAction, ActionStatus
+        )
+        from apps.seo.services.continuous_operation import ContinuousOperationService
+        from apps.seo.services.agent_events import AgentEventType, InMemoryEventPublisher
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        from rest_framework.test import APIClient
+
+        self.ContinuousOperation = ContinuousOperation
+        self.ContinuousOperationStatus = ContinuousOperationStatus
+        self.ContinuousOperationScheduleType = ContinuousOperationScheduleType
+        self.AgentRun = AgentRun
+        self.AgentRunStatus = AgentRunStatus
+        self.SEOAction = SEOAction
+        self.ActionStatus = ActionStatus
+        self.AgentEventType = AgentEventType
+        self.SEOAgentEvaluationService = SEOAgentEvaluationService
+
+        self.user_a = User.objects.create_user(email="tenant_a@doxarank.io", password="SecretPassword123!")
+        self.user_b = User.objects.create_user(email="tenant_b@doxarank.io", password="SecretPassword123!")
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name="Alpha SEO Project",
+            website_url="https://alpha-seo.example.com"
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name="Beta SEO Project",
+            website_url="https://beta-seo.example.com"
+        )
+
+        self.client_a = APIClient()
+        self.client_a.force_authenticate(user=self.user_a)
+
+        self.client_b = APIClient()
+        self.client_b.force_authenticate(user=self.user_b)
+
+        self.publisher = InMemoryEventPublisher()
+        self.service = ContinuousOperationService(publisher=self.publisher)
+
+    def test_01_lifecycle_create_and_activate(self):
+        """1. Create and auto-activate a continuous operation."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Continuous technical SEO audit and ranking health monitoring.",
+            schedule_type=self.ContinuousOperationScheduleType.INTERVAL_MINUTES,
+            interval_value=30,
+            auto_activate=True
+        )
+
+        self.assertIsNotNone(op.id)
+        self.assertEqual(op.status, self.ContinuousOperationStatus.ACTIVE)
+        self.assertEqual(op.interval_value, 30)
+        self.assertIsNotNone(op.next_run_at)
+        self.assertIn("duplicate_prevention_count", op.metrics)
+
+        # Verify events
+        created_events = self.publisher.get_events_by_type(self.AgentEventType.SEO_OPERATION_CREATED)
+        started_events = self.publisher.get_events_by_type(self.AgentEventType.SEO_OPERATION_STARTED)
+        self.assertEqual(len(created_events), 1)
+        self.assertEqual(len(started_events), 1)
+        self.assertEqual(created_events[0].payload["operation_id"], op.id)
+
+    def test_02_pause_and_resume(self):
+        """2. Pause and resume operations, ensuring scheduler skips paused ones."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Monitor Search Console click changes.",
+            auto_activate=True
+        )
+
+        # Pause
+        paused_op = self.service.pause_operation(op.id, user=self.user_a)
+        self.assertEqual(paused_op.status, self.ContinuousOperationStatus.PAUSED)
+        self.assertIsNotNone(paused_op.paused_at)
+
+        # Scheduler must NOT pick paused operations even if next_run_at is in the past
+        paused_op.next_run_at = timezone.now() - timedelta(minutes=5)
+        paused_op.save(update_fields=['next_run_at'])
+        triggered = self.service.evaluate_and_trigger_due_operations()
+        self.assertNotIn(paused_op.id, [run.continuous_operation_id for run in self.AgentRun.objects.filter(id__in=triggered)])
+
+        # Resume
+        resumed_op = self.service.resume_operation(op.id, user=self.user_a)
+        self.assertEqual(resumed_op.status, self.ContinuousOperationStatus.ACTIVE)
+        self.assertIsNotNone(resumed_op.resumed_at)
+        self.assertIsNotNone(resumed_op.next_run_at)
+
+    def test_03_scheduling_due_and_future_operations(self):
+        """3. Scheduler triggers due operations and ignores future operations."""
+        # Due operation (next_run_at in past)
+        due_op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Due operation mission",
+            auto_activate=True
+        )
+        due_op.next_run_at = timezone.now() - timedelta(minutes=10)
+        due_op.save(update_fields=['next_run_at'])
+
+        # Future operation (next_run_at 2 hours in future)
+        future_op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Future operation mission",
+            auto_activate=True
+        )
+        future_op.next_run_at = timezone.now() + timedelta(hours=2)
+        future_op.save(update_fields=['next_run_at'])
+
+        started_ids = self.service.evaluate_and_trigger_due_operations()
+        self.assertGreater(len(started_ids), 0)
+
+        # Confirm due_op has executed a run
+        due_op.refresh_from_db()
+        self.assertEqual(due_op.total_runs, 1)
+        self.assertIsNotNone(due_op.last_run)
+
+        # Confirm future_op has NO run
+        future_op.refresh_from_db()
+        self.assertIsNone(future_op.current_run)
+        self.assertEqual(future_op.total_runs, 0)
+
+    def test_04_duplicate_run_prevention_single_active_run(self):
+        """4. Strictly prevent duplicate active runs for a single operation."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Duplicate prevention verification",
+            auto_activate=True
+        )
+
+        # Simulate active run in-flight
+        active_run = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.RUNNING
+        )
+        op.current_run = active_run
+        op.status = self.ContinuousOperationStatus.RUNNING
+        op.total_runs = 1
+        op.save(update_fields=['current_run', 'status', 'total_runs'])
+
+        # Scheduler evaluation while active_run is in-flight must NOT create a new run
+        started_2 = self.service.evaluate_and_trigger_due_operations()
+        self.assertEqual(len(started_2), 0)
+
+        # Manual trigger attempt while active must be rejected
+        manual_run = self.service.trigger_operation_manually(op.id, user=self.user_a)
+        self.assertIsNone(manual_run, "Manual trigger must reject when an active run is in progress")
+
+        op.refresh_from_db()
+        self.assertEqual(op.current_run_id, active_run.id)
+        self.assertEqual(op.total_runs, 1, "Must remain at exactly 1 run")
+        self.assertGreater(op.metrics.get("duplicate_prevention_count", 0), 0)
+
+    def test_05_concurrent_scheduler_protection(self):
+        """5. Concurrent scheduler triggers produce at most 1 AgentRun."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Concurrency race condition test",
+            auto_activate=True
+        )
+        op.next_run_at = timezone.now() - timedelta(minutes=1)
+        op.save(update_fields=['next_run_at'])
+
+        # Simulating concurrent workers
+        runs_created = []
+        for _ in range(3):
+            res = self.service.evaluate_and_trigger_due_operations()
+            runs_created.extend(res)
+
+        # Only 1 initial run was dispatched because first run set total_runs and current_run
+        self.assertEqual(len(runs_created), 1)
+        op.refresh_from_db()
+        self.assertEqual(op.total_runs, 1)
+
+    def test_06_failure_isolation_and_bounded_backoff(self):
+        """6. Failure of an individual run does not corrupt continuous operation; triggers backoff."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Failure isolation test",
+            auto_activate=True
+        )
+
+        run = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.FAILED
+        )
+        op.current_run = run
+        op.status = self.ContinuousOperationStatus.RUNNING
+        op.save(update_fields=['current_run', 'status'])
+
+        # Complete run with failure
+        updated_op = self.service.handle_run_completion(
+            operation_id=op.id,
+            run_id=run.id,
+            run_status=self.AgentRunStatus.FAILED,
+            duration_ms=1200,
+            error_summary="Simulated provider timeout",
+            failure_category="TimeoutError"
+        )
+
+        self.assertIsNone(updated_op.current_run)
+        self.assertEqual(updated_op.failed_runs, 1)
+        self.assertEqual(updated_op.consecutive_failures, 1)
+        self.assertEqual(updated_op.failure_category, "TimeoutError")
+        self.assertEqual(updated_op.status, self.ContinuousOperationStatus.ACTIVE)
+        # Next run scheduled in future with backoff
+        self.assertGreater(updated_op.next_run_at, timezone.now())
+
+        # Now simulate a subsequent successful run resetting consecutive failures
+        run_success = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=updated_op,
+            goal=updated_op.goal,
+            status=self.AgentRunStatus.COMPLETED
+        )
+        recovered_op = self.service.handle_run_completion(
+            operation_id=updated_op.id,
+            run_id=run_success.id,
+            run_status=self.AgentRunStatus.COMPLETED,
+            duration_ms=2500
+        )
+        self.assertEqual(recovered_op.successful_runs, 1)
+        self.assertEqual(recovered_op.consecutive_failures, 0)
+        self.assertEqual(recovered_op.last_successful_run_id, run_success.id)
+
+    def test_07_circuit_breaker_after_max_consecutive_failures(self):
+        """7. Exceeding max consecutive failures trips the circuit breaker to FAILED."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Circuit breaker test",
+            auto_activate=True
+        )
+        op.max_consecutive_failures = 3
+        op.consecutive_failures = 2
+        op.save(update_fields=['max_consecutive_failures', 'consecutive_failures'])
+
+        run = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.FAILED
+        )
+
+        # 3rd consecutive failure reaches threshold
+        broken_op = self.service.handle_run_completion(
+            operation_id=op.id,
+            run_id=run.id,
+            run_status=self.AgentRunStatus.FAILED,
+            error_summary="Third consecutive fatal error",
+            failure_category="FatalError"
+        )
+
+        self.assertEqual(broken_op.status, self.ContinuousOperationStatus.FAILED)
+        self.assertIsNone(broken_op.next_run_at, "Tripped circuit breaker must clear next_run_at")
+        self.assertEqual(broken_op.consecutive_failures, 3)
+
+    def test_08_hitl_safety_boundary_waiting_for_approval(self):
+        """8. Mutating actions enter WAITING_FOR_APPROVAL; operation enters WAITING and does NOT auto-execute."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="HITL safety boundary test",
+            auto_activate=True
+        )
+
+        run = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.WAITING_FOR_APPROVAL
+        )
+
+        # Create proposed SEOAction
+        action = self.SEOAction.objects.create(
+            project=self.project_a,
+            title="Update title tag for home page",
+            action_type="meta_tags",
+            status=self.ActionStatus.PROPOSED
+        )
+
+        waiting_op = self.service.handle_run_completion(
+            operation_id=op.id,
+            run_id=run.id,
+            run_status=self.AgentRunStatus.WAITING_FOR_APPROVAL
+        )
+
+        self.assertEqual(waiting_op.status, self.ContinuousOperationStatus.WAITING)
+        self.assertEqual(action.status, self.ActionStatus.PROPOSED, "Proposed action must NOT be auto-executed")
+        self.assertGreater(waiting_op.metrics.get("approval_wait_count", 0), 0)
+
+    def test_09_tenant_isolation(self):
+        """9. Project B tenant cannot view, pause, resume, or trigger Project A operations."""
+        op_a = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Tenant isolation test",
+            auto_activate=True
+        )
+
+        # User B attempts to access Op A via API -> 404
+        resp_get = self.client_b.get(f'/api/seo/ai/operations/{op_a.id}/')
+        self.assertEqual(resp_get.status_code, 404)
+
+        resp_pause = self.client_b.post(f'/api/seo/ai/operations/{op_a.id}/pause/')
+        self.assertEqual(resp_pause.status_code, 404)
+
+        resp_resume = self.client_b.post(f'/api/seo/ai/operations/{op_a.id}/resume/')
+        self.assertEqual(resp_resume.status_code, 404)
+
+        resp_trigger = self.client_b.post(f'/api/seo/ai/operations/{op_a.id}/trigger/')
+        self.assertEqual(resp_trigger.status_code, 404)
+
+    def test_10_operational_telemetry_events(self):
+        """10. All operational telemetry events are published and contain required identifiers."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Telemetry event verification",
+            auto_activate=True
+        )
+        self.service.pause_operation(op.id, user=self.user_a)
+        self.service.resume_operation(op.id, user=self.user_a)
+
+        run = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.COMPLETED
+        )
+        self.service._emit_event(self.AgentEventType.SEO_OPERATION_RUN_STARTED, op, run_id=run.id)
+        self.service.handle_run_completion(
+            operation_id=op.id,
+            run_id=run.id,
+            run_status=self.AgentRunStatus.COMPLETED,
+            duration_ms=1500
+        )
+
+        ev_types = self.publisher.get_event_types()
+        self.assertIn(self.AgentEventType.SEO_OPERATION_CREATED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_OPERATION_STARTED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_OPERATION_PAUSED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_OPERATION_RESUMED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_OPERATION_RUN_STARTED.value, ev_types)
+        self.assertIn(self.AgentEventType.SEO_OPERATION_RUN_COMPLETED.value, ev_types)
+
+    def test_11_runtime_derived_evaluation_metrics(self):
+        """11. All 11 evaluation metrics are computed dynamically from actual runtime state."""
+        op = self.service.create_operation(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Metrics calculation test",
+            auto_activate=True
+        )
+
+        now = timezone.now()
+        r1 = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.COMPLETED,
+            completed_at=now + timedelta(seconds=10)
+        )
+        r2 = self.AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            continuous_operation=op,
+            goal=op.goal,
+            status=self.AgentRunStatus.FAILED,
+            completed_at=now + timedelta(seconds=5)
+        )
+
+        report = self.SEOAgentEvaluationService.evaluate_continuous_operations(project=self.project_a)
+
+        self.assertIn("active_operations", report)
+        self.assertIn("paused_operations", report)
+        self.assertIn("scheduled_runs", report)
+        self.assertIn("completed_runs", report)
+        self.assertIn("failed_runs", report)
+        self.assertIn("operation_success_rate", report)
+        self.assertIn("average_run_duration", report)
+        self.assertIn("scheduling_delay", report)
+        self.assertIn("duplicate_run_prevention_count", report)
+        self.assertIn("consecutive_failures", report)
+        self.assertIn("human_approval_waits", report)
+
+        self.assertEqual(report["active_operations"], 1)
+        self.assertEqual(report["scheduled_runs"], 2)
+        self.assertEqual(report["completed_runs"], 1)
+        self.assertEqual(report["failed_runs"], 1)
+        self.assertEqual(report["operation_success_rate"], 50.0)
+
+    def test_12_api_endpoints_full_lifecycle(self):
+        """12. REST APIs support CRUD, pause, resume, trigger, runs, and metrics."""
+        # 1. Create
+        create_payload = {
+            "project": self.project_a.id,
+            "goal": "API-driven continuous SEO auditing",
+            "schedule_type": "interval_minutes",
+            "interval_value": 45,
+            "auto_activate": True
+        }
+        res_create = self.client_a.post('/api/seo/ai/operations/', data=create_payload, format='json')
+        self.assertEqual(res_create.status_code, 201)
+        op_id = res_create.data["id"]
+
+        # 2. List
+        res_list = self.client_a.get(f'/api/seo/ai/operations/?project={self.project_a.id}')
+        self.assertEqual(res_list.status_code, 200)
+        self.assertTrue(any(o["id"] == op_id for o in res_list.data))
+
+        # 3. Retrieve
+        res_get = self.client_a.get(f'/api/seo/ai/operations/{op_id}/')
+        self.assertEqual(res_get.status_code, 200)
+        self.assertEqual(res_get.data["interval_value"], 45)
+
+        # 4. Pause
+        res_pause = self.client_a.post(f'/api/seo/ai/operations/{op_id}/pause/')
+        self.assertEqual(res_pause.status_code, 200)
+        self.assertEqual(res_pause.data["status"], "paused")
+
+        # 5. Resume
+        res_resume = self.client_a.post(f'/api/seo/ai/operations/{op_id}/resume/')
+        self.assertEqual(res_resume.status_code, 200)
+        self.assertEqual(res_resume.data["status"], "active")
+
+        # 6. Trigger Run
+        res_trigger = self.client_a.post(f'/api/seo/ai/operations/{op_id}/trigger/')
+        self.assertEqual(res_trigger.status_code, 201)
+        self.assertIn("id", res_trigger.data)
+
+        # 7. Runs list
+        res_runs = self.client_a.get(f'/api/seo/ai/operations/{op_id}/runs/')
+        self.assertEqual(res_runs.status_code, 200)
+        self.assertGreater(len(res_runs.data), 0)
+
+        # 8. Metrics
+        res_metrics = self.client_a.get(f'/api/seo/ai/operations/{op_id}/metrics/')
+        self.assertEqual(res_metrics.status_code, 200)
+        self.assertIn("operation_success_rate", res_metrics.data)

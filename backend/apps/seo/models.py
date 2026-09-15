@@ -1705,6 +1705,178 @@ class SEOAction(models.Model):
         return f"[{self.get_action_type_display()}] {self.title} ({self.get_status_display()})"
 
 
+class ContinuousOperationStatus(models.TextChoices):
+    INACTIVE = 'inactive', 'Inactive'
+    ACTIVE = 'active', 'Active'
+    RUNNING = 'running', 'Running'
+    PAUSED = 'paused', 'Paused'
+    WAITING = 'waiting', 'Waiting'
+    FAILED = 'failed', 'Failed'
+    COMPLETED = 'completed', 'Completed'
+
+
+class ContinuousOperationScheduleType(models.TextChoices):
+    INTERVAL_MINUTES = 'interval_minutes', 'Every N Minutes'
+    INTERVAL_HOURS = 'interval_hours', 'Every N Hours'
+    DAILY = 'daily', 'Daily'
+
+
+class ContinuousOperation(models.Model):
+    """
+    ContinuousOperation model representing a persistent, scheduled agent operational lifecycle
+    for a specific Project.
+    Milestone 6.1: Continuous Agent Operations.
+    Relationship: Project 1 ─────── * ContinuousOperation
+                  ContinuousOperation 1 ─────── * AgentRun
+    Ownership follows: operation.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='continuous_operations',
+        help_text='The project this continuous agent operation belongs to.'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='continuous_operations',
+        help_text='The user who created/initiated this continuous operation.'
+    )
+    goal = models.TextField(
+        help_text='High-level operational SEO objective or ongoing monitoring goal.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ContinuousOperationStatus.choices,
+        default=ContinuousOperationStatus.ACTIVE,
+        db_index=True,
+        help_text='Current operational state of the continuous operation.'
+    )
+    schedule_type = models.CharField(
+        max_length=30,
+        choices=ContinuousOperationScheduleType.choices,
+        default=ContinuousOperationScheduleType.INTERVAL_MINUTES,
+        help_text='Recurrence schedule type: interval_minutes, interval_hours, or daily.'
+    )
+    interval_value = models.PositiveIntegerField(
+        default=30,
+        help_text='Frequency interval unit (e.g. 30 for 30 min, 2 for 2 hours, 1 for daily).'
+    )
+    schedule_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured execution parameters (workflow, target_url, target_query, max_steps, etc.).'
+    )
+    current_run = models.ForeignKey(
+        'AgentRun',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='active_continuous_operation',
+        help_text='The currently executing AgentRun, if any (enforces at most one active run).'
+    )
+    last_run = models.ForeignKey(
+        'AgentRun',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='last_continuous_operation',
+        help_text='The most recently completed or attempted AgentRun.'
+    )
+    last_successful_run = models.ForeignKey(
+        'AgentRun',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='successful_continuous_operations',
+        help_text='The most recently succeeded AgentRun.'
+    )
+    next_run_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Calculated timestamp when the next AgentRun should be triggered by the scheduler.'
+    )
+    last_run_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the most recent run was initiated.'
+    )
+    consecutive_failures = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of consecutive failed runs since last success (for circuit breaking / backoff).'
+    )
+    max_consecutive_failures = models.PositiveIntegerField(
+        default=5,
+        help_text='Maximum consecutive failures allowed before transitioning to terminal FAILED status.'
+    )
+    failed_run_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Identifier of the most recently failed AgentRun.'
+    )
+    failure_category = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text='Categorization of recent failure (e.g. execution_failure, timeout, circuit_breaker).'
+    )
+    failure_reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Sanitized summary of the failure reason from the failed run.'
+    )
+    total_runs = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of AgentRuns launched under this continuous operation.'
+    )
+    successful_runs = models.PositiveIntegerField(
+        default=0,
+        help_text='Total count of successfully completed AgentRuns.'
+    )
+    failed_runs = models.PositiveIntegerField(
+        default=0,
+        help_text='Total count of failed AgentRuns.'
+    )
+    metrics = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Persisted operational runtime statistics (duplicate_prevention_count, avg_duration, etc.).'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the continuous operation was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the continuous operation was last updated.'
+    )
+    paused_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the operation was paused.'
+    )
+    resumed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the operation was resumed.'
+    )
+
+    class Meta:
+        db_table = 'seo_continuous_operations'
+        verbose_name = 'Continuous operation'
+        verbose_name_plural = 'Continuous operations'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_cont_op_proj_stat_idx'),
+            models.Index(fields=['status', 'next_run_at'], name='seo_cont_op_stat_next_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_cont_op_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"Operation #{self.id} [{self.project.name}]: {self.goal[:40]} ({self.get_status_display()})"
+
+
 class AgentRunStatus(models.TextChoices):
     PENDING = 'pending', 'Pending'
     RUNNING = 'running', 'Running'
@@ -1737,6 +1909,7 @@ class AgentRun(models.Model):
     for a specific Project with a defined high-level SEO goal.
     Relationship: Project 1 ─────── * AgentRun
                   User 1 ────────── * AgentRun
+                  ContinuousOperation 1 ──── * AgentRun
     Ownership follows: run.project -> project.owner
     """
     project = models.ForeignKey(
@@ -1750,6 +1923,14 @@ class AgentRun(models.Model):
         on_delete=models.CASCADE,
         related_name='agent_runs',
         help_text='The user who initiated this agent run.'
+    )
+    continuous_operation = models.ForeignKey(
+        ContinuousOperation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='runs',
+        help_text='The continuous operational lifecycle session this run was scheduled under, if any.'
     )
     goal = models.TextField(
         help_text='The high-level SEO objective or task for the agent.'
@@ -1807,6 +1988,7 @@ class AgentRun(models.Model):
             models.Index(fields=['project', 'status'], name='seo_agent_run_proj_stat_idx'),
             models.Index(fields=['user', 'status'], name='seo_agent_run_user_stat_idx'),
             models.Index(fields=['project', '-created_at'], name='seo_agent_run_proj_date_idx'),
+            models.Index(fields=['continuous_operation', '-created_at'], name='seo_agent_run_cont_date_idx'),
         ]
 
     def __str__(self):

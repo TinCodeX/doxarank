@@ -12,7 +12,8 @@ from .models import (
     SEOContentDraft, DraftStatus,
     SEOAction, ActionType, ActionStatus, ActionPriority,
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
-    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
+    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
+    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType
 )
 from apps.projects.models import Project
 
@@ -1389,6 +1390,113 @@ class AgentRunResumeSerializer(serializers.Serializer):
         required=False,
         help_text="Human approval decision: 'approved' or 'rejected'."
     )
+
+
+class ContinuousOperationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ContinuousOperation model representing persistent, scheduled operations.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    schedule_type_display = serializers.CharField(source='get_schedule_type_display', read_only=True)
+    current_run_status = serializers.CharField(source='current_run.status', read_only=True, default=None)
+
+    class Meta:
+        model = ContinuousOperation
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'user',
+            'goal',
+            'status',
+            'status_display',
+            'schedule_type',
+            'schedule_type_display',
+            'interval_value',
+            'schedule_config',
+            'current_run',
+            'current_run_status',
+            'last_run',
+            'last_successful_run',
+            'next_run_at',
+            'last_run_at',
+            'consecutive_failures',
+            'max_consecutive_failures',
+            'failed_run_id',
+            'failure_category',
+            'failure_reason',
+            'total_runs',
+            'successful_runs',
+            'failed_runs',
+            'metrics',
+            'created_at',
+            'updated_at',
+            'paused_at',
+            'resumed_at',
+        )
+        read_only_fields = (
+            'id',
+            'user',
+            'current_run',
+            'last_run',
+            'last_successful_run',
+            'next_run_at',
+            'last_run_at',
+            'consecutive_failures',
+            'failed_run_id',
+            'failure_category',
+            'failure_reason',
+            'total_runs',
+            'successful_runs',
+            'failed_runs',
+            'metrics',
+            'created_at',
+            'updated_at',
+            'paused_at',
+            'resumed_at',
+        )
+
+
+class ContinuousOperationCreateSerializer(serializers.Serializer):
+    """
+    Serializer for creating a ContinuousOperation session.
+    Validates tenant ownership and input hygiene.
+    """
+    project = serializers.PrimaryKeyRelatedField(
+        queryset=Project.objects.all(),
+        required=True,
+        help_text="The project this operation is associated with."
+    )
+    goal = serializers.CharField(
+        required=True,
+        help_text="The high-level SEO operational goal."
+    )
+    schedule_type = serializers.ChoiceField(
+        choices=ContinuousOperationScheduleType.choices,
+        default=ContinuousOperationScheduleType.INTERVAL_MINUTES,
+        required=False
+    )
+    interval_value = serializers.IntegerField(
+        min_value=1,
+        default=30,
+        required=False
+    )
+    schedule_config = serializers.JSONField(
+        default=dict,
+        required=False
+    )
+    auto_activate = serializers.BooleanField(
+        default=True,
+        required=False
+    )
+
+    def validate_project(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError("You do not have permission to manage operations for this project.")
+        return value
 
 
 class GoogleOAuthAuthorizationUrlResponseSerializer(serializers.Serializer):

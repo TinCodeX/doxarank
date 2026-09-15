@@ -16,7 +16,8 @@ from .models import (
     SEOContentDraft, DraftStatus,
     SEOAction, ActionType, ActionStatus, ActionPriority,
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
-    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus
+    AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
+    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -30,6 +31,7 @@ from .serializers import (
     SEOActionSerializer, SEOActionUpdateSerializer, SEOActionGenerateRequestSerializer, SEOActionRejectRequestSerializer,
     SEOActionPlanSerializer, SEOActionPlanCreateRequestSerializer, SEOActionPlanRejectRequestSerializer,
     AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
+    ContinuousOperationSerializer, ContinuousOperationCreateSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
@@ -1538,6 +1540,111 @@ class AgentRunViewSet(viewsets.ModelViewSet):
         from .services.agent_events import get_agent_run_events
         events_data = get_agent_run_events(run, after_sequence=after_seq)
         return Response(events_data, status=status.HTTP_200_OK)
+
+
+class ContinuousOperationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing ContinuousOperation lifecycles.
+    Endpoints:
+    - GET /api/seo/ai/operations/ (list operations for accessible projects, optional ?project=<id>)
+    - POST /api/seo/ai/operations/ (create a new continuous operation)
+    - GET /api/seo/ai/operations/{id}/ (retrieve operation details)
+    - POST /api/seo/ai/operations/{id}/pause/ (pause operation)
+    - POST /api/seo/ai/operations/{id}/resume/ (resume operation)
+    - POST /api/seo/ai/operations/{id}/trigger/ (manually trigger a scheduled run now)
+    - GET /api/seo/ai/operations/{id}/runs/ (list all AgentRun records for this operation)
+    - GET /api/seo/ai/operations/{id}/metrics/ (retrieve operation-level runtime metrics)
+    - GET /api/seo/ai/operations/metrics/?project=<id> (retrieve project-level aggregated continuous operation metrics)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ContinuousOperationSerializer
+
+    def get_queryset(self):
+        qs = ContinuousOperation.objects.filter(project__owner=self.request.user).select_related('project', 'user', 'current_run', 'last_run', 'last_successful_run')
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        create_serializer = ContinuousOperationCreateSerializer(data=request.data, context={'request': request})
+        create_serializer.is_valid(raise_exception=True)
+
+        data = create_serializer.validated_data
+        from apps.seo.services.continuous_operation import ContinuousOperationService
+        service = ContinuousOperationService()
+        operation = service.create_operation(
+            project=data['project'],
+            user=request.user,
+            goal=data['goal'],
+            schedule_type=data.get('schedule_type', ContinuousOperationScheduleType.INTERVAL_MINUTES),
+            interval_value=data.get('interval_value', 30),
+            schedule_config=data.get('schedule_config', {}),
+            auto_activate=data.get('auto_activate', True)
+        )
+
+        response_serializer = ContinuousOperationSerializer(operation, context={'request': request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='pause')
+    def pause(self, request, pk=None):
+        operation = self.get_object()
+        from apps.seo.services.continuous_operation import ContinuousOperationService
+        service = ContinuousOperationService()
+        updated_op = service.pause_operation(operation.id, user=request.user)
+        return Response(ContinuousOperationSerializer(updated_op).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='resume')
+    def resume(self, request, pk=None):
+        operation = self.get_object()
+        from apps.seo.services.continuous_operation import ContinuousOperationService
+        service = ContinuousOperationService()
+        updated_op = service.resume_operation(operation.id, user=request.user)
+        return Response(ContinuousOperationSerializer(updated_op).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='trigger')
+    def trigger(self, request, pk=None):
+        operation = self.get_object()
+        from apps.seo.services.continuous_operation import ContinuousOperationService
+        service = ContinuousOperationService()
+        run = service.trigger_operation_manually(operation.id, user=request.user)
+        if run is None:
+            return Response(
+                {"detail": "Operation already has an active run executing. Single active run invariant enforced."},
+                status=status.HTTP_409_CONFLICT
+            )
+        return Response(AgentRunSerializer(run).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'], url_path='runs')
+    def runs(self, request, pk=None):
+        operation = self.get_object()
+        runs = operation.runs.all().order_by('-created_at').prefetch_related('steps__tool_calls')
+        serializer = AgentRunSerializer(runs, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='metrics')
+    def operation_metrics(self, request, pk=None):
+        operation = self.get_object()
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        metrics = SEOAgentEvaluationService.evaluate_continuous_operations(
+            project=operation.project,
+            operation=operation
+        )
+        return Response(metrics, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='metrics')
+    def project_metrics(self, request):
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        metrics = SEOAgentEvaluationService.evaluate_continuous_operations(project=project)
+        return Response(metrics, status=status.HTTP_200_OK)
 
 
 class GoogleOAuthAuthorizationUrlView(APIView):

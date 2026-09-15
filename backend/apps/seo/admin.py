@@ -3,7 +3,7 @@ from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
-    SEOAction, AgentRun, AgentStep, AgentToolCall
+    SEOAction, AgentRun, AgentStep, AgentToolCall, ContinuousOperation
 )
 
 
@@ -436,3 +436,30 @@ class AgentToolCallAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
 
+@admin.register(ContinuousOperation)
+class ContinuousOperationAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'goal',
+        'status',
+        'schedule_type',
+        'interval_value',
+        'total_runs',
+        'successful_runs',
+        'failed_runs',
+        'next_run_at',
+        'created_at'
+    )
+    list_filter = (
+        'status',
+        'schedule_type',
+        'created_at'
+    )
+    search_fields = (
+        'goal',
+        'project__name',
+        'user__email'
+    )
+    readonly_fields = ('created_at', 'updated_at', 'paused_at', 'resumed_at')
+    ordering = ('-created_at',)
