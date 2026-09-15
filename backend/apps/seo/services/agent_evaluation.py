@@ -726,3 +726,67 @@ class SEOAgentEvaluationService:
             "consecutive_failures": consecutive_failures,
             "human_approval_waits": total_approval_waits,
         }
+
+    @classmethod
+    def evaluate_event_driven_operations(
+        cls,
+        project: Any,
+        event_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Milestone 6.2: Evaluate runtime-derived event-driven agent operational metrics.
+        Guarantees metrics are dynamically derived from actual persisted SEOEvent and AgentRun records.
+        """
+        from apps.projects.models import Project
+        from apps.seo.models import SEOEvent, SEOEventStatus, AgentRun, AgentRunStatus
+
+        project_obj = project if isinstance(project, Project) else Project.objects.get(id=project)
+
+        events_qs = SEOEvent.objects.filter(project=project_obj)
+        if event_type:
+            events_qs = events_qs.filter(event_type=event_type)
+
+        events = list(events_qs)
+        events_received = len(events)
+        events_accepted = sum(1 for e in events if e.status in [SEOEventStatus.ACCEPTED, SEOEventStatus.PROCESSED])
+        events_rejected = sum(1 for e in events if e.status == SEOEventStatus.REJECTED)
+        events_deduplicated = sum(1 for e in events if e.status == SEOEventStatus.DEDUPLICATED)
+        events_suppressed = sum(1 for e in events if e.status == SEOEventStatus.SUPPRESSED)
+        events_triggered = sum(1 for e in events if e.agent_run_id is not None)
+        event_trigger_failures = sum(1 for e in events if e.status == SEOEventStatus.FAILED)
+
+        # Rates
+        event_trigger_rate = round((events_triggered / max(1, events_accepted)) * 100, 1) if events_accepted > 0 else 0.0
+        event_to_run_rate = round((events_triggered / max(1, events_received)) * 100, 1) if events_received > 0 else 0.0
+
+        # Suppression breakdown
+        storm_suppressions = sum(1 for e in events if "storm" in (e.suppression_reason or "").lower())
+        cooldown_suppressions = sum(1 for e in events if "cooldown" in (e.suppression_reason or "").lower())
+
+        # Average event trigger delay (seconds between occurred_at and processed_at / agent_run.created_at)
+        delays = []
+        for e in events:
+            if e.processed_at and e.occurred_at:
+                diff = max(0.0, (e.processed_at - e.occurred_at).total_seconds())
+                delays.append(diff)
+            elif e.agent_run and e.occurred_at:
+                diff = max(0.0, (e.agent_run.created_at - e.occurred_at).total_seconds())
+                delays.append(diff)
+        avg_delay = round(sum(delays) / max(1, len(delays)), 2) if delays else 0.0
+
+        return {
+            "project_id": project_obj.id,
+            "event_type_filter": event_type,
+            "events_received": events_received,
+            "events_accepted": events_accepted,
+            "events_rejected": events_rejected,
+            "events_deduplicated": events_deduplicated,
+            "events_suppressed": events_suppressed,
+            "events_triggered": events_triggered,
+            "event_trigger_rate": event_trigger_rate,
+            "event_to_run_rate": event_to_run_rate,
+            "average_event_trigger_delay": avg_delay,
+            "event_trigger_failures": event_trigger_failures,
+            "event_storm_suppressions": storm_suppressions,
+            "cooldown_suppressions": cooldown_suppressions,
+        }

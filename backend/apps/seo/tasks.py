@@ -721,3 +721,133 @@ def execute_continuous_agent_run_task(
     )
 
     return run.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    name="apps.seo.tasks.execute_event_triggered_agent_run_task",
+)
+def execute_event_triggered_agent_run_task(self, run_id: int, event_id: int) -> Optional[int]:
+    """
+    Celery background worker task for executing event-triggered AgentRuns (Milestone 6.2).
+    Reuses existing SEOSupervisorAgent multi-agent stack, records steps, and enforces HITL boundary.
+    """
+    import time
+    from apps.seo.models import (
+        SEOEvent, SEOEventStatus,
+        AgentRun, AgentRunStatus, AgentStep, AgentStepStatus, AgentActionType,
+        SEOAction, ActionStatus, ContinuousOperation, ContinuousOperationStatus
+    )
+    from apps.seo.services.agents.seo_supervisor import SEOSupervisorAgent
+    from apps.seo.services.continuous_operation import ContinuousOperationService
+
+    start_time = time.time()
+
+    # 1. Row-lock run atomically
+    try:
+        with transaction.atomic():
+            try:
+                run = AgentRun.objects.select_for_update().select_related('project', 'user').get(id=run_id)
+            except AgentRun.DoesNotExist:
+                logger.error(f"[Event Run Task] AgentRun #{run_id} not found.")
+                return None
+
+            try:
+                event = SEOEvent.objects.select_for_update().get(id=event_id)
+            except SEOEvent.DoesNotExist:
+                logger.warning(f"[Event Run Task] SEOEvent #{event_id} not found.")
+                event = None
+
+            if run.status != AgentRunStatus.PENDING:
+                logger.warning(f"[Event Run Task] AgentRun #{run_id} status is '{run.status}'. Skipping.")
+                return run.id
+
+            run.status = AgentRunStatus.RUNNING
+            run.save(update_fields=['status', 'updated_at'])
+
+    except Exception as lock_exc:
+        logger.exception(f"[Event Run Task] Lock acquisition failed for Run #{run_id}: {lock_exc}")
+        if isinstance(lock_exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
+            raise self.retry(exc=lock_exc, countdown=2 ** self.request.retries)
+        return None
+
+    # 2. Execute via existing SEOSupervisorAgent multi-agent stack
+    error_summary = ""
+    failure_category = ""
+    is_waiting_approval = False
+
+    try:
+        supervisor = SEOSupervisorAgent(
+            project=run.project,
+            user=run.user
+        )
+        context = supervisor.orchestrate(
+            task=run.goal,
+            correlation_id=f"event-{event_id}-run-{run.id}" if event_id else f"run-{run.id}"
+        )
+
+        # Record tasks as AgentSteps
+        if hasattr(context, "task_plan") and context.task_plan:
+            plan_tasks = context.task_plan.tasks
+            run.plan = [t.to_dict() for t in plan_tasks.values()]
+            for step_num, (t_id, task_obj) in enumerate(plan_tasks.items(), start=1):
+                thought_text = f"Agent: {task_obj.responsible_agent}\nObjective: {task_obj.objective}"
+                if task_obj.result_summary:
+                    thought_text += f"\nResult: {str(task_obj.result_summary)[:200]}"
+                task_status_val = task_obj.status.value if hasattr(task_obj.status, 'value') else str(task_obj.status)
+                AgentStep.objects.get_or_create(
+                    run=run,
+                    step_number=step_num,
+                    defaults={
+                        "action_type": AgentActionType.PLAN if "plan" in t_id else AgentActionType.DECISION,
+                        "status": AgentStepStatus.COMPLETED if task_status_val in ["completed", "ready"] else AgentStepStatus.FAILED,
+                        "thought": thought_text
+                    }
+                )
+
+        # Check HITL boundary: Did any agent propose actions requiring human review?
+        proposed_actions = SEOAction.objects.filter(
+            project=run.project,
+            status=ActionStatus.PROPOSED
+        )
+        if getattr(context, "requires_human_approval", False) or proposed_actions.exists():
+            is_waiting_approval = True
+            run.status = AgentRunStatus.WAITING_FOR_APPROVAL
+            run.summary = "Execution paused: Proposed SEO action(s) require human review and approval."
+            run.total_steps = len(run.plan) if run.plan else 1
+            run.save(update_fields=['status', 'summary', 'plan', 'total_steps', 'updated_at'])
+        else:
+            run.status = AgentRunStatus.COMPLETED
+            run.completed_at = timezone.now()
+            run.total_steps = len(run.plan) if run.plan else 1
+            run.summary = getattr(context, "summary", "") or f"Successfully completed event-triggered workflow for: {run.goal[:100]}"
+            run.save(update_fields=['status', 'completed_at', 'summary', 'plan', 'total_steps', 'updated_at'])
+
+    except Exception as exc:
+        logger.exception(f"[Event Run Task] Multi-agent execution error for Run #{run.id}: {exc}")
+        error_summary = str(exc).replace("sk-", "sk-***")[:500]
+        failure_category = exc.__class__.__name__
+        run.status = AgentRunStatus.FAILED
+        run.completed_at = timezone.now()
+        run.summary = f"Execution failed: {failure_category} - {error_summary}"
+        run.save(update_fields=['status', 'completed_at', 'summary', 'updated_at'])
+
+    # 3. If connected to a ContinuousOperation, notify completion hook
+    if run.continuous_operation_id:
+        duration_ms = int((time.time() - start_time) * 1000)
+        cont_service = ContinuousOperationService()
+        cont_service.handle_run_completion(
+            operation_id=run.continuous_operation_id,
+            run_id=run.id,
+            run_status=run.status,
+            duration_ms=duration_ms,
+            error_summary=error_summary,
+            failure_category=failure_category
+        )
+
+    return run.id

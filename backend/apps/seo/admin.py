@@ -3,7 +3,8 @@ from .models import (
     Keyword, KeywordRanking, SiteAudit, AuditIssue,
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
-    SEOAction, AgentRun, AgentStep, AgentToolCall, ContinuousOperation
+    SEOAction, AgentRun, AgentStep, AgentToolCall, ContinuousOperation,
+    SEOEvent
 )
 
 
@@ -462,4 +463,39 @@ class ContinuousOperationAdmin(admin.ModelAdmin):
         'user__email'
     )
     readonly_fields = ('created_at', 'updated_at', 'paused_at', 'resumed_at')
+    ordering = ('-created_at',)
+
+
+@admin.register(SEOEvent)
+class SEOEventAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'event_type',
+        'source',
+        'severity',
+        'status',
+        'agent_run',
+        'occurred_at',
+        'created_at'
+    )
+    list_filter = (
+        'event_type',
+        'severity',
+        'status',
+        'created_at'
+    )
+    search_fields = (
+        'event_type',
+        'source',
+        'correlation_id',
+        'idempotency_key',
+        'project__name'
+    )
+    readonly_fields = (
+        'received_at',
+        'processed_at',
+        'created_at',
+        'updated_at'
+    )
     ordering = ('-created_at',)

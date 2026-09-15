@@ -15,6 +15,7 @@ import { SearchConsoleAnalyticsPanel } from '../components/SearchConsoleAnalytic
 import { SEOInsightsPanel } from '../components/SEOInsightsPanel';
 import { AgentOrchestratorPanel } from '../components/AgentOrchestratorPanel';
 import { ContinuousOperationsPanel } from '../components/ContinuousOperationsPanel';
+import { EventActivityPanel } from '../components/EventActivityPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -738,6 +739,13 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 6.6: CONTINUOUS AGENT OPERATIONS (Milestone 6.1) */}
         {selectedProject && (
           <ContinuousOperationsPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 6.7: EVENT-DRIVEN AGENT OPERATIONS (Milestone 6.2) */}
+        {selectedProject && (
+          <EventActivityPanel
             project={selectedProject}
           />
         )}

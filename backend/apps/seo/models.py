@@ -2123,6 +2123,143 @@ class AgentToolCall(models.Model):
         return f"{self.tool_name} on Step #{self.step_id} ({status_str}, {self.duration_ms}ms)"
 
 
+class SEOEventType(models.TextChoices):
+    RANKING_CHANGE = 'ranking_change', 'Ranking Change'
+    PAGE_STATUS_CHANGE = 'page_status_change', 'Page Status Change'
+    SEO_AUDIT_CHANGE = 'seo_audit_change', 'SEO Audit Change'
+    GSC_CHANGE = 'gsc_change', 'Google Search Console Performance Change'
+    CRAWL_ISSUE = 'crawl_issue', 'Crawl Issue Detected'
+    KEYWORD_VISIBILITY_CHANGE = 'keyword_visibility_change', 'Keyword Visibility Change'
+    CONTENT_CHANGE = 'content_change', 'Content Change Detected'
+
+
+class SEOEventSeverity(models.TextChoices):
+    LOW = 'low', 'Low'
+    MEDIUM = 'medium', 'Medium'
+    HIGH = 'high', 'High'
+    CRITICAL = 'critical', 'Critical'
+
+
+class SEOEventStatus(models.TextChoices):
+    RECEIVED = 'received', 'Received'
+    ACCEPTED = 'accepted', 'Accepted'
+    PROCESSED = 'processed', 'Processed'
+    SUPPRESSED = 'suppressed', 'Suppressed'
+    DEDUPLICATED = 'deduplicated', 'Deduplicated'
+    REJECTED = 'rejected', 'Rejected'
+    FAILED = 'failed', 'Failed'
+
+
+class SEOEvent(models.Model):
+    """
+    SEOEvent model representing a persistent, meaningful SEO event that can trigger
+    specialized agent workflows (Milestone 6.2: Event-Driven Agents).
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='seo_events',
+        help_text='The project this SEO event belongs to.'
+    )
+    event_type = models.CharField(
+        max_length=64,
+        choices=SEOEventType.choices,
+        db_index=True,
+        help_text='Controlled classification of the SEO event.'
+    )
+    source = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Originating system or component that generated this event.'
+    )
+    severity = models.CharField(
+        max_length=32,
+        choices=SEOEventSeverity.choices,
+        default=SEOEventSeverity.MEDIUM,
+        db_index=True,
+        help_text='Severity level determining priority and trigger eligibility.'
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=SEOEventStatus.choices,
+        default=SEOEventStatus.RECEIVED,
+        db_index=True,
+        help_text='Current lifecycle state of the event.'
+    )
+    payload = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured JSON payload containing event metrics and context.'
+    )
+    correlation_id = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Unique identifier linking this event across workflows and runs.'
+    )
+    idempotency_key = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text='Deterministic deduplication key to prevent duplicate runs.'
+    )
+    occurred_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when the underlying event actually occurred.'
+    )
+    received_at = models.DateTimeField(
+        default=timezone.now,
+        help_text='Timestamp when the event was ingested by DoxaRank.'
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when event trigger processing completed.'
+    )
+    suppression_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Explanation if event was suppressed by cooldown or storm policy.'
+    )
+    agent_run = models.ForeignKey(
+        AgentRun,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='triggering_events',
+        help_text='The AgentRun triggered by this event, if any.'
+    )
+    continuous_operation = models.ForeignKey(
+        ContinuousOperation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='triggered_events',
+        help_text='Optional continuous operation session linked to this event.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this event record was persisted.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when this event record was last updated.'
+    )
+
+    class Meta:
+        db_table = 'seo_events'
+        verbose_name = 'SEO event'
+        verbose_name_plural = 'SEO events'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'event_type', 'created_at'], name='seo_ev_proj_type_idx'),
+            models.Index(fields=['project', 'idempotency_key'], name='seo_ev_proj_idemp_idx'),
+            models.Index(fields=['status', 'created_at'], name='seo_ev_status_idx'),
+            models.Index(fields=['occurred_at'], name='seo_ev_occurred_idx'),
+        ]
+
+    def __str__(self):
+        return f"SEOEvent #{self.id} [{self.event_type}] ({self.status}, {self.severity}) for Project #{self.project_id}"
 
 
 

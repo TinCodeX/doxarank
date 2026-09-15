@@ -182,6 +182,17 @@ class AgentEventType(str, Enum):
     SEO_OPERATION_RUN_FAILED = "seo.operation.run.failed"
     SEO_OPERATION_COMPLETED = "seo.operation.completed"
 
+    # Event-Driven Agents (Milestone 6.2)
+    SEO_EVENT_RECEIVED = "seo.event.received"
+    SEO_EVENT_ACCEPTED = "seo.event.accepted"
+    SEO_EVENT_REJECTED = "seo.event.rejected"
+    SEO_EVENT_DEDUPLICATED = "seo.event.deduplicated"
+    SEO_EVENT_SUPPRESSED = "seo.event.suppressed"
+    SEO_EVENT_TRIGGERED = "seo.event.triggered"
+    SEO_EVENT_COOLDOWN = "seo.event.cooldown"
+    SEO_EVENT_RUN_CREATED = "seo.event.run_created"
+    SEO_EVENT_PROCESSING_FAILED = "seo.event.processing_failed"
+
 
 
 

@@ -17,7 +17,8 @@ from .models import (
     SEOAction, ActionType, ActionStatus, ActionPriority,
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
-    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType
+    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
+    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -32,6 +33,7 @@ from .serializers import (
     SEOActionPlanSerializer, SEOActionPlanCreateRequestSerializer, SEOActionPlanRejectRequestSerializer,
     AgentRunSerializer, AgentRunCreateSerializer, AgentRunResumeSerializer,
     ContinuousOperationSerializer, ContinuousOperationCreateSerializer,
+    SEOEventSerializer, SEOEventIngestSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
@@ -1645,6 +1647,88 @@ class ContinuousOperationViewSet(viewsets.ModelViewSet):
         from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
         metrics = SEOAgentEvaluationService.evaluate_continuous_operations(project=project)
         return Response(metrics, status=status.HTTP_200_OK)
+
+
+class SEOEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for SEOEvent model (Milestone 6.2: Event-Driven Agents).
+    Provides list, retrieve, runs, metrics, and controlled ingestion.
+    Enforces strict tenant isolation: users can only view/ingest events for their own projects.
+    """
+    serializer_class = SEOEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = SEOEvent.objects.filter(project__owner=user).select_related('project', 'agent_run', 'continuous_operation')
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        event_type = self.request.query_params.get('event_type')
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+        status_val = self.request.query_params.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+        severity = self.request.query_params.get('severity')
+        if severity:
+            qs = qs.filter(severity=severity)
+        return qs.order_by('-created_at')
+
+    @action(detail=True, methods=['get'], url_path='runs')
+    def runs(self, request, pk=None):
+        event = self.get_object()
+        if not event.agent_run:
+            return Response([], status=status.HTTP_200_OK)
+        serializer = AgentRunSerializer(event.agent_run)
+        return Response([serializer.data], status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='metrics')
+    def metrics(self, request):
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        event_type = request.query_params.get('event_type')
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        metrics_data = SEOAgentEvaluationService.evaluate_event_driven_operations(project=project, event_type=event_type)
+        return Response(metrics_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='ingest')
+    def ingest(self, request):
+        serializer = SEOEventIngestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        project = Project.objects.get(id=data['project_id'])
+        cont_op = None
+        if data.get('continuous_operation_id'):
+            try:
+                cont_op = ContinuousOperation.objects.get(id=data['continuous_operation_id'], project=project)
+            except ContinuousOperation.DoesNotExist:
+                return Response({"detail": "Continuous operation not found for this project."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.event_ingestion import SEOEventIngestionService
+        service = SEOEventIngestionService()
+        try:
+            event = service.ingest_event(
+                project=project,
+                event_type=data['event_type'],
+                source=data['source'],
+                payload=data.get('payload', {}),
+                severity=data.get('severity', SEOEventSeverity.MEDIUM),
+                occurred_at=data.get('occurred_at'),
+                idempotency_key=data.get('idempotency_key'),
+                continuous_operation=cont_op,
+                user=request.user
+            )
+            return Response(SEOEventSerializer(event).data, status=status.HTTP_201_CREATED)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GoogleOAuthAuthorizationUrlView(APIView):

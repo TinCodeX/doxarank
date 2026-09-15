@@ -13,7 +13,8 @@ from .models import (
     SEOAction, ActionType, ActionStatus, ActionPriority,
     SEOActionPlan, ActionPlanStatus, ActionRiskLevel, VerificationStatus,
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
-    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType
+    ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
+    SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus
 )
 from apps.projects.models import Project
 
@@ -1537,3 +1538,78 @@ class GoogleOAuthCallbackRequestSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Optional custom redirect URI used during authorization."
     )
+
+
+class SEOEventSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOEvent model (Milestone 6.2: Event-Driven Agents).
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    agent_run_status = serializers.CharField(source='agent_run.status', read_only=True, default='')
+
+    class Meta:
+        model = SEOEvent
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'event_type',
+            'source',
+            'severity',
+            'status',
+            'payload',
+            'correlation_id',
+            'idempotency_key',
+            'occurred_at',
+            'received_at',
+            'processed_at',
+            'suppression_reason',
+            'agent_run',
+            'agent_run_status',
+            'continuous_operation',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = (
+            'id',
+            'status',
+            'correlation_id',
+            'idempotency_key',
+            'received_at',
+            'processed_at',
+            'suppression_reason',
+            'agent_run',
+            'agent_run_status',
+            'created_at',
+            'updated_at',
+        )
+
+
+class SEOEventIngestSerializer(serializers.Serializer):
+    """
+    Serializer for controlled event ingestion endpoint (POST /api/seo/ai/events/ingest/).
+    """
+    project_id = serializers.IntegerField(required=True)
+    event_type = serializers.ChoiceField(choices=SEOEventType.choices, required=True)
+    source = serializers.CharField(max_length=128, required=True)
+    severity = serializers.ChoiceField(choices=SEOEventSeverity.choices, default=SEOEventSeverity.MEDIUM, required=False)
+    payload = serializers.DictField(default=dict, required=False)
+    occurred_at = serializers.DateTimeField(required=False, default=None)
+    idempotency_key = serializers.CharField(max_length=255, required=False, default=None, allow_blank=True)
+    continuous_operation_id = serializers.IntegerField(required=False, default=None)
+
+    def validate_project_id(self, value):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if not Project.objects.filter(id=value, owner=request.user).exists():
+                raise serializers.ValidationError("Project does not exist or you do not have permission to access it.")
+        return value
+
+    def validate_payload(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Payload must be a dictionary.")
+        from apps.seo.services.event_ingestion import FORBIDDEN_PAYLOAD_KEYS
+        injected = FORBIDDEN_PAYLOAD_KEYS.intersection(value.keys())
+        if injected:
+            raise serializers.ValidationError(f"Payload contains forbidden configuration keys: {list(injected)}")
+        return value
