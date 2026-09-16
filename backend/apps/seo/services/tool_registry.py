@@ -1070,6 +1070,37 @@ def handle_get_adaptive_seo_strategy(project: Project, args: Dict[str, Any]) -> 
     }
 
 
+def handle_execute_seo_remediation(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handler executing an approved or policy-authorized autonomous SEO remediation.
+    Enforces tenant isolation, AutonomousRemediationPolicy, connector execution,
+    empirical verification, and failure categorization.
+    """
+    action_id = args.get("action_id")
+    if not action_id:
+        raise ValueError("Parameter 'action_id' is required.")
+
+    from apps.seo.services.autonomous_remediation import AutonomousRemediationService
+    service = AutonomousRemediationService()
+    record = service.execute_remediation(
+        action_id=int(action_id),
+        project_id=project.id
+    )
+
+    return {
+        "remediation_id": record.id,
+        "action_id": record.action_id,
+        "status": record.status,
+        "is_autonomous": record.is_autonomous,
+        "risk_level": record.risk_level,
+        "policy_decision": record.policy_decision,
+        "policy_explanation": record.policy_explanation,
+        "error_category": record.error_category,
+        "verification_status": record.action.verification_status,
+        "verification_data": record.verification_data,
+    }
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1602,6 +1633,23 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=False,
         handler=handle_get_adaptive_seo_strategy
+    ))
+
+    # 23. execute_seo_remediation
+    registry.register(AgentToolDefinition(
+        name="execute_seo_remediation",
+        description="Execute an approved or policy-authorized autonomous SEO remediation action safely through the mutation connector pipeline with empirical verification and rollback protection.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "integer", "description": "ID of the SEOAction to remediate."}
+            },
+            "required": ["action_id"]
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_execute_seo_remediation
     ))
 
     return registry

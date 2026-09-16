@@ -681,12 +681,26 @@ def execute_continuous_agent_run_task(
                     }
                 )
 
-        # Check HITL boundary: Did any agent propose actions requiring human review?
+        # Check HITL & Autonomous Remediation Policy boundary
         proposed_actions = SEOAction.objects.filter(
             project=run.project,
             status=ActionStatus.PROPOSED
         )
-        if getattr(context, "requires_human_approval", False) or proposed_actions.exists():
+        has_pending_human_approval = False
+        if proposed_actions.exists():
+            from apps.seo.services.autonomous_remediation import AutonomousRemediationPolicy, AutonomousRemediationService
+            rem_service = AutonomousRemediationService()
+            for p_act in proposed_actions:
+                pol_eval = AutonomousRemediationPolicy.evaluate(action=p_act, project=run.project)
+                if pol_eval.decision == "autonomous_allowed":
+                    try:
+                        rem_service.execute_remediation(action_id=p_act.id, project_id=run.project.id, run_id=run.id)
+                    except Exception as auto_err:
+                        logger.warning(f"[Continuous Run Task] Autonomous execution failed for #{p_act.id}: {auto_err}")
+                else:
+                    has_pending_human_approval = True
+
+        if getattr(context, "requires_human_approval", False) or has_pending_human_approval:
             is_waiting_approval = True
             run.status = AgentRunStatus.WAITING_FOR_APPROVAL
             run.summary = "Execution paused: Proposed SEO action(s) require human review and approval."
@@ -721,6 +735,10 @@ def execute_continuous_agent_run_task(
     )
 
     return run.id
+
+
+# Alias for backward compatibility
+execute_continuous_run_task = execute_continuous_agent_run_task
 
 
 @shared_task(
@@ -810,12 +828,26 @@ def execute_event_triggered_agent_run_task(self, run_id: int, event_id: int) -> 
                     }
                 )
 
-        # Check HITL boundary: Did any agent propose actions requiring human review?
+        # Check HITL & Autonomous Remediation Policy boundary
         proposed_actions = SEOAction.objects.filter(
             project=run.project,
             status=ActionStatus.PROPOSED
         )
-        if getattr(context, "requires_human_approval", False) or proposed_actions.exists():
+        has_pending_human_approval = False
+        if proposed_actions.exists():
+            from apps.seo.services.autonomous_remediation import AutonomousRemediationPolicy, AutonomousRemediationService
+            rem_service = AutonomousRemediationService()
+            for p_act in proposed_actions:
+                pol_eval = AutonomousRemediationPolicy.evaluate(action=p_act, project=run.project)
+                if pol_eval.decision == "autonomous_allowed":
+                    try:
+                        rem_service.execute_remediation(action_id=p_act.id, project_id=run.project.id, run_id=run.id)
+                    except Exception as auto_err:
+                        logger.warning(f"[Event Run Task] Autonomous execution failed for #{p_act.id}: {auto_err}")
+                else:
+                    has_pending_human_approval = True
+
+        if getattr(context, "requires_human_approval", False) or has_pending_human_approval:
             is_waiting_approval = True
             run.status = AgentRunStatus.WAITING_FOR_APPROVAL
             run.summary = "Execution paused: Proposed SEO action(s) require human review and approval."

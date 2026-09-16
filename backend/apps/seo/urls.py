@@ -8,6 +8,7 @@ from .views import (
     SEOContentBriefViewSet, SEOContentDraftViewSet,
     SEOActionViewSet, SEOActionPlanViewSet, AgentRunViewSet,
     ContinuousOperationViewSet, SEOEventViewSet, AutonomousMonitoringViewSet,
+    AutonomousRemediationViewSet,
     GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView,
     SEOAdaptiveStrategyView, SEOAgentOrchestrationView,
     MCPServersView, MCPToolsView, AgentEvaluationView,
@@ -38,6 +39,7 @@ router.register('ai/agent/runs', AgentRunViewSet, basename='agent-run')
 router.register('ai/operations', ContinuousOperationViewSet, basename='continuous-operation')
 router.register('ai/events', SEOEventViewSet, basename='seo-ai-events')
 router.register('ai/monitoring', AutonomousMonitoringViewSet, basename='ai-monitoring')
+router.register('ai/remediation', AutonomousRemediationViewSet, basename='ai-remediation')
 
 
 urlpatterns = [

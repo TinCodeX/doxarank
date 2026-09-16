@@ -207,6 +207,24 @@ class AgentEventType(str, Enum):
     SEO_MONITORING_RECOVERY_DETECTED = "seo.monitoring.recovery.detected"
     SEO_MONITORING_DUPLICATE_PREVENTED = "seo.monitoring.duplicate_prevented"
 
+    # Autonomous Remediation (Milestone 6.4)
+    SEO_REMEDIATION_PROPOSED = "seo.remediation.proposed"
+    SEO_REMEDIATION_AUTH_EVALUATED = "seo.remediation.auth.evaluated"
+    SEO_REMEDIATION_AUTH_APPROVED = "seo.remediation.auth.approved"
+    SEO_REMEDIATION_AUTH_REJECTED = "seo.remediation.auth.rejected"
+    SEO_REMEDIATION_AUTONOMOUS_ALLOWED = "seo.remediation.autonomous.allowed"
+    SEO_REMEDIATION_EXECUTION_STARTED = "seo.remediation.execution.started"
+    SEO_REMEDIATION_EXECUTION_COMPLETED = "seo.remediation.execution.completed"
+    SEO_REMEDIATION_EXECUTION_FAILED = "seo.remediation.execution.failed"
+    SEO_REMEDIATION_VERIFICATION_STARTED = "seo.remediation.verification.started"
+    SEO_REMEDIATION_VERIFICATION_PASSED = "seo.remediation.verification.passed"
+    SEO_REMEDIATION_VERIFICATION_FAILED = "seo.remediation.verification.failed"
+    SEO_REMEDIATION_ROLLBACK_STARTED = "seo.remediation.rollback.started"
+    SEO_REMEDIATION_ROLLBACK_COMPLETED = "seo.remediation.rollback.completed"
+    SEO_REMEDIATION_COMPLETED = "seo.remediation.completed"
+    SEO_REMEDIATION_BLOCKED = "seo.remediation.blocked"
+    SEO_REMEDIATION_DUPLICATE_PREVENTED = "seo.remediation.duplicate.prevented"
+
 
 
 

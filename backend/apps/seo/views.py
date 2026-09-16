@@ -19,7 +19,8 @@ from .models import (
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
-    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus
+    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
+    ProjectRemediationPolicy, RemediationRecord
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -36,7 +37,8 @@ from .serializers import (
     ContinuousOperationSerializer, ContinuousOperationCreateSerializer,
     SEOEventSerializer, SEOEventIngestSerializer,
     MonitoringStateSerializer, MonitoringSnapshotSerializer, MonitoringTriggerSerializer,
-    GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer
+    GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer,
+    ProjectRemediationPolicySerializer, RemediationRecordSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.google_oauth import (
@@ -1832,6 +1834,69 @@ class AutonomousMonitoringViewSet(viewsets.ReadOnlyModelViewSet):
             "project_id": project.id,
             "results": result
         }, status=status.HTTP_200_OK)
+
+
+class AutonomousRemediationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Autonomous Remediation records & operational history (Milestone 6.4: Autonomous Remediation).
+    Provides remediation history inspection, detail retrieval, and runtime evaluation metrics.
+    Enforces strict tenant isolation: users can only access remediation data for their own projects.
+    Read-only to prevent clients bypassing ToolRegistry / AutonomousRemediationPolicy.
+    """
+    serializer_class = RemediationRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = RemediationRecord.objects.filter(project__owner=user).select_related('project', 'action', 'event', 'agent_run')
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        status_val = self.request.query_params.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+        risk_level = self.request.query_params.get('risk_level')
+        if risk_level:
+            qs = qs.filter(risk_level=risk_level)
+        is_auto = self.request.query_params.get('is_autonomous')
+        if is_auto is not None:
+            qs = qs.filter(is_autonomous=is_auto.lower() in ['true', '1'])
+        return qs.order_by('-created_at')
+
+    @action(detail=False, methods=['get'], url_path='metrics')
+    def metrics(self, request):
+        """
+        Retrieve runtime evaluation metrics for autonomous remediation (GET /api/seo/ai/remediation/metrics/?project={id}).
+        """
+        user = request.user
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        data = SEOAgentEvaluationService.evaluate_autonomous_remediation(project=project)
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='policy')
+    def policy(self, request):
+        """
+        Retrieve project remediation policy settings (GET /api/seo/ai/remediation/policy/?project={id}).
+        """
+        user = request.user
+        project_id = request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = Project.objects.get(id=project_id, owner=user)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or not owned by user."}, status=status.HTTP_404_NOT_FOUND)
+
+        policy_obj, _ = ProjectRemediationPolicy.objects.get_or_create(project=project)
+        return Response(ProjectRemediationPolicySerializer(policy_obj).data, status=status.HTTP_200_OK)
 
 
 class GoogleOAuthAuthorizationUrlView(APIView):

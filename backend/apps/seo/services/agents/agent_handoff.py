@@ -69,6 +69,7 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "propose_seo_action",
         "get_action",
         "preview_action",
+        "execute_seo_remediation",
     },
     "seo_verifier": {
         "verify_seo_action",

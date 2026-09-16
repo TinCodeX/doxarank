@@ -32,6 +32,12 @@ class MemoryCategory(str, Enum):
     DECISION = "decision"                # Recorded collaboration decision
     WORK_ITEM = "work_item"              # Completed or pending task record
     VERIFICATION = "verification"        # Live verification result
+    # Milestone 6.4: Remediation Epistemic Lifecycle
+    ACTION_PROPOSAL = "action_proposal"  # Concrete remediation proposal
+    RISK_ASSESSMENT = "risk_assessment"  # Risk and reversibility classification
+    AUTHORIZATION_DECISION = "authorization_decision"  # Policy or human authorization
+    EXECUTION_RESULT = "execution_result"  # Mutation execution outcome
+    OUTCOME = "outcome"                  # Verified post-execution SEO outcome
 
 
 class DecisionStatus(str, Enum):
@@ -430,6 +436,48 @@ class SharedWorkingMemory:
         self._fingerprints.add(fp)
         self.entries_created += 1
         self._enforce_budget("inferences")
+        return item
+
+    @synchronized_memory
+    def record_remediation_step(
+        self,
+        category: str,
+        content: str,
+        source_agent: str = "seo_action_planner",
+        action_id: Optional[int] = None,
+        stage: str = "planned",
+        confidence: float = 1.0,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> MemoryItem:
+        """
+        Record a structured remediation milestone in shared working memory (Milestone 6.4).
+        Preserves provenance and epistemic boundaries across stages:
+        'planned', 'authorized', 'executed', 'verified'.
+        """
+        clean_content = redact_secrets(content)
+        cat_val = category if isinstance(category, str) else category.value
+        fp = generate_fingerprint(cat_val, clean_content)
+        mem_id = f"rem-{cat_val[:4]}-{uuid.uuid4().hex[:8]}"
+
+        combined_meta = dict(metadata or {})
+        combined_meta["stage"] = stage
+        if action_id:
+            combined_meta["action_id"] = action_id
+
+        item = MemoryItem(
+            memory_id=mem_id,
+            category=cat_val,
+            content=clean_content,
+            source_agent=source_agent,
+            correlation_id=self.correlation_id,
+            confidence=max(0.0, min(1.0, confidence)),
+            fingerprint=fp,
+            metadata=redact_secrets(combined_meta)
+        )
+        self._facts[mem_id] = item
+        self._fingerprints.add(fp)
+        self.entries_created += 1
         return item
 
     @synchronized_memory

@@ -843,3 +843,98 @@ class SEOAgentEvaluationService:
             "duplicate_detections": duplicates_prevented,
             "event_generation_rate": event_generation_rate,
         }
+
+    @classmethod
+    def evaluate_autonomous_remediation(
+        cls,
+        project: Any
+    ) -> Dict[str, Any]:
+        """
+        Milestone 6.4: Evaluate runtime-derived autonomous remediation operational metrics.
+        Guarantees metrics are dynamically derived from actual persisted RemediationRecord
+        and SEOAction records.
+        """
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            SEOAction, ActionStatus, RemediationRecord,
+            RemediationPolicyDecision, RemediationErrorCategory
+        )
+
+        project_obj = project if isinstance(project, Project) else Project.objects.get(id=project)
+
+        records_qs = RemediationRecord.objects.filter(project=project_obj)
+        total_records = records_qs.count()
+
+        remediation_attempts = records_qs.filter(
+            status__in=[
+                ActionStatus.EXECUTING,
+                ActionStatus.VERIFYING,
+                ActionStatus.VERIFIED,
+                ActionStatus.COMPLETED,
+                ActionStatus.FAILED,
+                ActionStatus.ROLLED_BACK
+            ]
+        ).count()
+
+        remediation_successes = records_qs.filter(
+            status__in=[ActionStatus.VERIFIED, ActionStatus.COMPLETED]
+        ).count()
+
+        verification_successes = remediation_successes
+        verification_failures = records_qs.filter(
+            error_category=RemediationErrorCategory.VERIFICATION_FAILURE
+        ).count()
+
+        human_approved_count = records_qs.filter(
+            action__approved_by__isnull=False
+        ).count()
+        human_rejected_count = records_qs.filter(
+            status=ActionStatus.REJECTED
+        ).count()
+
+        autonomous_executed_count = records_qs.filter(
+            is_autonomous=True,
+            status__in=[ActionStatus.VERIFYING, ActionStatus.VERIFIED, ActionStatus.COMPLETED]
+        ).count()
+
+        policy_blocked_count = records_qs.filter(
+            policy_decision=RemediationPolicyDecision.BLOCKED
+        ).count() + records_qs.filter(
+            error_category=RemediationErrorCategory.POLICY_BLOCK
+        ).count()
+
+        rollback_count = records_qs.filter(
+            status=ActionStatus.ROLLED_BACK
+        ).count()
+
+        duplicates_prevented = records_qs.filter(
+            error_category=RemediationErrorCategory.IDEMPOTENCY_CONFLICT
+        ).count()
+
+        total_verif = verification_successes + verification_failures
+        total_human_decisions = human_approved_count + human_rejected_count
+
+        return {
+            "project_id": project_obj.id,
+            "total_remediations": total_records,
+            "remediation_attempts": remediation_attempts,
+            "remediation_successes": remediation_successes,
+            "verification_successes": verification_successes,
+            "verification_failures": verification_failures,
+            "human_approved_count": human_approved_count,
+            "human_rejected_count": human_rejected_count,
+            "autonomous_executed_count": autonomous_executed_count,
+            "policy_blocked_count": policy_blocked_count,
+            "rollback_count": rollback_count,
+            "duplicates_prevented": duplicates_prevented,
+            "remediation_attempt_rate": round((remediation_attempts / max(1, total_records)) * 100, 1) if total_records > 0 else 0.0,
+            "remediation_success_rate": round((remediation_successes / max(1, remediation_attempts)) * 100, 1) if remediation_attempts > 0 else 0.0,
+            "verification_success_rate": round((verification_successes / max(1, total_verif)) * 100, 1) if total_verif > 0 else 0.0,
+            "verification_failure_rate": round((verification_failures / max(1, total_verif)) * 100, 1) if total_verif > 0 else 0.0,
+            "human_approval_rate": round((human_approved_count / max(1, total_human_decisions)) * 100, 1) if total_human_decisions > 0 else 0.0,
+            "human_rejection_rate": round((human_rejected_count / max(1, total_human_decisions)) * 100, 1) if total_human_decisions > 0 else 0.0,
+            "autonomous_execution_rate": round((autonomous_executed_count / max(1, remediation_attempts)) * 100, 1) if remediation_attempts > 0 else 0.0,
+            "policy_block_rate": round((policy_blocked_count / max(1, total_records)) * 100, 1) if total_records > 0 else 0.0,
+            "rollback_rate": round((rollback_count / max(1, remediation_attempts)) * 100, 1) if remediation_attempts > 0 else 0.0,
+            "duplicate_prevention_rate": round((duplicates_prevented / max(1, total_records + duplicates_prevented)) * 100, 1) if (total_records + duplicates_prevented) > 0 else 0.0,
+        }

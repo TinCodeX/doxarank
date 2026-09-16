@@ -689,7 +689,65 @@ class DynamicTaskPlanner:
                 )
                 plan.add_task(t5)
 
-        # 1. Investigation / Diagnostic Intent
+        # 1. Autonomous Remediation Workflow Intent (Milestone 6.4)
+        elif any(w in goal_lower for w in ["remediate", "remediation", "auto fix", "autonomous fix", "safe remediation"]):
+            t1 = AgentTask(
+                task_id=f"task-res-{uuid.uuid4().hex[:6]}",
+                objective=f"Extract baseline diagnostic evidence for {url_label}",
+                description="Retrieve GSC queries, clicks, impressions, and site audit issues.",
+                responsible_agent="seo_researcher",
+                priority=TaskPriority.CRITICAL.value,
+                required_evidence=["get_gsc_performance", "get_site_audit_summary"],
+                reason="Empirical baseline required for remediation."
+            )
+            plan.add_task(t1)
+
+            t2 = AgentTask(
+                task_id=f"task-inv-{uuid.uuid4().hex[:6]}",
+                objective="Investigate root cause and affected SEO elements",
+                description="Correlate anomalies against site technical health to isolate defect.",
+                responsible_agent="seo_investigator",
+                priority=TaskPriority.HIGH.value,
+                dependencies=[t1.task_id],
+                reason="Root cause isolation required prior to formulating remediation."
+            )
+            plan.add_task(t2)
+
+            t3 = AgentTask(
+                task_id=f"task-strat-{uuid.uuid4().hex[:6]}",
+                objective="Formulate prioritized remediation strategy",
+                description="Determine highest leverage, lowest risk fix approach.",
+                responsible_agent="seo_strategist",
+                priority=TaskPriority.HIGH.value,
+                dependencies=[t2.task_id],
+                reason="Strategy grounds proposed actions in historical effectiveness."
+            )
+            plan.add_task(t3)
+
+            t4 = AgentTask(
+                task_id=f"task-plan-{uuid.uuid4().hex[:6]}",
+                objective="Formulate remediation action proposal under policy governance",
+                description="Draft reversible action items; assess risk level and capture baseline state.",
+                responsible_agent="seo_action_planner",
+                priority=TaskPriority.CRITICAL.value,
+                dependencies=[t3.task_id],
+                metadata={"action_status": "proposed"},
+                reason="Stage concrete action proposals for policy evaluation."
+            )
+            plan.add_task(t4)
+
+            t5 = AgentTask(
+                task_id=f"task-ver-{uuid.uuid4().hex[:6]}",
+                objective=f"Perform post-remediation verification on {url_label}",
+                description="Empirically verify live website HTML, status codes, and tags post-remediation.",
+                responsible_agent="seo_verifier",
+                priority=TaskPriority.CRITICAL.value,
+                dependencies=[t4.task_id],
+                reason="Mandatory verification confirms whether real-world state reflects expected changes."
+            )
+            plan.add_task(t5)
+
+        # 2. Investigation / Diagnostic Intent
         elif any(w in goal_lower for w in ["drop", "decline", "fall", "why", "investigate", "audit", "diagnose"]):
             # Task 1: Performance evidence extraction
             t1 = AgentTask(

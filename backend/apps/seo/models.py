@@ -1194,10 +1194,15 @@ class ActionStatus(models.TextChoices):
     REVIEWED = 'reviewed', 'Reviewed'
     APPROVED = 'approved', 'Approved'
     READY_TO_EXECUTE = 'ready_to_execute', 'Ready to Execute'
+    AUTHORIZED = 'authorized', 'Authorized'
     EXECUTING = 'executing', 'Executing'
     COMPLETED = 'completed', 'Completed'
+    VERIFYING = 'verifying', 'Verifying'
+    VERIFIED = 'verified', 'Verified'
     REJECTED = 'rejected', 'Rejected'
     FAILED = 'failed', 'Failed'
+    BLOCKED = 'blocked', 'Blocked'
+    ROLLED_BACK = 'rolled_back', 'Rolled Back'
     CANCELLED = 'cancelled', 'Cancelled'
 
 
@@ -2456,3 +2461,176 @@ class MonitoringSnapshot(models.Model):
     def __str__(self):
         anomaly_str = " (ANOMALY)" if self.is_anomaly else (" (RECOVERY)" if self.is_recovery else "")
         return f"Snapshot #{self.id} [{self.monitor_type}] '{self.metric_key}'{anomaly_str} for Project #{self.project_id}"
+
+
+class RemediationRiskLevel(models.TextChoices):
+    LOW = 'low', 'Low'
+    MEDIUM = 'medium', 'Medium'
+    HIGH = 'high', 'High'
+    CRITICAL = 'critical', 'Critical'
+
+
+class RemediationPolicyDecision(models.TextChoices):
+    AUTONOMOUS_ALLOWED = 'autonomous_allowed', 'Autonomous Allowed'
+    HUMAN_APPROVAL_REQUIRED = 'human_approval_required', 'Human Approval Required'
+    BLOCKED = 'blocked', 'Blocked'
+
+
+class RemediationErrorCategory(models.TextChoices):
+    TOOL_FAILURE = 'tool_failure', 'Tool Failure'
+    AUTHORIZATION_FAILURE = 'authorization_failure', 'Authorization Failure'
+    HUMAN_REJECTION = 'human_rejection', 'Human Rejection'
+    EXECUTION_TIMEOUT = 'execution_timeout', 'Execution Timeout'
+    VERIFICATION_FAILURE = 'verification_failure', 'Verification Failure'
+    TENANT_ISOLATION_FAILURE = 'tenant_isolation_failure', 'Tenant Isolation Failure'
+    POLICY_BLOCK = 'policy_block', 'Policy Block'
+    IDEMPOTENCY_CONFLICT = 'idempotency_conflict', 'Idempotency Conflict'
+
+
+class ProjectRemediationPolicy(models.Model):
+    """
+    Project-level configuration and bounds for autonomous remediation (Milestone 6.4).
+    Controls whether autonomous execution is enabled, daily quotas, confidence thresholds,
+    and allowed action types.
+    """
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='remediation_policy',
+        help_text='The project this remediation policy applies to.'
+    )
+    is_autonomous_enabled = models.BooleanField(
+        default=True,
+        help_text='Whether autonomous remediation for authorized low-risk actions is permitted.'
+    )
+    max_daily_autonomous_actions = models.PositiveIntegerField(
+        default=10,
+        help_text='Maximum number of autonomous remediations allowed per calendar day.'
+    )
+    min_confidence_threshold = models.FloatField(
+        default=0.85,
+        help_text='Minimum confidence score required for an action to execute autonomously.'
+    )
+    allowed_autonomous_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of ActionType string values explicitly permitted for autonomous execution.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_project_remediation_policies'
+        verbose_name = 'project remediation policy'
+        verbose_name_plural = 'project remediation policies'
+
+    def __str__(self):
+        return f"RemediationPolicy(Project #{self.project_id}, Enabled={self.is_autonomous_enabled})"
+
+
+class RemediationRecord(models.Model):
+    """
+    Persistent audit and execution record for an autonomous or human-approved SEO remediation (Milestone 6.4).
+    Enforces deterministic idempotency, state snapshots for rollback, verification evidence,
+    and failure categorization.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='remediation_records',
+        help_text='The project this remediation belongs to.'
+    )
+    action = models.ForeignKey(
+        SEOAction,
+        on_delete=models.CASCADE,
+        related_name='remediation_records',
+        help_text='The underlying SEO action being remediated.'
+    )
+    event = models.ForeignKey(
+        'SEOEvent',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remediation_records',
+        help_text='The originating SEO event triggering this remediation.'
+    )
+    agent_run = models.ForeignKey(
+        'AgentRun',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remediation_records',
+        help_text='The multi-agent run orchestrating this remediation.'
+    )
+    idempotency_key = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='SHA-256 fingerprint guaranteeing idempotency across workers and retries.'
+    )
+    risk_level = models.CharField(
+        max_length=20,
+        choices=RemediationRiskLevel.choices,
+        default=RemediationRiskLevel.LOW,
+        db_index=True,
+        help_text='Assessed risk classification for this remediation.'
+    )
+    policy_decision = models.CharField(
+        max_length=30,
+        choices=RemediationPolicyDecision.choices,
+        default=RemediationPolicyDecision.HUMAN_APPROVAL_REQUIRED,
+        db_index=True,
+        help_text='Centralized policy determination.'
+    )
+    policy_explanation = models.TextField(
+        blank=True,
+        default='',
+        help_text='Detailed justification of the policy decision.'
+    )
+    is_autonomous = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Whether this remediation was executed autonomously without human intervention.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ActionStatus.choices,
+        default=ActionStatus.PROPOSED,
+        db_index=True,
+        help_text='Remediation execution & verification lifecycle status.'
+    )
+    rollback_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Snapshot of pre-remediation state to enable deterministic rollback.'
+    )
+    verification_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Empirical verification evidence collected post-execution.'
+    )
+    error_category = models.CharField(
+        max_length=50,
+        choices=RemediationErrorCategory.choices,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Deterministic failure category if execution or verification fails.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_remediation_records'
+        verbose_name = 'remediation record'
+        verbose_name_plural = 'remediation records'
+        ordering = ['-created_at']
+        unique_together = [('project', 'idempotency_key')]
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_rem_proj_stat_idx'),
+            models.Index(fields=['action', 'status'], name='seo_rem_act_stat_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_rem_proj_created_idx'),
+            models.Index(fields=['policy_decision'], name='seo_rem_decision_idx'),
+        ]
+
+    def __str__(self):
+        return f"Remediation #{self.id} for Action #{self.action_id} [{self.status}] ({self.project.name})"

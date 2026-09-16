@@ -4,7 +4,8 @@ from .models import (
     SearchConsoleConnection, SearchAnalyticsData,
     SEOInsight, SEORecommendation, SEOContentBrief, SEOContentDraft,
     SEOAction, AgentRun, AgentStep, AgentToolCall, ContinuousOperation,
-    SEOEvent, MonitoringState, MonitoringSnapshot
+    SEOEvent, MonitoringState, MonitoringSnapshot,
+    ProjectRemediationPolicy, RemediationRecord
 )
 
 
@@ -559,4 +560,55 @@ class MonitoringSnapshotAdmin(admin.ModelAdmin):
     readonly_fields = (
         'created_at',
     )
+    ordering = ('-created_at',)
+
+
+@admin.register(ProjectRemediationPolicy)
+class ProjectRemediationPolicyAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'is_autonomous_enabled',
+        'max_daily_autonomous_actions',
+        'min_confidence_threshold',
+        'created_at'
+    )
+    list_filter = (
+        'is_autonomous_enabled',
+        'created_at'
+    )
+    search_fields = (
+        'project__name',
+        'project__owner__email'
+    )
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(RemediationRecord)
+class RemediationRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'project',
+        'action',
+        'risk_level',
+        'policy_decision',
+        'is_autonomous',
+        'status',
+        'error_category',
+        'created_at'
+    )
+    list_filter = (
+        'risk_level',
+        'policy_decision',
+        'is_autonomous',
+        'status',
+        'error_category',
+        'created_at'
+    )
+    search_fields = (
+        'project__name',
+        'idempotency_key',
+        'action__title'
+    )
+    readonly_fields = ('created_at', 'updated_at')
     ordering = ('-created_at',)

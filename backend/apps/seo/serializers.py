@@ -15,7 +15,8 @@ from .models import (
     AgentRun, AgentStep, AgentToolCall, AgentRunStatus, AgentActionType, AgentStepStatus,
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
-    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus
+    MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
+    ProjectRemediationPolicy, RemediationRecord
 )
 from apps.projects.models import Project
 
@@ -1688,3 +1689,61 @@ class MonitoringTriggerSerializer(serializers.Serializer):
             if not Project.objects.filter(id=value, owner=request.user).exists():
                 raise serializers.ValidationError("Project does not exist or you do not have permission to access it.")
         return value
+
+
+class ProjectRemediationPolicySerializer(serializers.ModelSerializer):
+    """
+    Serializer for ProjectRemediationPolicy model (Milestone 6.4: Autonomous Remediation).
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = ProjectRemediationPolicy
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'is_autonomous_enabled',
+            'max_daily_autonomous_actions',
+            'min_confidence_threshold',
+            'allowed_autonomous_types',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
+class RemediationRecordSerializer(serializers.ModelSerializer):
+    """
+    Serializer for RemediationRecord model (Milestone 6.4: Autonomous Remediation).
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+    action_title = serializers.ReadOnlyField(source='action.title')
+    action_type = serializers.ReadOnlyField(source='action.action_type')
+    target_url = serializers.ReadOnlyField(source='action.target_url')
+
+    class Meta:
+        model = RemediationRecord
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'action',
+            'action_title',
+            'action_type',
+            'target_url',
+            'event',
+            'agent_run',
+            'idempotency_key',
+            'risk_level',
+            'policy_decision',
+            'policy_explanation',
+            'is_autonomous',
+            'status',
+            'rollback_data',
+            'verification_data',
+            'error_category',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields

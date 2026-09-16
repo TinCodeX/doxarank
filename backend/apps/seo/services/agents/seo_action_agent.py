@@ -32,7 +32,8 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
         "get_action_plan",
         "propose_seo_action",
         "get_action",
-        "preview_action"
+        "preview_action",
+        "execute_seo_remediation",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:
