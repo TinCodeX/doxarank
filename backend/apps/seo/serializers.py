@@ -16,7 +16,8 @@ from .models import (
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
     MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
-    ProjectRemediationPolicy, RemediationRecord
+    ProjectRemediationPolicy, RemediationRecord,
+    ExternalConnection, ExternalOperationRecord
 )
 from apps.projects.models import Project
 
@@ -1743,6 +1744,83 @@ class RemediationRecordSerializer(serializers.ModelSerializer):
             'rollback_data',
             'verification_data',
             'error_category',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class ExternalConnectionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ExternalConnection model (Milestone 6.5).
+    Guarantees that credentials/secrets are NEVER exposed in API responses.
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+    capabilities = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExternalConnection
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'system_type',
+            'provider',
+            'name',
+            'status',
+            'configuration',
+            'capabilities',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+    def get_capabilities(self, obj):
+        return obj.get_declared_capabilities()
+
+
+class ExternalOperationRecordSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ExternalOperationRecord model (Milestone 6.5).
+    Provides structured, transparent visibility into external system operations.
+    """
+    project_name = serializers.ReadOnlyField(source='project.name')
+    connection_name = serializers.ReadOnlyField(source='connection.name')
+
+    class Meta:
+        model = ExternalOperationRecord
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'connection',
+            'connection_name',
+            'action',
+            'remediation_record',
+            'agent_run',
+            'task_id',
+            'correlation_id',
+            'idempotency_key',
+            'system_type',
+            'provider',
+            'operation',
+            'required_capability',
+            'target',
+            'status',
+            'risk_level',
+            'is_autonomous',
+            'request_summary',
+            'before_state',
+            'after_state',
+            'response_summary',
+            'status_code',
+            'changed',
+            'error_category',
+            'error_message',
+            'retry_count',
+            'duration_ms',
+            'verification_status',
+            'verification_data',
             'created_at',
             'updated_at',
         )

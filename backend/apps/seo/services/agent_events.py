@@ -225,8 +225,17 @@ class AgentEventType(str, Enum):
     SEO_REMEDIATION_BLOCKED = "seo.remediation.blocked"
     SEO_REMEDIATION_DUPLICATE_PREVENTED = "seo.remediation.duplicate.prevented"
 
-
-
+    # Multi-System Agent Integration (Milestone 6.5)
+    EXTERNAL_INTEGRATION_REQUESTED = "external.integration.requested"
+    EXTERNAL_INTEGRATION_AUTHORIZED = "external.integration.authorized"
+    EXTERNAL_INTEGRATION_DENIED = "external.integration.denied"
+    EXTERNAL_INTEGRATION_STARTED = "external.integration.started"
+    EXTERNAL_INTEGRATION_COMPLETED = "external.integration.completed"
+    EXTERNAL_INTEGRATION_FAILED = "external.integration.failed"
+    EXTERNAL_INTEGRATION_RETRY = "external.integration.retry"
+    EXTERNAL_INTEGRATION_RATE_LIMITED = "external.integration.rate_limited"
+    EXTERNAL_INTEGRATION_VERIFIED = "external.integration.verified"
+    EXTERNAL_INTEGRATION_DUPLICATE_PREVENTED = "external.integration.duplicate_prevented"
 
 
 def sanitize_event_payload(data: Any) -> Any:
@@ -269,6 +278,7 @@ class AgentEvent:
     payload: Dict[str, Any] = field(default_factory=dict)
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(default_factory=lambda: timezone.now().isoformat())
+    correlation_id: Optional[str] = None
 
     def __post_init__(self):
         # Guarantee server-side UUID4 format
@@ -490,6 +500,13 @@ def set_event_publisher(publisher: AgentEventPublisher) -> None:
     """Set the global AgentEventPublisher instance."""
     global _default_publisher
     _default_publisher = publisher
+
+
+def reset_event_publisher() -> AgentEventPublisher:
+    """Reset the global AgentEventPublisher to a fresh InMemoryEventPublisher instance."""
+    global _default_publisher
+    _default_publisher = InMemoryEventPublisher()
+    return _default_publisher
 
 
 def reconstruct_agent_run_events(run) -> List[Dict[str, Any]]:

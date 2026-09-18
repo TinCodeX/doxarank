@@ -42,6 +42,9 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "mcp__seo_local__check_url_status",
         "mcp__seo_local__get_page_metadata",
         "mcp__seo_local__get_external_page_signals",
+        "discover_external_capabilities",
+        "inspect_cms_page",
+        "inspect_git_repository",
     },
     "seo_investigator": {
         "get_gsc_performance",
@@ -70,11 +73,19 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "get_action",
         "preview_action",
         "execute_seo_remediation",
+        "discover_external_capabilities",
+        "inspect_cms_page",
+        "inspect_git_repository",
+        "execute_external_operation",
     },
     "seo_verifier": {
         "verify_seo_action",
         "verify_action_plan",
         "get_action_outcomes",
+        "verify_external_operation",
+        "inspect_cms_page",
+        "inspect_git_repository",
+        "discover_external_capabilities",
     },
 }
 

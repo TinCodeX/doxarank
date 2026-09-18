@@ -38,6 +38,9 @@ class MemoryCategory(str, Enum):
     AUTHORIZATION_DECISION = "authorization_decision"  # Policy or human authorization
     EXECUTION_RESULT = "execution_result"  # Mutation execution outcome
     OUTCOME = "outcome"                  # Verified post-execution SEO outcome
+    # Milestone 6.5: External Integration Epistemic Lifecycle
+    ACTION = "action"                    # External operation executed
+    AUTHORIZATION = "authorization"      # External operation authorization
 
 
 class DecisionStatus(str, Enum):
@@ -479,6 +482,57 @@ class SharedWorkingMemory:
         self._fingerprints.add(fp)
         self.entries_created += 1
         return item
+
+    @synchronized_memory
+    def record_external_operation(
+        self,
+        source_agent: str,
+        system_type: str,
+        operation: str,
+        target: str,
+        status: str = "pending",
+        before_state: Optional[Dict[str, Any]] = None,
+        after_state: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Record an external system operation in shared working memory with full provenance (Milestone 6.5).
+        """
+        clean_target = redact_secrets(target)
+        clean_before = redact_secrets(before_state or {})
+        clean_after = redact_secrets(after_state or {})
+
+        entry = {
+            "external_system": system_type,
+            "operation": operation,
+            "target": clean_target,
+            "status": status,
+            "source_agent": source_agent,
+            "before_state": clean_before,
+            "after_state": clean_after,
+            "timestamp": timezone.now().isoformat(),
+            "metadata": redact_secrets(metadata or {})
+        }
+
+        content = f"External {system_type} {operation} on {clean_target} -> {status}"
+        fp = generate_fingerprint(MemoryCategory.ACTION.value, content)
+        mem_id = f"ext-{system_type[:3]}-{uuid.uuid4().hex[:8]}"
+
+        item = MemoryItem(
+            memory_id=mem_id,
+            category=MemoryCategory.ACTION.value,
+            content=content,
+            source_agent=source_agent,
+            correlation_id=self.correlation_id,
+            confidence=1.0,
+            fingerprint=fp,
+            metadata=entry
+        )
+        self._facts[mem_id] = item
+        self._fingerprints.add(fp)
+        self.entries_created += 1
+        return entry
 
     @synchronized_memory
     def add_uncertainty(

@@ -20,7 +20,8 @@ from .models import (
     ContinuousOperation, ContinuousOperationStatus, ContinuousOperationScheduleType,
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
     MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
-    ProjectRemediationPolicy, RemediationRecord
+    ProjectRemediationPolicy, RemediationRecord,
+    ExternalConnection, ExternalOperationRecord
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -38,7 +39,8 @@ from .serializers import (
     SEOEventSerializer, SEOEventIngestSerializer,
     MonitoringStateSerializer, MonitoringSnapshotSerializer, MonitoringTriggerSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer,
-    ProjectRemediationPolicySerializer, RemediationRecordSerializer
+    ProjectRemediationPolicySerializer, RemediationRecordSerializer,
+    ExternalConnectionSerializer, ExternalOperationRecordSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.google_oauth import (
@@ -2568,4 +2570,64 @@ class SEOCollaborationReasoningView(APIView):
                 "failed": failed,
                 "open": len(cases) - (reached + escalated + failed),
             },
+        }, status=status.HTTP_200_OK)
+
+
+# ==============================================================================
+# MILESTONE 6.5: EXTERNAL MULTI-SYSTEM INTEGRATION VIEWS
+# ==============================================================================
+
+class ExternalIntegrationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Project-scoped, read-only visibility into configured external connections (CMS, Git, Webhook).
+    Strictly forbids exposing passwords, tokens, or credentials in API responses.
+    """
+    serializer_class = ExternalConnectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = ExternalConnection.objects.filter(project__owner=user)
+        project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except ValueError:
+                pass
+        system_type = self.request.query_params.get('system_type')
+        if system_type:
+            qs = qs.filter(system_type=system_type)
+        return qs
+
+    @action(detail=True, methods=['get'])
+    def operations(self, request, pk=None):
+        """List all historical operations executed via this external connection."""
+        connection = self.get_object()
+        ops = connection.operations.all().order_by('-created_at')
+        serializer = ExternalOperationRecordSerializer(ops, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SEOCollaborationIntegrationsView(APIView):
+    """
+    Retrieve external operations correlated with a specific multi-agent orchestration run.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        try:
+            run = AgentRun.objects.get(id=run_id, project__owner=request.user)
+        except AgentRun.DoesNotExist:
+            return Response(
+                {"detail": "AgentRun not found or unauthorized for this user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        ops = ExternalOperationRecord.objects.filter(agent_run=run).order_by('-created_at')
+        serializer = ExternalOperationRecordSerializer(ops, many=True)
+        return Response({
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "operations_count": ops.count(),
+            "operations": serializer.data,
         }, status=status.HTTP_200_OK)

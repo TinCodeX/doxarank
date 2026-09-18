@@ -938,3 +938,107 @@ class SEOAgentEvaluationService:
             "rollback_rate": round((rollback_count / max(1, remediation_attempts)) * 100, 1) if remediation_attempts > 0 else 0.0,
             "duplicate_prevention_rate": round((duplicates_prevented / max(1, total_records + duplicates_prevented)) * 100, 1) if (total_records + duplicates_prevented) > 0 else 0.0,
         }
+
+    @classmethod
+    def evaluate_external_integrations(
+        cls,
+        project: Any = None,
+        project_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Milestone 6.5: Evaluate runtime-derived external multi-system integration metrics.
+        Guarantees metrics are dynamically derived from actual persisted ExternalOperationRecord
+        and ExternalConnection records.
+        """
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            ExternalConnection,
+            ExternalOperationRecord,
+            ExternalOperationStatus,
+        )
+
+        p = project if project is not None else project_id
+        if p is None:
+            raise ValueError("evaluate_external_integrations requires either project or project_id.")
+        project_obj = p if isinstance(p, Project) else Project.objects.get(id=p)
+        ops_qs = ExternalOperationRecord.objects.filter(project=project_obj)
+        total_ops = ops_qs.count()
+
+        ops_attempted = ops_qs.filter(
+            status__in=[
+                ExternalOperationStatus.EXECUTING,
+                ExternalOperationStatus.COMPLETED,
+                ExternalOperationStatus.VERIFIED,
+                ExternalOperationStatus.FAILED,
+                ExternalOperationStatus.RATE_LIMITED,
+            ]
+        ).count()
+
+        ops_completed = ops_qs.filter(
+            status__in=[ExternalOperationStatus.COMPLETED, ExternalOperationStatus.VERIFIED]
+        ).count()
+
+        ops_verified = ops_qs.filter(
+            status=ExternalOperationStatus.VERIFIED
+        ).count()
+
+        ops_failed = ops_qs.filter(
+            status=ExternalOperationStatus.FAILED
+        ).count()
+
+        ops_denied = ops_qs.filter(
+            error_category__in=["hitl_required", "permission_denied"]
+        ).count()
+
+        connector_failures = ops_qs.filter(
+            error_category__in=["adapter_exception", "tool_failure", "invalid_target", "malformed_request"]
+        ).count()
+
+        retried_ops = ops_qs.filter(retry_count__gt=0).count()
+        total_retries = sum(o.retry_count for o in ops_qs)
+
+        verification_failures = ops_qs.filter(
+            verification_status="failed"
+        ).count()
+
+        duplicates_prevented = ops_qs.filter(
+            error_category="duplicate_prevented"
+        ).count()
+
+        system_breakdown = {}
+        provider_breakdown = {}
+        for op in ops_qs:
+            system_breakdown[op.system_type] = system_breakdown.get(op.system_type, 0) + 1
+            provider_breakdown[op.provider] = provider_breakdown.get(op.provider, 0) + 1
+
+        durations = [o.duration_ms for o in ops_qs if o.duration_ms > 0]
+        avg_duration_ms = round(sum(durations) / len(durations), 1) if durations else 0.0
+
+        total_verif = ops_verified + verification_failures
+
+        return {
+            "project_id": project_obj.id,
+            "total_external_operations": total_ops,
+            "external_operations_attempted": ops_attempted,
+            "external_operations_completed": ops_completed,
+            "external_operations_verified": ops_verified,
+            "external_operations_failed": ops_failed,
+            "authorization_denials": ops_denied,
+            "connector_failures": connector_failures,
+            "retried_operations": retried_ops,
+            "total_retries": total_retries,
+            "verification_failures": verification_failures,
+            "duplicates_prevented": duplicates_prevented,
+            "system_breakdown": system_breakdown,
+            "provider_breakdown": provider_breakdown,
+            "average_duration_ms": avg_duration_ms,
+            "operation_failure_rate": round((ops_failed / max(1, ops_attempted)) * 100, 1) if ops_attempted > 0 else 0.0,
+            "authorization_denial_rate": round((ops_denied / max(1, total_ops)) * 100, 1) if total_ops > 0 else 0.0,
+            "connector_failure_rate": round((connector_failures / max(1, ops_attempted)) * 100, 1) if ops_attempted > 0 else 0.0,
+            "retry_rate": round((retried_ops / max(1, ops_attempted)) * 100, 1) if ops_attempted > 0 else 0.0,
+            "verification_failure_rate": round((verification_failures / max(1, total_verif)) * 100, 1) if total_verif > 0 else 0.0,
+            "verification_success_rate": round((ops_verified / max(1, total_verif)) * 100, 1) if total_verif > 0 else 0.0,
+            "external_verification_success_rate": round((ops_verified / max(1, total_verif)) * 100, 1) if total_verif > 0 else 0.0,
+            "external_mean_latency_ms": avg_duration_ms,
+            "duplicate_prevention_rate": round((duplicates_prevented / max(1, total_ops + duplicates_prevented)) * 100, 1) if (total_ops + duplicates_prevented) > 0 else 0.0,
+        }

@@ -1101,6 +1101,161 @@ def handle_execute_seo_remediation(project: Project, args: Dict[str, Any]) -> Di
     }
 
 
+def handle_discover_external_capabilities(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Discover available external connections, providers, and capabilities for a project."""
+    from apps.seo.services.external_adapters.registry import get_external_adapter_registry
+    from apps.seo.models import ExternalConnection
+    registry = get_external_adapter_registry()
+    system_type = args.get("system_type")
+
+    connections = ExternalConnection.objects.filter(project=project)
+    if system_type:
+        connections = connections.filter(system_type=system_type)
+
+    conn_list = [c.clean_for_api() for c in connections]
+    declared_caps = registry.discover_capabilities(system_type)
+    return {
+        "project_id": project.id,
+        "connections": conn_list,
+        "available_capabilities": declared_caps
+    }
+
+
+def handle_inspect_cms_page(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Read page or metadata state from connected CMS."""
+    from apps.seo.services.external_adapters.service import ExternalIntegrationService
+    connection_id = args.get("connection_id")
+    target_url = args.get("target_url")
+    operation = args.get("operation", "read_metadata")
+    if not connection_id or not target_url:
+        raise ValueError("Parameters 'connection_id' and 'target_url' are required.")
+
+    service = ExternalIntegrationService()
+    record = service.execute_operation(
+        project=project,
+        connection_id=int(connection_id),
+        operation=operation,
+        target=target_url,
+        params={},
+        agent_name="seo_researcher"
+    )
+    return {
+        "operation_id": record.id,
+        "target": record.target,
+        "status": record.status,
+        "metadata": record.response_summary.get("metadata", {}),
+        "status_code": record.status_code,
+    }
+
+
+def handle_inspect_git_repository(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Inspect repository structure or configuration file from connected Git repository."""
+    from apps.seo.services.external_adapters.service import ExternalIntegrationService
+    connection_id = args.get("connection_id")
+    target_repo = args.get("target_repo", "")
+    file_path = args.get("file_path")
+    branch = args.get("branch")
+    if not connection_id:
+        raise ValueError("Parameter 'connection_id' is required.")
+
+    service = ExternalIntegrationService()
+    params = {}
+    if file_path:
+        params["file_path"] = file_path
+    if branch:
+        params["branch"] = branch
+
+    record = service.execute_operation(
+        project=project,
+        connection_id=int(connection_id),
+        operation="read_repository",
+        target=target_repo,
+        params=params,
+        agent_name="seo_researcher"
+    )
+    return {
+        "operation_id": record.id,
+        "target": record.target,
+        "status": record.status,
+        "response": record.response_summary,
+        "before_state": record.before_state,
+    }
+
+
+def handle_execute_external_operation(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Central ToolRegistry execution authority for external mutations (CMS, Git, Webhook).
+    Enforces tenant isolation, agent role allowlists, HITL governance, rate limiting, and verification.
+    """
+    from apps.seo.services.external_adapters.service import ExternalIntegrationService
+    connection_id = args.get("connection_id")
+    operation = args.get("operation")
+    target = args.get("target")
+    params = args.get("parameters") or {}
+    agent_name = args.get("agent_name", "seo_action_planner")
+    action_id = args.get("action_id")
+    correlation_id = args.get("correlation_id", "")
+    force_autonomous = args.get("force_autonomous", False)
+
+    if not connection_id or not operation or not target:
+        raise ValueError("Parameters 'connection_id', 'operation', and 'target' are required.")
+
+    action_obj = None
+    if action_id:
+        from apps.seo.models import SEOAction
+        action_obj = SEOAction.objects.filter(project=project, id=action_id).first()
+
+    service = ExternalIntegrationService()
+    record = service.execute_operation(
+        project=project,
+        connection_id=int(connection_id),
+        operation=operation,
+        target=target,
+        params=params,
+        agent_name=agent_name,
+        action=action_obj,
+        correlation_id=correlation_id,
+        force_autonomous=bool(force_autonomous)
+    )
+    return {
+        "operation_id": record.id,
+        "system_type": record.system_type,
+        "provider": record.provider,
+        "operation": record.operation,
+        "target": record.target,
+        "status": record.status,
+        "risk_level": record.risk_level,
+        "is_autonomous": record.is_autonomous,
+        "changed": record.changed,
+        "status_code": record.status_code,
+        "response_summary": record.response_summary,
+        "verification_status": record.verification_status,
+        "error_category": record.error_category,
+        "error_message": record.error_message,
+    }
+
+
+def handle_verify_external_operation(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve empirical verification outcome for an external operation."""
+    from apps.seo.models import ExternalOperationRecord
+    operation_id = args.get("operation_id")
+    if not operation_id:
+        raise ValueError("Parameter 'operation_id' is required.")
+
+    record = ExternalOperationRecord.objects.filter(project=project, id=operation_id).first()
+    if not record:
+        raise ValueError(f"ExternalOperationRecord #{operation_id} not found.")
+
+    return {
+        "operation_id": record.id,
+        "status": record.status,
+        "verification_status": record.verification_status,
+        "verification_data": record.verification_data,
+        "target": record.target,
+        "changed": record.changed,
+    }
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1650,6 +1805,102 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=True,
         handler=handle_execute_seo_remediation
+    ))
+
+    # Milestone 6.5: Multi-System Agent Integration Tools
+    # 1. discover_external_capabilities
+    registry.register(AgentToolDefinition(
+        name="discover_external_capabilities",
+        description="Discover available external connections, providers, and declared capabilities (CMS, Git, Webhook) for the current project.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "system_type": {"type": "string", "description": "Optional filter for system type ('cms', 'git', 'webhook')."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_discover_external_capabilities
+    ))
+
+    # 2. inspect_cms_page
+    registry.register(AgentToolDefinition(
+        name="inspect_cms_page",
+        description="Inspect and read live page or metadata state from an authorized connected CMS platform.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "integer", "description": "ID of the external CMS connection."},
+                "target_url": {"type": "string", "description": "Page URL to inspect."},
+                "operation": {"type": "string", "description": "Operation: 'read_metadata' or 'read_page'."}
+            },
+            "required": ["connection_id", "target_url"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_inspect_cms_page
+    ))
+
+    # 3. inspect_git_repository
+    registry.register(AgentToolDefinition(
+        name="inspect_git_repository",
+        description="Inspect repository structure, branches, or read configuration files from an authorized Git repository.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "integer", "description": "ID of the external Git connection."},
+                "target_repo": {"type": "string", "description": "Target repository identifier."},
+                "file_path": {"type": "string", "description": "Optional relative file path to inspect."},
+                "branch": {"type": "string", "description": "Optional branch name to inspect."}
+            },
+            "required": ["connection_id"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_inspect_git_repository
+    ))
+
+    # 4. execute_external_operation
+    registry.register(AgentToolDefinition(
+        name="execute_external_operation",
+        description="Execute an authorized mutating operation on an external system (CMS metadata update, Git commit/file change, Webhook delivery) under strict policy and verification boundaries.",
+        category=ToolCategory.HIGH_IMPACT,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "integer", "description": "ID of the external connection to mutate."},
+                "operation": {"type": "string", "description": "Operation name (e.g. 'update_metadata', 'write_file', 'create_branch', 'send_webhook')."},
+                "target": {"type": "string", "description": "Target URL, repo/branch, or webhook endpoint."},
+                "parameters": {"type": "object", "description": "Parameters dictionary for the external operation."},
+                "action_id": {"type": "integer", "description": "Optional associated SEOAction ID."},
+                "agent_name": {"type": "string", "description": "Calling specialized agent name."}
+            },
+            "required": ["connection_id", "operation", "target", "parameters"]
+        },
+        requires_approval=True,
+        is_mutating=True,
+        handler=handle_execute_external_operation
+    ))
+
+    # 5. verify_external_operation
+    registry.register(AgentToolDefinition(
+        name="verify_external_operation",
+        description="Retrieve empirical post-execution verification evidence for an external operation.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "operation_id": {"type": "integer", "description": "ID of the ExternalOperationRecord to verify."}
+            },
+            "required": ["operation_id"]
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_verify_external_operation
     ))
 
     return registry

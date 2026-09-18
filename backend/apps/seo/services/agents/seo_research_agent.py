@@ -36,7 +36,10 @@ class SEOResearchAgent(BaseSpecializedAgent):
         "get_adaptive_seo_strategy",
         "mcp__seo_local__check_url_status",
         "mcp__seo_local__get_page_metadata",
-        "mcp__seo_local__get_external_page_signals"
+        "mcp__seo_local__get_external_page_signals",
+        "discover_external_capabilities",
+        "inspect_cms_page",
+        "inspect_git_repository",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

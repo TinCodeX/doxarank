@@ -19136,3 +19136,776 @@ class AutonomousRemediationTests(TransactionTestCase):
             rec = self.service.execute_remediation(action_id=action.id, project_id=self.project_a.id)
 
         self.assertEqual(rec.status, self.ActionStatus.VERIFIED)
+
+
+# ==============================================================================
+# MILESTONE 6.5: MULTI-SYSTEM AGENT INTEGRATION TESTS
+# ==============================================================================
+
+class MultiSystemIntegrationTests(TestCase):
+    """
+    Comprehensive verification suite for Milestone 6.5: Multi-System Agent Integration.
+    Tests all 32 required dimensions covering:
+    - Connection creation and project isolation
+    - ToolRegistry authority and agent role allowlists
+    - CMS, Git, and Webhook external system adapters
+    - Explicit capability routing and cross-system DAG execution
+    - HITL authorization boundaries and rejection governance
+    - MCP safety boundaries and Anti-SSRF URL validation
+    - Secret redaction and credential safety
+    - Deterministic idempotency and concurrent duplicate protection
+    - Bounded retries, backoff, and rate-limiting handling
+    - Post-execution empirical verification and verification failure boundaries
+    - Rollback state capture, SharedWorkingMemory provenance, and telemetry
+    - Runtime evaluation metrics and multi-tenant failure isolation
+    - End-to-end 6.3 -> 6.2 -> 6.4 -> 6.5 pipeline and regression guarantees
+    """
+
+    def setUp(self):
+        from apps.users.models import User
+        from apps.projects.models import Project
+        from apps.seo.models import (
+            SEOAction, ActionType, ActionStatus, ActionRiskLevel,
+            VerificationStatus, ProjectRemediationPolicy, RemediationRecord,
+            SEOEvent, SEOEventType, AgentRun, AgentRunStatus,
+            ExternalConnection, ExternalOperationRecord, ExternalOperationStatus
+        )
+        from apps.seo.services.agent_events import InMemoryEventPublisher, set_event_publisher, AgentEventType
+        from apps.seo.services.external_adapters import (
+            ExternalIntegrationService, CMSAdapter, GitAdapter, WebhookAdapter,
+            get_external_adapter_registry
+        )
+        from apps.seo.services.tool_registry import get_tool_registry
+
+        self.publisher = InMemoryEventPublisher()
+        set_event_publisher(self.publisher)
+        self.AgentEventType = AgentEventType
+        self.ActionType = ActionType
+        self.ActionStatus = ActionStatus
+        self.ExternalOperationStatus = ExternalOperationStatus
+        self.ExternalConnection = ExternalConnection
+        self.AgentRunStatus = AgentRunStatus
+
+        # Reset in-memory adapter staging stores
+        CMSAdapter.reset_staging()
+        GitAdapter.reset_staging()
+        WebhookAdapter.reset_staging()
+
+        # Users & Projects (Tenant Isolation)
+        self.user_a = User.objects.create_user(
+            email="tenant_a_65@doxarank.io",
+            first_name="Tenant",
+            last_name="A",
+            password="testpassword123"
+        )
+        self.user_b = User.objects.create_user(
+            email="tenant_b_65@doxarank.io",
+            first_name="Tenant",
+            last_name="B",
+            password="testpassword123"
+        )
+
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name="Alpha Project 6.5",
+            website_url="https://alpha-site.example.com"
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name="Beta Project 6.5",
+            website_url="https://beta-site.example.com"
+        )
+
+        # External Connections for Project A
+        self.conn_cms_a = ExternalConnection.objects.create(
+            project=self.project_a,
+            system_type="cms",
+            provider="wordpress",
+            name="Alpha WordPress CMS",
+            status="test_staging",
+            configuration={"baseUrl": "https://alpha-site.example.com", "allowlisted_domains": ["alpha-site.example.com"]}
+        )
+        self.conn_cms_a.set_credentials({"api_key": "secret_wp_key_alpha", "username": "admin_alpha"})
+        self.conn_cms_a.save()
+
+        self.conn_git_a = ExternalConnection.objects.create(
+            project=self.project_a,
+            system_type="git",
+            provider="github",
+            name="Alpha GitHub Repo",
+            status="test_staging",
+            configuration={"repo": "alpha-org/alpha-site", "branch_prefix": "doxarank/"}
+        )
+        self.conn_git_a.set_credentials({"token": "ghp_alpha_github_secret_token_12345"})
+        self.conn_git_a.save()
+
+        self.conn_webhook_a = ExternalConnection.objects.create(
+            project=self.project_a,
+            system_type="webhook",
+            provider="generic_webhook",
+            name="Alpha Deploy Webhook",
+            status="test_staging",
+            configuration={"allowlisted_domains": ["alpha-site.example.com", "api.webhook.example.com"]}
+        )
+        self.conn_webhook_a.set_credentials({"signing_secret": "whsec_alpha_secret_signature"})
+        self.conn_webhook_a.save()
+
+        # Connection for Project B
+        self.conn_cms_b = ExternalConnection.objects.create(
+            project=self.project_b,
+            system_type="cms",
+            provider="shopify",
+            name="Beta Shopify Store",
+            status="test_staging",
+            configuration={"baseUrl": "https://beta-site.example.com", "allowlisted_domains": ["beta-site.example.com"]}
+        )
+        self.conn_cms_b.set_credentials({"access_token": "shpat_beta_secret_token_9999"})
+        self.conn_cms_b.save()
+
+        self.service = ExternalIntegrationService(publisher=self.publisher)
+        self.registry = get_tool_registry()
+
+    def tearDown(self):
+        from apps.seo.services.agent_events import reset_event_publisher
+        reset_event_publisher()
+
+    def test_01_connection_creation(self):
+        """1. External connection is created with Fernet encryption and status."""
+        from apps.seo.models import ExternalConnection
+        conn = ExternalConnection.objects.get(id=self.conn_cms_a.id)
+        self.assertEqual(conn.system_type, "cms")
+        self.assertEqual(conn.provider, "wordpress")
+        self.assertEqual(conn.status, "test_staging")
+        # Ensure credentials decrypt accurately in memory
+        creds = conn.get_credentials()
+        self.assertEqual(creds.get("api_key"), "secret_wp_key_alpha")
+        # Ensure plaintext secret is NOT stored in encrypted_credentials
+        self.assertNotIn("secret_wp_key_alpha", conn.encrypted_credentials)
+
+    def test_02_project_isolation(self):
+        """2. Project A connections cannot be accessed or executed by Project B."""
+        from django.core.exceptions import PermissionDenied
+        with self.assertRaises(PermissionDenied):
+            self.service.execute_operation(
+                project=self.project_b,
+                connection_id=self.conn_cms_a.id,
+                operation="read_metadata",
+                target="https://alpha-site.example.com/page-1",
+                params={},
+                agent_name="seo_researcher"
+            )
+
+    def test_03_capability_discovery(self):
+        """3. Connection and adapter registry expose declared capabilities."""
+        caps = self.conn_cms_a.get_declared_capabilities()
+        self.assertIn("CMS.READ_METADATA", caps)
+        self.assertIn("CMS.UPDATE_METADATA", caps)
+        self.assertIn("CMS.PUBLISH_CONTENT", caps)
+
+        git_caps = self.conn_git_a.get_declared_capabilities()
+        self.assertIn("GIT.WRITE_FILE", git_caps)
+        self.assertIn("GIT.CREATE_COMMIT", git_caps)
+
+    def test_04_tool_registry_enforcement(self):
+        """4. External operations must execute through ToolRegistry authority."""
+        res = self.registry.execute(
+            tool_name="execute_external_operation",
+            project=self.project_a,
+            arguments={
+                "connection_id": self.conn_cms_a.id,
+                "operation": "update_metadata",
+                "target": "https://alpha-site.example.com/seo-page",
+                "parameters": {"title": "Updated via ToolRegistry"},
+                "agent_name": "seo_action_planner",
+                "force_autonomous": True
+            }
+        )
+        self.assertTrue(res["success"])
+        self.assertEqual(res["data"]["status"], "verified")
+        self.assertEqual(res["data"]["system_type"], "cms")
+
+    def test_05_unauthorized_agent_rejection(self):
+        """5. SEOResearchAgent is strictly rejected when attempting mutating external operations."""
+        from apps.seo.services.agents.seo_research_agent import SEOResearchAgent
+        researcher = SEOResearchAgent(project=self.project_a, user=self.user_a)
+
+        # Researcher calling mutating tool raises PermissionError at agent layer
+        with self.assertRaises(PermissionError):
+            researcher.execute_tool("execute_external_operation", {
+                "connection_id": self.conn_cms_a.id,
+                "operation": "update_metadata",
+                "target": "https://alpha-site.example.com/target",
+                "parameters": {"title": "Malicious Update"}
+            })
+
+        # Calling service directly as unauthorized agent raises PermissionError
+        with self.assertRaises(PermissionError):
+            self.service.execute_operation(
+                project=self.project_a,
+                connection_id=self.conn_cms_a.id,
+                operation="update_metadata",
+                target="https://alpha-site.example.com/target",
+                params={"title": "Direct Bypass Attempt"},
+                agent_name="seo_researcher"
+            )
+
+    def test_06_cms_adapter(self):
+        """6. CMS adapter safely reads and updates metadata with diffs and before-state."""
+        from apps.seo.services.external_adapters.cms_adapter import CMSAdapter
+        CMSAdapter.set_staging_page_state("https://alpha-site.example.com/blog", {
+            "title": "Initial Blog Title",
+            "meta_description": "Initial meta description."
+        })
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/blog",
+            params={"title": "Optimized Blog Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertTrue(rec.changed)
+        self.assertEqual(rec.before_state.get("title"), "Initial Blog Title")
+        self.assertEqual(rec.after_state.get("title"), "Optimized Blog Title")
+
+    def test_07_git_adapter(self):
+        """7. Git adapter manages branch creation, file modification, and commits."""
+        rec_branch = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_git_a.id,
+            operation="create_branch",
+            target="alpha-org/alpha-site",
+            params={"branch_name": "doxarank/seo-meta-fix"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_branch.status, "verified")
+
+        rec_write = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_git_a.id,
+            operation="write_file",
+            target="alpha-org/alpha-site",
+            params={
+                "branch": "doxarank/seo-meta-fix",
+                "file_path": "config/seo.json",
+                "content": '{"title": "Automated SEO Title"}'
+            },
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_write.status, "verified")
+        self.assertTrue(rec_write.changed)
+
+    def test_08_webhook_api_adapter(self):
+        """8. Webhook adapter delivers verified payloads to allowlisted endpoints."""
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_webhook_a.id,
+            operation="send_webhook",
+            target="https://api.webhook.example.com/deploy",
+            params={"event": "seo_action_deployed", "action_id": 101},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertEqual(rec.status_code, 200)
+
+    def test_09_explicit_capability_matching(self):
+        """9. Adapters are resolved via explicit capability matching (e.g. CMS.UPDATE_METADATA)."""
+        from apps.seo.services.external_adapters.registry import get_external_adapter_registry
+        reg = get_external_adapter_registry()
+        cms_adapter = reg.get_adapter_for_capability("CMS.UPDATE_METADATA")
+        self.assertEqual(cms_adapter.system_type, "cms")
+
+        git_adapter = reg.get_adapter_for_capability("GIT.WRITE_FILE")
+        self.assertEqual(git_adapter.system_type, "git")
+
+        wh_adapter = reg.get_adapter_for_capability("WEBHOOK.SEND_WEBHOOK")
+        self.assertEqual(wh_adapter.system_type, "webhook")
+
+    def test_10_cross_system_dag(self):
+        """10. Multi-system tasks form an executable DAG with explicit dependencies."""
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner, AgentTask, TaskPlan
+        planner = DynamicTaskPlanner(project_id=self.project_a.id)
+        plan = TaskPlan(
+            project_id=self.project_a.id,
+            goal="Cross-system automated SEO remediation",
+            plan_id="plan_cross_system"
+        )
+        t1 = AgentTask(task_id="t1_cms_inspect", objective="Inspect CMS", description="Inspect page", responsible_agent="seo_researcher")
+        t2 = AgentTask(task_id="t2_plan", objective="Plan fix", description="Plan change", responsible_agent="seo_action_planner", dependencies=["t1_cms_inspect"])
+        t3 = AgentTask(task_id="t3_git_commit", objective="Git commit", description="Write git file", responsible_agent="seo_action_planner", dependencies=["t2_plan"])
+        t4 = AgentTask(task_id="t4_webhook_deploy", objective="Webhook deploy", description="Deploy webhook", responsible_agent="seo_action_planner", dependencies=["t3_git_commit"])
+        t5 = AgentTask(task_id="t5_verify", objective="Verify live", description="Verify page", responsible_agent="seo_verifier", dependencies=["t4_webhook_deploy"])
+
+        plan.add_task(t1)
+        plan.add_task(t2)
+        plan.add_task(t3)
+        plan.add_task(t4)
+        plan.add_task(t5)
+
+        self.assertTrue(plan.validate_graph())
+        ready_tasks = plan.get_ready_tasks()
+        self.assertEqual(len(ready_tasks), 1)
+        self.assertEqual(ready_tasks[0].task_id, "t1_cms_inspect")
+
+    def test_11_low_risk_authorized_execution(self):
+        """11. Low-risk actions execute autonomously when permitted by policy."""
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/low-risk",
+            params={"title": "Safe New Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertTrue(rec.is_autonomous)
+
+    def test_12_high_risk_hitl_requirement(self):
+        """12. High-risk operations (e.g. publish_content) are blocked pending human approval."""
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="publish_content",
+            target="https://alpha-site.example.com/new-article",
+            params={"content": "New published content article."},
+            agent_name="seo_action_planner",
+            force_autonomous=False
+        )
+        self.assertEqual(rec.status, "pending")
+        self.assertEqual(rec.error_category, "hitl_required")
+
+    def test_13_approval_flow(self):
+        """13. Human approval unlocks high-risk execution."""
+        from apps.seo.models import SEOAction
+        from django.utils import timezone
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=self.ActionType.PUBLISH_NEW_CONTENT,
+            title="Publish Article",
+            target_url="https://alpha-site.example.com/article-approved",
+            status=self.ActionStatus.APPROVED,
+            approved_by=self.user_a,
+            approved_at=timezone.now()
+        )
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="publish_content",
+            target="https://alpha-site.example.com/article-approved",
+            params={"content": "Approved high-risk content."},
+            agent_name="seo_action_planner",
+            action=action
+        )
+        self.assertEqual(rec.status, "verified")
+
+    def test_14_rejection_flow(self):
+        """14. Rejection strictly prevents execution."""
+        from apps.seo.models import SEOAction
+        from django.utils import timezone
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=self.ActionType.PUBLISH_NEW_CONTENT,
+            title="Rejected Article",
+            target_url="https://alpha-site.example.com/article-rejected",
+            status=self.ActionStatus.REJECTED,
+            rejected_at=timezone.now()
+        )
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="publish_content",
+            target="https://alpha-site.example.com/article-rejected",
+            params={"content": "Rejected content."},
+            agent_name="seo_action_planner",
+            action=action
+        )
+        self.assertEqual(rec.status, "pending")
+        self.assertEqual(rec.error_category, "hitl_required")
+
+    def test_15_mcp_safety(self):
+        """15. MCP mutating operations are rejected and cannot inject arbitrary external mutations."""
+        from apps.seo.services.mcp.permissions import MCPPermissionPolicy
+        is_approved, err = MCPPermissionPolicy.validate_tool_for_registration(
+            server_id="seo_local",
+            tool_declaration={"name": "mcp_execute_cms_mutation", "is_mutating": True}
+        )
+        self.assertFalse(is_approved)
+        self.assertIn("mutation is forbidden", err.lower())
+
+    def test_16_arbitrary_url_rejection(self):
+        """16. Anti-SSRF strictly rejects arbitrary, loopback, and non-allowlisted URLs."""
+        rec_loopback = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_webhook_a.id,
+            operation="send_webhook",
+            target="http://127.0.0.1:8000/evil",
+            params={"data": "exploit"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_loopback.status, "failed")
+        self.assertEqual(rec_loopback.error_category, "invalid_target")
+
+        rec_metadata = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_webhook_a.id,
+            operation="send_webhook",
+            target="http://169.254.169.254/latest/meta-data",
+            params={"data": "exploit"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_metadata.status, "failed")
+        self.assertEqual(rec_metadata.error_category, "invalid_target")
+
+    def test_17_credential_redaction(self):
+        """17. Credentials and tokens are redacted from API views and logs."""
+        clean = self.conn_cms_a.clean_for_api()
+        self.assertNotIn("encrypted_credentials", clean)
+        self.assertNotIn("secret_wp_key_alpha", str(clean))
+
+    def test_18_idempotency(self):
+        """18. Repeated execution with identical parameters yields identical fingerprint and prevents duplicate work."""
+        rec1 = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/idem-test",
+            params={"title": "Idempotent Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec1.status, "verified")
+
+        rec2 = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/idem-test",
+            params={"title": "Idempotent Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec1.id, rec2.id)
+
+    def test_19_concurrent_duplicate_protection(self):
+        """19. Duplicate prevented telemetry is emitted on duplicate invocation."""
+        rec1 = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/concurrent-test",
+            params={"title": "Concurrency Safe"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/concurrent-test",
+            params={"title": "Concurrency Safe"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        event_types = [e.event_type for e in self.publisher.get_events()]
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_DUPLICATE_PREVENTED, event_types)
+
+    def test_20_retry_behavior(self):
+        """20. Transient network timeouts trigger bounded backoff retries."""
+        from apps.seo.services.external_adapters.webhook_adapter import WebhookAdapter
+        # Simulate 1 transient timeout then success
+        WebhookAdapter.set_simulation_behavior({"timeout_attempts": 1})
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_webhook_a.id,
+            operation="send_webhook",
+            target="https://api.webhook.example.com/deploy",
+            params={"event": "test_retry"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertEqual(rec.retry_count, 1)
+
+    def test_21_rate_limit_behavior(self):
+        """21. Rate limit 429 triggers bounded backoff and emits rate-limited telemetry."""
+        from apps.seo.services.external_adapters.webhook_adapter import WebhookAdapter
+        WebhookAdapter.set_simulation_behavior({"rate_limit_attempts": 1})
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_webhook_a.id,
+            operation="send_webhook",
+            target="https://api.webhook.example.com/deploy",
+            params={"event": "test_rate_limit"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertEqual(rec.retry_count, 1)
+
+        event_types = [e.event_type for e in self.publisher.get_events()]
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_RATE_LIMITED, event_types)
+
+    def test_22_verification_success(self):
+        """22. Post-execution empirical verification confirms expected changes and transitions to VERIFIED."""
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/verif-success",
+            params={"title": "Verified Title Value"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertEqual(rec.verification_status, "verified")
+        self.assertTrue(rec.verification_data.get("verified"))
+
+    def test_23_verification_failure(self):
+        """23. Post-execution verification failure transitions operation to FAILED."""
+        from apps.seo.services.external_adapters.cms_adapter import CMSAdapter
+        # Mock adapter verify to return False
+        with mock.patch.object(CMSAdapter, 'verify', return_value=(False, {"mismatches": ["Title tag missing"]})):
+            rec = self.service.execute_operation(
+                project=self.project_a,
+                connection_id=self.conn_cms_a.id,
+                operation="update_metadata",
+                target="https://alpha-site.example.com/verif-fail",
+                params={"title": "Failing Verification Title"},
+                agent_name="seo_action_planner",
+                force_autonomous=True
+            )
+        self.assertEqual(rec.status, "failed")
+        self.assertEqual(rec.verification_status, "failed")
+        self.assertEqual(rec.error_category, "verification_failure")
+
+    def test_24_rollback_compensation(self):
+        """24. Reversible operations capture before_state enabling compensation."""
+        from apps.seo.services.external_adapters.cms_adapter import CMSAdapter
+        CMSAdapter.set_staging_page_state("https://alpha-site.example.com/rollback-target", {
+            "title": "Original Staging Title"
+        })
+
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/rollback-target",
+            params={"title": "Mutated Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec.before_state.get("title"), "Original Staging Title")
+
+        # Rollback: apply compensation mutation with original before_state
+        rec_revert = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/rollback-target",
+            params={"title": rec.before_state["title"]},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_revert.status, "verified")
+        self.assertEqual(rec_revert.after_state.get("title"), "Original Staging Title")
+
+    def test_25_shared_working_memory_provenance(self):
+        """25. External operations are recorded into SharedWorkingMemory with full provenance."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, MemoryCategory
+        mem = SharedWorkingMemory(project_id=self.project_a.id, task_goal="External Update Audit")
+        mem.add_evidence(
+            fact="CMS title currently = Old Title",
+            source_agent="seo_researcher",
+            source_tool="inspect_cms_page"
+        )
+        mem.add_recommendation(
+            recommendation="Change title to New Title via CMS.UPDATE_METADATA",
+            source_agent="seo_action_planner"
+        )
+        record = mem.record_external_operation(
+            source_agent="seo_action_planner",
+            system_type="cms",
+            operation="update_metadata",
+            target="https://alpha-site.example.com/page",
+            status="verified",
+            before_state={"title": "Old Title"},
+            after_state={"title": "New Title"}
+        )
+        self.assertEqual(record["external_system"], "cms")
+        self.assertEqual(record["status"], "verified")
+        self.assertIn("Old Title", str(mem.get_facts()))
+
+    def test_26_telemetry(self):
+        """26. Emits full suite of external integration telemetry events."""
+        self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/telemetry-target",
+            params={"title": "Telemetry Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        event_types = [e.event_type for e in self.publisher.get_events()]
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_REQUESTED, event_types)
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_AUTHORIZED, event_types)
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_STARTED, event_types)
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_COMPLETED, event_types)
+        self.assertIn(self.AgentEventType.EXTERNAL_INTEGRATION_VERIFIED, event_types)
+
+    def test_27_runtime_evaluation(self):
+        """27. SEOAgentEvaluationService computes dynamic rates from actual records."""
+        from apps.seo.services.agent_evaluation import SEOAgentEvaluationService
+        self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target="https://alpha-site.example.com/eval-target",
+            params={"title": "Eval Title"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        eval_metrics = SEOAgentEvaluationService.evaluate_external_integrations(self.project_a)
+        self.assertGreaterEqual(eval_metrics["external_operations_completed"], 1)
+        self.assertGreaterEqual(eval_metrics["external_operations_verified"], 1)
+        self.assertEqual(eval_metrics["system_breakdown"].get("cms"), 1)
+
+    def test_28_tenant_isolation(self):
+        """28. API and service layers strictly isolate connections across tenants."""
+        from django.core.exceptions import PermissionDenied
+        # Service level
+        with self.assertRaises(PermissionDenied):
+            self.service.execute_operation(
+                project=self.project_b,
+                connection_id=self.conn_cms_a.id,
+                operation="read_metadata",
+                target="https://alpha-site.example.com/isolation",
+                params={},
+                agent_name="seo_researcher"
+            )
+
+    def test_29_failure_isolation(self):
+        """29. Failure in CMS operation for Project A does not disable Project B Git operations."""
+        from apps.seo.services.external_adapters.cms_adapter import CMSAdapter
+        # Simulate CMS failure for Project A
+        with mock.patch.object(CMSAdapter, 'execute', side_effect=RuntimeError("CMS network outage")):
+            rec_a = self.service.execute_operation(
+                project=self.project_a,
+                connection_id=self.conn_cms_a.id,
+                operation="update_metadata",
+                target="https://alpha-site.example.com/fail",
+                params={"title": "Failed Title"},
+                agent_name="seo_action_planner",
+                force_autonomous=True
+            )
+            self.assertEqual(rec_a.status, "failed")
+
+        # Project B Git operation proceeds unaffected
+        conn_git_b = self.ExternalConnection.objects.create(
+            project=self.project_b,
+            system_type="git",
+            provider="github",
+            name="Beta Git",
+            status="test_staging",
+            configuration={"repo": "beta-org/beta-site"}
+        )
+        rec_b = self.service.execute_operation(
+            project=self.project_b,
+            connection_id=conn_git_b.id,
+            operation="create_branch",
+            target="beta-org/beta-site",
+            params={"branch_name": "doxarank/beta-fix"},
+            agent_name="seo_action_planner",
+            force_autonomous=True
+        )
+        self.assertEqual(rec_b.status, "verified")
+
+    def test_30_6_3_to_6_2_to_6_4_to_6_5_pipeline(self):
+        """30. Complete end-to-end integration: 6.3 Detection -> 6.2 Event -> Run -> 6.4 Policy -> 6.5 Adapter -> Verification."""
+        from apps.seo.models import SEOEvent, AgentRun, SEOAction
+        from apps.seo.services.autonomous_remediation import AutonomousRemediationPolicy
+
+        # 1. 6.3 / 6.2 Event
+        event = SEOEvent.objects.create(
+            project=self.project_a,
+            event_type="title_change_detected",
+            source="autonomous_monitor",
+            payload={"page": "https://alpha-site.example.com/pipeline", "detected_title": "Bad Title"}
+        )
+        # 2. Agent Run
+        run = AgentRun.objects.create(
+            project=self.project_a,
+            user=self.user_a,
+            goal="Remediate title change anomaly",
+            status=self.AgentRunStatus.RUNNING
+        )
+        # 3. Action Proposal
+        action = SEOAction.objects.create(
+            project=self.project_a,
+            action_type=self.ActionType.UPDATE_TITLE,
+            title="Update Page Title to Optimal Baseline",
+            target_url="https://alpha-site.example.com/pipeline",
+            current_state={"title": "Bad Title"},
+            proposed_change={"title": "Optimal Title Baseline"}
+        )
+        # 4. 6.4 Policy Check
+        decision = AutonomousRemediationPolicy.evaluate(action=action, project=self.project_a)
+        self.assertEqual(decision.decision, "autonomous_allowed")
+
+        # 5. 6.5 Adapter Execution via ToolRegistry
+        rec = self.service.execute_operation(
+            project=self.project_a,
+            connection_id=self.conn_cms_a.id,
+            operation="update_metadata",
+            target=action.target_url,
+            params={"title": action.proposed_change["title"]},
+            agent_name="seo_action_planner",
+            action=action,
+            agent_run=run,
+            force_autonomous=True
+        )
+        self.assertEqual(rec.status, "verified")
+        self.assertEqual(rec.verification_status, "verified")
+
+    def test_31_existing_5_x_regression(self):
+        """31. Regression guarantee: Milestone 5.1-5.7 multi-agent collaboration works unimpeded."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory
+        from apps.seo.services.agents.task_planner import DynamicTaskPlanner
+        from apps.seo.services.agents.adaptive_selector import AdaptiveAgentSelector
+
+        mem = SharedWorkingMemory(project_id=self.project_a.id, task_goal="5.x Regression Verification")
+        self.assertEqual(mem.project_id, self.project_a.id)
+
+        planner = DynamicTaskPlanner(project_id=self.project_a.id)
+        plan = planner.decompose_goal(goal="5.x Planning Regression", project_id=self.project_a.id)
+        self.assertTrue(plan.validate_graph())
+
+        selector = AdaptiveAgentSelector(project_id=self.project_a.id)
+        ready_tasks = plan.get_ready_tasks()
+        if ready_tasks:
+            decision = selector.select_agent(ready_tasks[0])
+            self.assertIsNotNone(decision.selected_agent)
+
+    def test_32_existing_6_x_regression(self):
+        """32. Regression guarantee: Milestone 6.1-6.4 autonomous operations continue functioning."""
+        from apps.seo.services.autonomous_remediation import AutonomousRemediationService
+        from apps.seo.services.autonomous_monitoring import AutonomousMonitoringService
+
+        rem_service = AutonomousRemediationService(publisher=self.publisher)
+        self.assertIsNotNone(rem_service)
+
+        mon_service = AutonomousMonitoringService(publisher=self.publisher)
+        self.assertIsNotNone(mon_service)

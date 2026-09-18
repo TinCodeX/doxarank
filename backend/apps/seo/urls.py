@@ -8,7 +8,7 @@ from .views import (
     SEOContentBriefViewSet, SEOContentDraftViewSet,
     SEOActionViewSet, SEOActionPlanViewSet, AgentRunViewSet,
     ContinuousOperationViewSet, SEOEventViewSet, AutonomousMonitoringViewSet,
-    AutonomousRemediationViewSet,
+    AutonomousRemediationViewSet, ExternalIntegrationViewSet,
     GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView,
     SEOAdaptiveStrategyView, SEOAgentOrchestrationView,
     MCPServersView, MCPToolsView, AgentEvaluationView,
@@ -17,7 +17,8 @@ from .views import (
     SEOCollaborationTasksView, SEOCollaborationTasksSummaryView,
     SEOCollaborationTasksGraphView,
     SEOAgentLearningPerformanceView, SEOCollaborationLearningView,
-    SEOReasoningCaseDetailView, SEOCollaborationReasoningView
+    SEOReasoningCaseDetailView, SEOCollaborationReasoningView,
+    SEOCollaborationIntegrationsView
 )
 
 app_name = 'seo'
@@ -40,6 +41,7 @@ router.register('ai/operations', ContinuousOperationViewSet, basename='continuou
 router.register('ai/events', SEOEventViewSet, basename='seo-ai-events')
 router.register('ai/monitoring', AutonomousMonitoringViewSet, basename='ai-monitoring')
 router.register('ai/remediation', AutonomousRemediationViewSet, basename='ai-remediation')
+router.register('ai/integrations', ExternalIntegrationViewSet, basename='external-integrations')
 
 
 urlpatterns = [
@@ -56,6 +58,7 @@ urlpatterns = [
     path('ai/orchestrate/<str:run_id>/tasks/', SEOCollaborationTasksView.as_view(), name='seo-orchestrate-tasks'),
     path('ai/orchestrate/<str:run_id>/learning/', SEOCollaborationLearningView.as_view(), name='seo-orchestrate-learning'),
     path('ai/orchestrate/<str:run_id>/reasoning/', SEOCollaborationReasoningView.as_view(), name='seo-orchestrate-reasoning'),
+    path('ai/orchestrate/<str:run_id>/integrations/', SEOCollaborationIntegrationsView.as_view(), name='seo-orchestrate-integrations'),
     path('ai/reasoning/<str:case_id>/', SEOReasoningCaseDetailView.as_view(), name='seo-reasoning-case-detail'),
     path('ai/learning/performance/', SEOAgentLearningPerformanceView.as_view(), name='seo-agent-learning-performance'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),

@@ -18,6 +18,7 @@ import { ContinuousOperationsPanel } from '../components/ContinuousOperationsPan
 import { EventActivityPanel } from '../components/EventActivityPanel';
 import { MonitoringActivityPanel } from '../components/MonitoringActivityPanel';
 import { RemediationActivityPanel } from '../components/RemediationActivityPanel';
+import { ExternalIntegrationsPanel } from '../components/ExternalIntegrationsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -762,6 +763,13 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 6.9: AUTONOMOUS REMEDIATION (Milestone 6.4) */}
         {selectedProject && (
           <RemediationActivityPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 6.10: MULTI-SYSTEM AGENT INTEGRATION (Milestone 6.5) */}
+        {selectedProject && (
+          <ExternalIntegrationsPanel
             project={selectedProject}
           />
         )}

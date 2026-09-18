@@ -29,7 +29,11 @@ class SEOVerificationAgent(BaseSpecializedAgent):
     allowed_tools: List[str] = [
         "verify_seo_action",
         "verify_action_plan",
-        "get_action_outcomes"
+        "get_action_outcomes",
+        "verify_external_operation",
+        "inspect_cms_page",
+        "inspect_git_repository",
+        "discover_external_capabilities",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

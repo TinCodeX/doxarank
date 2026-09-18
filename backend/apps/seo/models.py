@@ -2634,3 +2634,315 @@ class RemediationRecord(models.Model):
 
     def __str__(self):
         return f"Remediation #{self.id} for Action #{self.action_id} [{self.status}] ({self.project.name})"
+
+
+# ==============================================================================
+# MILESTONE 6.5: MULTI-SYSTEM AGENT INTEGRATION MODELS
+# ==============================================================================
+
+class ExternalSystemType(models.TextChoices):
+    CMS = 'cms', 'CMS'
+    GIT = 'git', 'Git'
+    WEBHOOK = 'webhook', 'Webhook/API'
+
+
+class ExternalConnectionStatus(models.TextChoices):
+    ACTIVE = 'active', 'Active'
+    INACTIVE = 'inactive', 'Inactive'
+    ERROR = 'error', 'Error'
+    TEST_STAGING = 'test_staging', 'Test/Staging'
+
+
+class ExternalOperationStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    AUTHORIZED = 'authorized', 'Authorized'
+    EXECUTING = 'executing', 'Executing'
+    COMPLETED = 'completed', 'Completed'
+    VERIFIED = 'verified', 'Verified'
+    FAILED = 'failed', 'Failed'
+    RATE_LIMITED = 'rate_limited', 'Rate Limited'
+    REJECTED = 'rejected', 'Rejected'
+
+
+class ExternalConnection(models.Model):
+    """
+    Represents an authorized external system integration (CMS, Git, Webhook)
+    scoped strictly to a Project. Never stores plaintext credentials or exposes secrets.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='external_connections',
+        help_text='The project this external connection belongs to.'
+    )
+    system_type = models.CharField(
+        max_length=30,
+        choices=ExternalSystemType.choices,
+        db_index=True,
+        help_text='External system category: cms, git, or webhook.'
+    )
+    provider = models.CharField(
+        max_length=60,
+        help_text='Provider identifier (e.g. wordpress, shopify, github, gitlab, generic_webhook).'
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text='Human-readable name for this external connection.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ExternalConnectionStatus.choices,
+        default=ExternalConnectionStatus.TEST_STAGING,
+        db_index=True,
+        help_text='Connection operational status.'
+    )
+    configuration = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Non-secret configuration: baseUrl, allowlisted_domains, branch_prefix, repo name, etc.'
+    )
+    encrypted_credentials = models.TextField(
+        blank=True,
+        default='',
+        help_text='AES-Fernet encrypted JSON string storing tokens/credentials.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_external_connections'
+        verbose_name = 'external connection'
+        verbose_name_plural = 'external connections'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', 'system_type'], name='seo_extconn_proj_sys_idx'),
+            models.Index(fields=['project', 'status'], name='seo_extconn_proj_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_system_type_display()} - {self.provider}) [#{self.project_id}]"
+
+    def set_credentials(self, creds: Dict[str, Any]) -> None:
+        """Securely encrypt dictionary of credentials using Fernet cipher."""
+        import json
+        from apps.seo.services.encryption import encrypt_token
+        raw = json.dumps(creds)
+        self.encrypted_credentials = encrypt_token(raw) or ''
+
+    def get_credentials(self) -> Dict[str, Any]:
+        """Decrypt credentials in memory only. Never log or return in API."""
+        import json
+        from apps.seo.services.encryption import decrypt_token
+        if not self.encrypted_credentials:
+            return {}
+        try:
+            raw = decrypt_token(self.encrypted_credentials)
+            return json.loads(raw) if raw else {}
+        except Exception:
+            return {}
+
+    def get_declared_capabilities(self) -> List[str]:
+        """Discover declared capabilities for this connection's system type."""
+        try:
+            from apps.seo.services.external_adapters.registry import get_external_adapter_registry
+            registry = get_external_adapter_registry()
+            adapter = registry.get_adapter(self.system_type, self.provider)
+            return adapter.get_capabilities()
+        except Exception:
+            return []
+
+    def clean_for_api(self) -> Dict[str, Any]:
+        """Return safe, non-sensitive dictionary strictly excluding credentials."""
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "system_type": self.system_type,
+            "provider": self.provider,
+            "name": self.name,
+            "status": self.status,
+            "configuration": self.configuration or {},
+            "capabilities": self.get_declared_capabilities(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ExternalOperationRecord(models.Model):
+    """
+    Persistent audit and execution record for an external system operation (Milestone 6.5).
+    Guarantees deterministic idempotency, verification tracking, before/after states for rollback,
+    and failure categorization.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='external_operations',
+        help_text='The project this external operation belongs to.'
+    )
+    connection = models.ForeignKey(
+        ExternalConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='operations',
+        help_text='The external connection used for this operation.'
+    )
+    action = models.ForeignKey(
+        SEOAction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='external_operations',
+        help_text='Optional SEOAction associated with this external operation.'
+    )
+    remediation_record = models.ForeignKey(
+        RemediationRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='external_operations',
+        help_text='Optional RemediationRecord associated with this external operation.'
+    )
+    agent_run = models.ForeignKey(
+        AgentRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='external_operations',
+        help_text='The agent run executing or orchestrating this external operation.'
+    )
+    task_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Correlation ID with AgentTask in DynamicTaskPlanner DAG.'
+    )
+    correlation_id = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='Unique request/trace correlation ID across agents and adapters.'
+    )
+    idempotency_key = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='SHA-256 fingerprint guaranteeing idempotency across workers and retries.'
+    )
+    system_type = models.CharField(
+        max_length=30,
+        db_index=True,
+        help_text='External system type (cms, git, webhook).'
+    )
+    provider = models.CharField(
+        max_length=60,
+        help_text='Provider identifier (wordpress, shopify, github, generic_webhook, etc.).'
+    )
+    operation = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text='Specific operation (e.g. read_metadata, update_metadata, create_branch, write_file, send_webhook).'
+    )
+    required_capability = models.CharField(
+        max_length=100,
+        help_text='Explicit capability required (e.g. CMS.UPDATE_METADATA, GIT.WRITE_FILE).'
+    )
+    target = models.CharField(
+        max_length=500,
+        help_text='Target URL, repo/branch, or endpoint.'
+    )
+    status = models.CharField(
+        max_length=40,
+        choices=ExternalOperationStatus.choices,
+        default=ExternalOperationStatus.PENDING,
+        db_index=True,
+        help_text='Lifecycle status of the external operation.'
+    )
+    risk_level = models.CharField(
+        max_length=20,
+        default='low',
+        db_index=True,
+        help_text='Assessed risk level (low, medium, high, critical).'
+    )
+    is_autonomous = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Whether operation was executed autonomously under policy.'
+    )
+    request_summary = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Sanitized summary of request parameters (secrets stripped).'
+    )
+    before_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Captured pre-operation state for verification and rollback.'
+    )
+    after_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Resulting state captured post-operation.'
+    )
+    response_summary = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Sanitized response metadata, status code, and duration.'
+    )
+    status_code = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='HTTP or adapter execution status code.'
+    )
+    changed = models.BooleanField(
+        default=False,
+        help_text='Whether external system state was actually modified.'
+    )
+    error_category = models.CharField(
+        max_length=60,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Categorized error code on failure.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Sanitized error description.'
+    )
+    retry_count = models.IntegerField(
+        default=0,
+        help_text='Number of bounded retries attempted.'
+    )
+    duration_ms = models.IntegerField(
+        default=0,
+        help_text='Operation duration in milliseconds.'
+    )
+    verification_status = models.CharField(
+        max_length=30,
+        default='pending',
+        db_index=True,
+        help_text='Post-operation empirical verification status: pending, verified, failed.'
+    )
+    verification_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Empirical verification evidence collected post-execution.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_external_operations'
+        verbose_name = 'external operation'
+        verbose_name_plural = 'external operations'
+        ordering = ['-created_at']
+        unique_together = [('project', 'idempotency_key')]
+        indexes = [
+            models.Index(fields=['project', 'system_type'], name='seo_extop_proj_sys_idx'),
+            models.Index(fields=['project', 'status'], name='seo_extop_proj_stat_idx'),
+            models.Index(fields=['correlation_id'], name='seo_extop_corr_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_extop_proj_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"ExternalOp #{self.id} [{self.system_type}:{self.operation}] on {self.target} ({self.status})"
