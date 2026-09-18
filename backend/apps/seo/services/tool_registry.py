@@ -1256,6 +1256,108 @@ def handle_verify_external_operation(project: Project, args: Dict[str, Any]) -> 
     }
 
 
+# Milestone 6.6: Strategy Tool Handlers
+def handle_get_long_term_strategy(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Inspect active strategy, objectives, and initiatives for the project."""
+    from apps.seo.models import LongTermSEOStrategy, StrategicObjective, StrategyStatus
+    strategy = LongTermSEOStrategy.objects.filter(project=project, status=StrategyStatus.ACTIVE).order_by("-version").first()
+    objectives = StrategicObjective.objects.filter(project=project)
+
+    if not strategy:
+        return {
+            "has_active_strategy": False,
+            "project_id": project.id,
+            "objectives": [{"id": o.id, "name": o.name, "metric": o.metric, "progress": o.progress, "status": o.status} for o in objectives],
+            "initiatives": [],
+        }
+
+    return {
+        "has_active_strategy": True,
+        "strategy_id": strategy.id,
+        "version": strategy.version,
+        "title": strategy.title,
+        "status": strategy.status,
+        "health": strategy.health,
+        "rationale": strategy.rationale,
+        "objectives": [
+            {
+                "id": o.id,
+                "name": o.name,
+                "metric": o.metric,
+                "baseline": o.baseline,
+                "target": o.target,
+                "target_direction": o.target_direction,
+                "current_value": o.current_value,
+                "progress": o.progress,
+                "status": o.status,
+                "priority": o.priority,
+                "horizon": o.horizon,
+            }
+            for o in objectives
+        ],
+        "initiatives": [
+            {
+                "id": i.id,
+                "name": i.name,
+                "priority": i.priority,
+                "status": i.status,
+                "progress": i.progress,
+                "risk_level": i.risk_level,
+                "horizon": i.horizon,
+                "objective_id": i.objective_id,
+            }
+            for i in strategy.initiatives.all()
+        ],
+        "assumptions": strategy.assumptions,
+        "risks": strategy.risks,
+        "expected_outcomes": strategy.expected_outcomes,
+    }
+
+
+def handle_propose_strategy_review(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Trigger an explainable strategy review cycle for the project."""
+    from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+    service = LongTermSEOStrategyService(project)
+    trigger_source = args.get("trigger_source", "agent_initiated")
+    review, decision, proposed = service.conduct_strategy_review(project=project, trigger_source=trigger_source)
+    return {
+        "review_id": review.id,
+        "cycle": review.review_cycle,
+        "decision": decision,
+        "approval_status": review.approval_status,
+        "strategy_health": review.evaluation_summary.get("strategy_health", "on_track"),
+        "detected_risks": review.evaluation_summary.get("detected_risks", []),
+        "proposed_version": proposed.version if proposed else None,
+    }
+
+
+def handle_propose_strategy_adjustment(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Propose an adjustment to an existing strategy version or objective under HITL boundary."""
+    from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+    service = LongTermSEOStrategyService(project)
+    rationale = args.get("adjustment_rationale", "Strategic alignment adjustment proposed by agent.")
+    review, decision, proposed = service.conduct_strategy_review(
+        project=project,
+        trigger_source="agent_adjustment_proposal",
+        evidence_override={"agent_rationale": rationale}
+    )
+    return {
+        "review_id": review.id,
+        "decision": decision,
+        "approval_status": review.approval_status,
+        "requires_hitl_approval": review.approval_status == "pending_approval",
+        "proposed_version": proposed.version if proposed else None,
+        "message": "Strategy adjustment proposal submitted for Human-In-The-Loop review." if review.approval_status == "pending_approval" else "Strategy review evaluated."
+    }
+
+
+def handle_get_strategy_metrics(project: Project, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve dynamic evaluation metrics for long-term SEO strategy."""
+    from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+    service = LongTermSEOStrategyService(project)
+    return service.get_strategy_metrics(project)
+
+
 # ==============================================================================
 # DEFAULT REGISTRY BUILDER
 # ==============================================================================
@@ -1901,6 +2003,71 @@ def create_default_tool_registry() -> ToolRegistry:
         requires_approval=False,
         is_mutating=False,
         handler=handle_verify_external_operation
+    ))
+
+    # Milestone 6.6: Long-Term SEO Strategy Tools
+    # 1. get_long_term_strategy
+    registry.register(AgentToolDefinition(
+        name="get_long_term_strategy",
+        description="Inspect the active long-term SEO strategy, strategic objectives, progress, and initiatives for this project.",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_long_term_strategy
+    ))
+
+    # 2. propose_strategy_review
+    registry.register(AgentToolDefinition(
+        name="propose_strategy_review",
+        description="Trigger a bounded, explainable strategic review cycle assessing objective progress, risks, and trends.",
+        category=ToolCategory.SAFE_INTERNAL,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "trigger_source": {"type": "string", "description": "Reason for triggering review (e.g. 'routine_check', 'new_ranking_data', 'objective_achieved')."}
+            },
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=True,
+        handler=handle_propose_strategy_review
+    ))
+
+    # 3. propose_strategy_adjustment
+    registry.register(AgentToolDefinition(
+        name="propose_strategy_adjustment",
+        description="Propose a formal adjustment to long-term SEO strategy initiatives, priorities, or targets under Human-in-the-Loop review.",
+        category=ToolCategory.HIGH_IMPACT,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "adjustment_rationale": {"type": "string", "description": "Evidence-backed rationale explaining why the strategy adjustment is necessary."}
+            },
+            "required": ["adjustment_rationale"]
+        },
+        requires_approval=True,
+        is_mutating=True,
+        handler=handle_propose_strategy_adjustment
+    ))
+
+    # 4. get_strategy_metrics
+    registry.register(AgentToolDefinition(
+        name="get_strategy_metrics",
+        description="Retrieve dynamic runtime evaluation metrics for long-term SEO strategy (health, completion rates, objective achievement).",
+        category=ToolCategory.READ_ONLY,
+        parameters_schema={
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
+        requires_approval=False,
+        is_mutating=False,
+        handler=handle_get_strategy_metrics
     ))
 
     return registry

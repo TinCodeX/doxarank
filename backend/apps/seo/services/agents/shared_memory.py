@@ -41,6 +41,11 @@ class MemoryCategory(str, Enum):
     # Milestone 6.5: External Integration Epistemic Lifecycle
     ACTION = "action"                    # External operation executed
     AUTHORIZATION = "authorization"      # External operation authorization
+    # Milestone 6.6: Long-Term Strategy Epistemic Lifecycle
+    STRATEGIC_OBJECTIVE = "strategic_objective"    # Persistent long-term objective
+    STRATEGIC_INITIATIVE = "strategic_initiative"  # Supporting strategic initiative
+    STRATEGY_DECISION = "strategy_decision"        # Versioned strategy or adaptation decision
+    STRATEGY_REVIEW = "strategy_review"            # Periodic strategy review cycle record
 
 
 class DecisionStatus(str, Enum):
@@ -256,6 +261,18 @@ def synchronized_memory(fn):
         with self._lock:
             return fn(self, *args, **kwargs)
     return wrapper
+
+
+class StrategicMemoryEntry(dict):
+    """Dual-access container supporting both dict indexing and attribute access for strategic items."""
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"'StrategicMemoryEntry' has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
 
 
 class SharedWorkingMemory:
@@ -522,6 +539,115 @@ class SharedWorkingMemory:
         item = MemoryItem(
             memory_id=mem_id,
             category=MemoryCategory.ACTION.value,
+            content=content,
+            source_agent=source_agent,
+            correlation_id=self.correlation_id,
+            confidence=1.0,
+            fingerprint=fp,
+            metadata=entry
+        )
+        self._facts[mem_id] = item
+        self._fingerprints.add(fp)
+        self.entries_created += 1
+        return entry
+
+    @synchronized_memory
+    def record_strategy_decision(
+        self,
+        source_agent: str,
+        strategy_version: int,
+        decision: str,
+        rationale: str,
+        objectives: Optional[List[str]] = None,
+        initiatives: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Record a long-term strategy version decision in shared working memory with full provenance (Milestone 6.6).
+        """
+        clean_rationale = redact_secrets(rationale)
+        clean_objectives = [redact_secrets(o) for o in (objectives or [])]
+        clean_initiatives = [redact_secrets(i) for i in (initiatives or [])]
+
+        entry = StrategicMemoryEntry({
+            "strategy_version": strategy_version,
+            "decision": decision,
+            "rationale": clean_rationale,
+            "objectives": clean_objectives,
+            "initiatives": clean_initiatives,
+            "source_agent": source_agent,
+            "timestamp": timezone.now().isoformat(),
+            "metadata": redact_secrets(metadata or {}),
+            "category": MemoryCategory.STRATEGY_DECISION,
+            "content": {"strategy_version": strategy_version, "decision": decision, "rationale": clean_rationale}
+        })
+
+        content = f"Strategy v{strategy_version} decision: {decision}. {clean_rationale[:100]}"
+        fp = generate_fingerprint(MemoryCategory.STRATEGY_DECISION.value, content)
+        mem_id = f"strat-v{strategy_version}-{uuid.uuid4().hex[:6]}"
+
+        item = MemoryItem(
+            memory_id=mem_id,
+            category=MemoryCategory.STRATEGY_DECISION.value,
+            content=content,
+            source_agent=source_agent,
+            correlation_id=self.correlation_id,
+            confidence=1.0,
+            fingerprint=fp,
+            metadata=entry
+        )
+        if isinstance(self._decisions, list):
+            self._decisions.append(item)
+        else:
+            self._decisions[mem_id] = item
+        self._facts[mem_id] = item
+        self._fingerprints.add(fp)
+        self.entries_created += 1
+        return entry
+
+    @synchronized_memory
+    def record_strategic_objective(
+        self,
+        source_agent: str,
+        objective_id: int,
+        name: str,
+        metric: str = "organic_traffic",
+        baseline: float = 0.0,
+        target: float = 100.0,
+        target_direction: str = "increasing",
+        status: str = "active",
+        progress: float = 0.0,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Record a strategic objective milestone in shared working memory (Milestone 6.6).
+        """
+        clean_name = redact_secrets(name)
+        entry = StrategicMemoryEntry({
+            "objective_id": objective_id,
+            "name": clean_name,
+            "metric": metric,
+            "baseline": baseline,
+            "target": target,
+            "target_direction": target_direction,
+            "status": status,
+            "progress": progress,
+            "source_agent": source_agent,
+            "timestamp": timezone.now().isoformat(),
+            "metadata": redact_secrets(metadata or {}),
+            "category": MemoryCategory.STRATEGIC_OBJECTIVE,
+            "content": {"name": clean_name, "metric": metric, "target": target, "status": status, "progress": progress}
+        })
+
+        content = f"Strategic Objective #{objective_id} '{clean_name}': {metric} -> {status} ({round(progress*100, 1)}%)"
+        fp = generate_fingerprint(MemoryCategory.STRATEGIC_OBJECTIVE.value, content)
+        mem_id = f"obj-{objective_id}-{uuid.uuid4().hex[:6]}"
+
+        item = MemoryItem(
+            memory_id=mem_id,
+            category=MemoryCategory.STRATEGIC_OBJECTIVE.value,
             content=content,
             source_agent=source_agent,
             correlation_id=self.correlation_id,

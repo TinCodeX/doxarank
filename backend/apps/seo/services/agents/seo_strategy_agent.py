@@ -28,7 +28,11 @@ class SEOStrategyAgent(BaseSpecializedAgent):
     allowed_tools: List[str] = [
         "get_adaptive_seo_strategy",
         "get_action_outcomes",
-        "analyze_seo_opportunities"
+        "analyze_seo_opportunities",
+        "get_long_term_strategy",
+        "propose_strategy_review",
+        "propose_strategy_adjustment",
+        "get_strategy_metrics"
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

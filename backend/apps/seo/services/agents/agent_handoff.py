@@ -45,6 +45,8 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "discover_external_capabilities",
         "inspect_cms_page",
         "inspect_git_repository",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     },
     "seo_investigator": {
         "get_gsc_performance",
@@ -65,6 +67,10 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "get_adaptive_seo_strategy",
         "get_action_outcomes",
         "analyze_seo_opportunities",
+        "get_long_term_strategy",
+        "propose_strategy_review",
+        "propose_strategy_adjustment",
+        "get_strategy_metrics",
     },
     "seo_action_planner": {
         "plan_seo_actions",
@@ -77,6 +83,8 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "inspect_cms_page",
         "inspect_git_repository",
         "execute_external_operation",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     },
     "seo_verifier": {
         "verify_seo_action",
@@ -86,6 +94,8 @@ KNOWN_AGENT_ALLOWED_TOOLS: Dict[str, Set[str]] = {
         "inspect_cms_page",
         "inspect_git_repository",
         "discover_external_capabilities",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     },
 }
 

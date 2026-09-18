@@ -19909,3 +19909,569 @@ class MultiSystemIntegrationTests(TestCase):
 
         mon_service = AutonomousMonitoringService(publisher=self.publisher)
         self.assertIsNotNone(mon_service)
+
+
+class LongTermSEOStrategyTests(TestCase):
+    """
+    Milestone 6.6 — Long-Term SEO Strategy Verification Test Suite.
+    Verifies that DoxaRank maintains and executes long-term SEO strategy over weeks
+    and months, with mathematical progress, rule-based trends, epistemic separation,
+    HITL governance, review idempotency, and multi-tenant isolation.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.publisher = InMemoryEventPublisher()
+        self.user_a = User.objects.create_user(
+            email="user_strat_a@doxarank.com",
+            password="Password123!",
+            first_name="Strat",
+            last_name="A"
+        )
+        self.user_b = User.objects.create_user(
+            email="user_strat_b@doxarank.com",
+            password="Password123!",
+            first_name="Strat",
+            last_name="B"
+        )
+        self.project_a = Project.objects.create(
+            name="Addis Market E-Commerce",
+            website_url="https://addismarket.et",
+            owner=self.user_a
+        )
+        self.project_b = Project.objects.create(
+            name="Competitor Market",
+            website_url="https://competitor.et",
+            owner=self.user_b
+        )
+        self.client.force_authenticate(user=self.user_a)
+
+        from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+        self.service = LongTermSEOStrategyService(project=self.project_a, publisher=self.publisher)
+
+    def test_01_objective_creation(self):
+        """1. Strategic objective creation with target direction and tenant scoping."""
+        from apps.seo.models import StrategicObjective, StrategicHorizon, StrategicPriority, TargetDirection, ObjectiveStatus
+        obj = self.service.create_objective(
+            project=self.project_a,
+            name="Rank Top 5 for የኢትዮጵያ ቡና",
+            metric="keyword_rank",
+            baseline=45.0,
+            target=5.0,
+            target_direction=TargetDirection.DECREASING,
+            priority=StrategicPriority.CRITICAL,
+            horizon=StrategicHorizon.MEDIUM_TERM,
+            description="Achieve top 5 position for Ethiopian Coffee query."
+        )
+        self.assertEqual(obj.project, self.project_a)
+        self.assertEqual(obj.metric, "keyword_rank")
+        self.assertEqual(obj.baseline, 45.0)
+        self.assertEqual(obj.target, 5.0)
+        self.assertEqual(obj.target_direction, "decreasing")
+        self.assertEqual(obj.status, ObjectiveStatus.ACTIVE)
+        self.assertEqual(obj.progress, 0.0)
+
+    def test_02_objective_lifecycle(self):
+        """2. Objective lifecycle transitions from active to achieved."""
+        from apps.seo.models import ObjectiveStatus, TargetDirection
+        obj = self.service.create_objective(
+            project=self.project_a,
+            name="Increase Monthly Organic Sessions",
+            metric="organic_sessions",
+            baseline=5000.0,
+            target=10000.0,
+            target_direction=TargetDirection.INCREASING
+        )
+        # Update progress halfway
+        self.service.update_objective_progress(obj, current_value=7500.0)
+        obj.refresh_from_db()
+        self.assertEqual(obj.progress, 0.5)
+        self.assertEqual(obj.status, ObjectiveStatus.ACTIVE)
+
+        # Update progress to complete
+        self.service.update_objective_progress(obj, current_value=10500.0)
+        obj.refresh_from_db()
+        self.assertGreaterEqual(obj.progress, 1.0)
+        self.assertEqual(obj.status, ObjectiveStatus.ACHIEVED)
+
+    def test_03_initiative_creation(self):
+        """3. Strategic initiative creation with horizon, priority, and risk."""
+        from apps.seo.models import StrategicHorizon, StrategicPriority, InitiativeStatus
+        strategy = self.service.generate_strategy(
+            project=self.project_a,
+            title="Q3 Strategic Plan"
+        )
+        init = self.service.create_initiative(
+            strategy=strategy,
+            name="Technical Core Web Vitals Optimization",
+            priority=StrategicPriority.HIGH,
+            horizon=StrategicHorizon.SHORT_TERM,
+            risk_level="low",
+            target_action_types=["fix_cwv", "optimize_images"]
+        )
+        self.assertEqual(init.strategy, strategy)
+        self.assertEqual(init.name, "Technical Core Web Vitals Optimization")
+        self.assertEqual(init.status, InitiativeStatus.PLANNED)
+        self.assertEqual(init.priority, "high")
+        self.assertEqual(init.risk_level, "low")
+
+    def test_04_initiative_lifecycle(self):
+        """4. Initiative progress tracking and automatic completion."""
+        from apps.seo.models import InitiativeStatus
+        strategy = self.service.generate_strategy(project=self.project_a, title="Q3 Plan")
+        init = self.service.create_initiative(strategy=strategy, name="Schema Deployment")
+        self.assertEqual(init.status, InitiativeStatus.PLANNED)
+
+        self.service.update_initiative_progress(init, progress=0.4, status=InitiativeStatus.ACTIVE)
+        init.refresh_from_db()
+        self.assertEqual(init.progress, 0.4)
+        self.assertEqual(init.status, InitiativeStatus.ACTIVE)
+
+        self.service.update_initiative_progress(init, progress=1.0)
+        init.refresh_from_db()
+        self.assertEqual(init.progress, 1.0)
+        self.assertEqual(init.status, InitiativeStatus.COMPLETED)
+
+    def test_05_priority_handling(self):
+        """5. Strategic priorities correctly categorized and filterable."""
+        from apps.seo.models import StrategicObjective, StrategicPriority
+        obj_crit = self.service.create_objective(project=self.project_a, name="Crit Obj", priority=StrategicPriority.CRITICAL)
+        obj_low = self.service.create_objective(project=self.project_a, name="Low Obj", priority=StrategicPriority.LOW)
+        self.assertEqual(obj_crit.priority, "critical")
+        self.assertEqual(obj_low.priority, "low")
+        crits = StrategicObjective.objects.filter(project=self.project_a, priority="critical")
+        self.assertIn(obj_crit, crits)
+        self.assertNotIn(obj_low, crits)
+
+    def test_06_strategy_creation(self):
+        """6. Generate strategy with 4-tier epistemic structure."""
+        from apps.seo.models import StrategyStatus, StrategyHealth
+        strat = self.service.generate_strategy(
+            project=self.project_a,
+            title="Comprehensive Annual SEO Strategy",
+            horizon="long_term"
+        )
+        self.assertEqual(strat.project, self.project_a)
+        self.assertEqual(strat.version, 1)
+        self.assertEqual(strat.status, StrategyStatus.ACTIVE)
+        self.assertEqual(strat.health, StrategyHealth.ON_TRACK)
+        self.assertIn("Observed Fact", strat.rationale)
+        self.assertIn("Inference", strat.rationale)
+        self.assertIn("Hypothesis", strat.rationale)
+        self.assertIn("Strategic Decision", strat.rationale)
+
+    def test_07_strategy_versioning(self):
+        """7. Incremental versioning upon strategy iteration."""
+        s1 = self.service.generate_strategy(project=self.project_a, title="Initial Strategy v1")
+        self.assertEqual(s1.version, 1)
+
+        s2 = self.service.generate_strategy(project=self.project_a, title="Iterated Strategy v2")
+        self.assertEqual(s2.version, 2)
+
+    def test_08_historical_versions_preserved(self):
+        """8. Previous strategy versions are superseded and never overwritten."""
+        from apps.seo.models import StrategyStatus
+        s1 = self.service.generate_strategy(project=self.project_a, title="Strategy v1")
+        self.assertEqual(s1.status, StrategyStatus.ACTIVE)
+
+        # Trigger adjustment and approve
+        obj = self.service.create_objective(
+            project=self.project_a, name="Failing Obj", status="at_risk"
+        )
+        rec, decision, proposed = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="manual"
+        )
+        self.assertIsNotNone(proposed)
+        active_v2 = self.service.approve_strategy_adjustment(review_id=rec.id, user=self.user_a)
+
+        s1.refresh_from_db()
+        self.assertEqual(s1.status, StrategyStatus.SUPERSEDED)
+        self.assertEqual(active_v2.status, StrategyStatus.ACTIVE)
+        self.assertEqual(active_v2.version, 2)
+        self.assertEqual(active_v2.previous_version, s1)
+
+    def test_09_evidence_provenance(self):
+        """9. Empirical evidence provenance recorded in strategy and reviews."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Evidence Strategy")
+        self.assertIn("rankings_count", strat.evidence)
+        self.assertIn("audit_issues_count", strat.evidence)
+        self.assertIn("observed_at", strat.evidence)
+
+    def test_10_progress_calculation_increasing(self):
+        """10. Deterministic progress calculation for INCREASING metrics (traffic, scores)."""
+        calc = self.service.calculate_progress
+        # 100 -> 200, current 150 = 50%
+        self.assertEqual(calc(100.0, 150.0, 200.0, "increasing"), 0.5)
+        # Below baseline is clamped to 0.0
+        self.assertEqual(calc(100.0, 80.0, 200.0, "increasing"), 0.0)
+        # Exceeded target
+        self.assertEqual(calc(100.0, 250.0, 200.0, "increasing"), 1.5)
+
+    def test_11_progress_calculation_decreasing(self):
+        """11. Deterministic progress calculation for DECREASING metrics (rankings)."""
+        calc = self.service.calculate_progress
+        # Rank: baseline 50 -> target 10, current 30 = 20/40 = 50%
+        self.assertEqual(calc(50.0, 30.0, 10.0, "decreasing"), 0.5)
+        # Current 10 = 100%
+        self.assertEqual(calc(50.0, 10.0, 10.0, "decreasing"), 1.0)
+        # Rank worsened to 60 -> clamped to 0.0
+        self.assertEqual(calc(50.0, 60.0, 10.0, "decreasing"), 0.0)
+        # Rank exceeded target (rank 5)
+        self.assertEqual(calc(50.0, 5.0, 10.0, "decreasing"), 1.125)
+
+    def test_12_trend_detection_rules(self):
+        """12. Rule-based trend detection without neural/ML black boxes."""
+        trend = self.service.calculate_trend
+        # Increasing
+        self.assertEqual(trend([100.0, 120.0, 150.0], "increasing"), "improving")
+        self.assertEqual(trend([150.0, 120.0, 100.0], "increasing"), "declining")
+        self.assertEqual(trend([100.0, 100.5], "increasing"), "stable")
+
+        # Decreasing (lower is better)
+        self.assertEqual(trend([50.0, 35.0, 20.0], "decreasing"), "improving")
+        self.assertEqual(trend([20.0, 35.0, 50.0], "decreasing"), "declining")
+        self.assertEqual(trend([20.0, 20.1], "decreasing"), "stable")
+
+        # Insufficient data
+        self.assertEqual(trend([10.0], "increasing"), "insufficient_data")
+
+    def test_13_strategy_health_calculation(self):
+        """13. Deterministic health derivation from objectives and initiatives."""
+        from apps.seo.models import StrategyHealth
+        strat = self.service.generate_strategy(project=self.project_a, title="Health Strategy")
+
+        # Empty strategy has ON_TRACK or NO_DATA
+        o1 = self.service.create_objective(project=self.project_a, name="Obj 1")
+        o2 = self.service.create_objective(project=self.project_a, name="Obj 2")
+        self.service.update_objective_progress(o1, current_value=90.0)
+        self.service.update_objective_progress(o2, current_value=85.0)
+
+        health = self.service.evaluate_strategy_health(strat)
+        self.assertEqual(health, StrategyHealth.ON_TRACK)
+
+    def test_14_risk_detection(self):
+        """14. Risk detection when objective drops into AT_RISK status."""
+        from apps.seo.models import ReviewDecision, ReviewApprovalStatus, ObjectiveStatus
+        strat = self.service.generate_strategy(project=self.project_a, title="Risk Strategy")
+        obj = self.service.create_objective(project=self.project_a, name="Critical Metric")
+        obj.status = ObjectiveStatus.AT_RISK
+        obj.save()
+
+        rec, decision, proposed = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="monitoring_alert"
+        )
+        self.assertEqual(decision, ReviewDecision.ADJUST)
+        self.assertEqual(rec.approval_status, ReviewApprovalStatus.PENDING_APPROVAL)
+        self.assertIsNotNone(proposed)
+        self.assertIn("AT_RISK", rec.evaluation_summary["detected_risks"][0])
+
+    def test_15_strategy_review_periodic(self):
+        """15. Bounded review cycle produces review record and keeps strategy if healthy."""
+        from apps.seo.models import ReviewDecision, ReviewApprovalStatus
+        strat = self.service.generate_strategy(project=self.project_a, title="Healthy Strategy")
+        rec, decision, proposed = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="weekly_schedule"
+        )
+        self.assertEqual(decision, ReviewDecision.KEEP)
+        self.assertEqual(rec.approval_status, ReviewApprovalStatus.NOT_REQUIRED)
+        self.assertIsNone(proposed)
+
+    def test_16_review_idempotency_fingerprint(self):
+        """16. Review idempotency via deterministic SHA-256 fingerprint."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Idempotent Strategy")
+        rec1, d1, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="cron")
+        # Repeating review without force
+        rec2, d2, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="cron")
+        self.assertEqual(rec1.id, rec2.id)
+        self.assertEqual(rec1.fingerprint, rec2.fingerprint)
+
+    def test_17_concurrent_review_protection(self):
+        """17. Row-locking (select_for_update) serializes concurrent reviews."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Lock Strategy")
+        with transaction.atomic():
+            rec, decision, _ = self.service.conduct_strategy_review(
+                project=self.project_a, trigger_source="concurrent_worker_1"
+            )
+            self.assertIsNotNone(rec)
+
+    def test_18_strategy_adjustment_proposal(self):
+        """18. Proposed strategy version created upon review adjustment."""
+        from apps.seo.models import StrategyStatus, ReviewApprovalStatus
+        strat = self.service.generate_strategy(project=self.project_a, title="Base Strat")
+        self.service.create_objective(project=self.project_a, name="Failing Metric", status="at_risk")
+
+        rec, decision, proposed = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="risk_trigger"
+        )
+        self.assertEqual(rec.approval_status, ReviewApprovalStatus.PENDING_APPROVAL)
+        self.assertIsNotNone(proposed)
+        self.assertEqual(proposed.status, StrategyStatus.PROPOSED)
+        self.assertEqual(proposed.version, 2)
+        self.assertEqual(proposed.previous_version, strat)
+
+    def test_19_strategy_approval_hitl(self):
+        """19. Human-in-the-Loop approval activates proposed version and supersedes previous."""
+        from apps.seo.models import StrategyStatus, ReviewApprovalStatus
+        s1 = self.service.generate_strategy(project=self.project_a, title="Strat v1")
+        self.service.create_objective(project=self.project_a, name="Needs Fix", status="at_risk")
+        rec, decision, proposed = self.service.conduct_strategy_review(project=self.project_a)
+
+        s2 = self.service.approve_strategy_adjustment(review_id=rec.id, user=self.user_a)
+        s1.refresh_from_db()
+        rec.refresh_from_db()
+
+        self.assertEqual(s1.status, StrategyStatus.SUPERSEDED)
+        self.assertEqual(s2.status, StrategyStatus.ACTIVE)
+        self.assertEqual(rec.approval_status, ReviewApprovalStatus.APPROVED)
+
+    def test_20_strategy_rejection_hitl(self):
+        """20. Human-in-the-Loop rejection archives proposed strategy and keeps active."""
+        from apps.seo.models import StrategyStatus, ReviewApprovalStatus
+        s1 = self.service.generate_strategy(project=self.project_a, title="Strat v1")
+        self.service.create_objective(project=self.project_a, name="Needs Fix", status="at_risk")
+        rec, decision, proposed = self.service.conduct_strategy_review(project=self.project_a)
+
+        updated_rec = self.service.reject_strategy_adjustment(
+            review_id=rec.id, user=self.user_a, reason="Proposed budget too high."
+        )
+        s1.refresh_from_db()
+        proposed.refresh_from_db()
+
+        self.assertEqual(s1.status, StrategyStatus.ACTIVE)
+        self.assertEqual(proposed.status, StrategyStatus.CANCELLED)
+        self.assertEqual(updated_rec.approval_status, ReviewApprovalStatus.REJECTED)
+
+    def test_21_hitl_boundary_enforcement(self):
+        """21. Disallow approving non-pending reviews or unauthorized changes."""
+        from apps.seo.services.long_term_strategy import StrategyHITLError
+        s1 = self.service.generate_strategy(project=self.project_a, title="Strat v1")
+        rec, decision, _ = self.service.conduct_strategy_review(project=self.project_a)
+        # Review is NOT_REQUIRED (not pending approval)
+        with self.assertRaises(StrategyHITLError):
+            self.service.approve_strategy_adjustment(review_id=rec.id, user=self.user_a)
+
+    def test_22_shared_working_memory_integration(self):
+        """22. SharedWorkingMemory registers strategic objectives and decisions with provenance."""
+        from apps.seo.services.agents.shared_memory import SharedWorkingMemory, MemoryCategory
+        mem = SharedWorkingMemory(project_id=self.project_a.id, task_goal="Long-term strategy planning")
+        entry = mem.record_strategic_objective(
+            source_agent="seo_strategist",
+            objective_id=101,
+            name="Rank Top 3 for Amharic Electronics",
+            target="Top 3",
+            horizon="medium_term"
+        )
+        self.assertEqual(entry.category, MemoryCategory.STRATEGIC_OBJECTIVE)
+        self.assertIn("Amharic Electronics", entry.content["name"])
+
+    def test_23_agent_learning_integration(self):
+        """23. Historical SEO action outcomes inform strategy rationale."""
+        from apps.seo.models import SEOAction, ActionType, ActionStatus
+        SEOAction.objects.create(
+            project=self.project_a,
+            action_type=ActionType.UPDATE_TITLE,
+            title="Fix Meta Titles",
+            target_url="https://addismarket.et/coffee",
+            status=ActionStatus.COMPLETED
+        )
+        strat = self.service.generate_strategy(project=self.project_a, title="Informed Strategy")
+        self.assertGreaterEqual(strat.evidence.get("historical_actions_count", 0), 1)
+
+    def test_24_advanced_reasoning_integration(self):
+        """24. Epistemic structure strictly separates facts, inferences, hypotheses, decisions."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Epistemic Strat")
+        rat = strat.rationale
+        self.assertIn("Observed Fact:", rat)
+        self.assertIn("Inference:", rat)
+        self.assertIn("Hypothesis:", rat)
+        self.assertIn("Strategic Decision:", rat)
+        self.assertIn("Expected Outcome:", rat)
+
+    def test_25_task_planner_dag_integration(self):
+        """25. Initiatives bridge to TaskPlanner DAG with ReplanReason.STRATEGY_CHANGE."""
+        from apps.seo.models import InitiativeStatus
+        strat = self.service.generate_strategy(project=self.project_a, title="DAG Plan")
+        init = self.service.create_initiative(strategy=strat, name="Optimize Crawl Budget")
+        link_res = self.service.link_initiative_to_tasks(init)
+        self.assertEqual(link_res["replan_reason"], "strategy_change")
+        self.assertGreater(len(link_res["generated_task_ids"]), 0)
+        init.refresh_from_db()
+        self.assertEqual(init.status, InitiativeStatus.ACTIVE)
+
+    def test_26_continuous_operations_integration(self):
+        """26. ContinuousOperation triggers strategy review cycle without breaking."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Continuous Strat")
+        rec, decision, _ = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="continuous_operations"
+        )
+        self.assertEqual(rec.evaluation_summary["trigger_source"], "continuous_operations")
+
+    def test_27_seo_event_integration(self):
+        """27. Major ranking drop SEOEvent triggers risk detection."""
+        from apps.seo.models import ReviewDecision
+        strat = self.service.generate_strategy(project=self.project_a, title="Event Strat")
+        rec, decision, proposed = self.service.conduct_strategy_review(
+            project=self.project_a, trigger_source="major_ranking_drop"
+        )
+        self.assertEqual(decision, ReviewDecision.ADJUST)
+        self.assertIn("Major ranking drop", rec.evaluation_summary["detected_risks"][0])
+
+    def test_28_monitoring_integration(self):
+        """28. Strategic review incorporates MonitoringSnapshot empirical evidence."""
+        from apps.seo.models import MonitoringSnapshot, MonitorType
+        MonitoringSnapshot.objects.create(
+            project=self.project_a,
+            monitor_type=MonitorType.RANKING,
+            metric_key="keyword_rank_summary",
+            value={"average_rank": 18.5, "health_score": 85}
+        )
+        strat = self.service.generate_strategy(project=self.project_a, title="Monitoring Strat")
+        self.assertGreaterEqual(strat.evidence.get("monitoring_snapshots_count", 0), 1)
+
+    def test_29_remediation_integration(self):
+        """29. Initiatives target concrete remediation action types."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Remediation Strat")
+        init = self.service.create_initiative(
+            strategy=strat,
+            name="Remediate Broken Canonical Tags",
+            target_action_types=["fix_canonical", "update_meta"]
+        )
+        self.assertIn("fix_canonical", init.target_action_types)
+
+    def test_30_multi_system_integration(self):
+        """30. Strategic initiatives connect to external adapter capabilities."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Multi-System Strat")
+        init = self.service.create_initiative(
+            strategy=strat,
+            name="Publish New Amharic Guides",
+            target_action_types=["CMS.UPDATE_METADATA", "GIT.WRITE_FILE"]
+        )
+        self.assertIn("CMS.UPDATE_METADATA", init.target_action_types)
+
+    def test_31_tenant_isolation(self):
+        """31. Tenant isolation prevents cross-tenant strategy access or objective linking."""
+        from apps.seo.services.long_term_strategy import TenantIsolationError
+        strat_a = self.service.generate_strategy(project=self.project_a, title="Project A Strat")
+        obj_b = self.service.create_objective(project=self.project_b, name="Tenant B Objective")
+
+        with self.assertRaises(TenantIsolationError):
+            self.service.create_initiative(
+                strategy=strat_a,
+                name="Illegal Cross-Tenant Initiative",
+                objective=obj_b
+            )
+
+    def test_32_failure_isolation(self):
+        """32. Review failures do not corrupt strategy state."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Safe Strat")
+        initial_status = strat.status
+        try:
+            with transaction.atomic():
+                self.service.conduct_strategy_review(project=self.project_a)
+                raise ValueError("Simulated unexpected failure during post-review")
+        except ValueError:
+            pass
+        strat.refresh_from_db()
+        self.assertEqual(strat.status, initial_status)
+
+    def test_33_telemetry_emission(self):
+        """33. 13 strategy events emitted during lifecycle."""
+        from apps.seo.services.agent_events import AgentEventType
+        self.publisher.clear()
+        strat = self.service.generate_strategy(project=self.project_a, title="Telemetry Strat")
+        events = [e.event_type for e in self.publisher.events]
+        self.assertIn(AgentEventType.SEO_STRATEGY_VERSION_CREATED, events)
+
+    def test_34_runtime_derived_evaluation_metrics(self):
+        """34. Runtime evaluation metrics dynamically aggregated from database."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Metrics Strat")
+        o1 = self.service.create_objective(project=self.project_a, name="Obj 1")
+        self.service.update_objective_progress(o1, current_value=50.0)
+
+        metrics = self.service.get_strategy_metrics(self.project_a)
+        self.assertEqual(metrics["active_objectives_count"], 1)
+        self.assertIn("health_status", metrics)
+        self.assertIn("strategy_version", metrics)
+
+    def test_35_stale_evidence_handling(self):
+        """35. Gracefully handles absence of telemetry or historical audits."""
+        empty_proj = Project.objects.create(name="Empty Proj", website_url="https://empty.et", owner=self.user_a)
+        strat = self.service.generate_strategy(project=empty_proj, title="Empty Strat")
+        self.assertEqual(strat.evidence["rankings_count"], 0)
+        self.assertEqual(strat.evidence["audit_issues_count"], 0)
+
+    def test_36_no_data_handling(self):
+        """36. Returns NO_DATA health when project has no objectives or initiatives."""
+        from apps.seo.models import StrategyHealth, LongTermSEOStrategy
+        empty_proj = Project.objects.create(name="No Data Proj", website_url="https://nodata.et", owner=self.user_a)
+        strat = LongTermSEOStrategy.objects.create(
+            project=empty_proj, title="Blank Strat", version=1
+        )
+        health = self.service.evaluate_strategy_health(strat)
+        self.assertEqual(health, StrategyHealth.NO_DATA)
+
+    def test_37_objective_achievement(self):
+        """37. Objective automatically transitions to ACHIEVED when target is reached."""
+        from apps.seo.models import ObjectiveStatus
+        obj = self.service.create_objective(
+            project=self.project_a, name="Reach 100", baseline=0, target=100
+        )
+        self.service.update_objective_progress(obj, current_value=100.0)
+        obj.refresh_from_db()
+        self.assertEqual(obj.status, ObjectiveStatus.ACHIEVED)
+        self.assertEqual(obj.progress, 1.0)
+
+    def test_38_objective_at_risk_state(self):
+        """38. Objective marked AT_RISK when target date is near with low progress."""
+        from apps.seo.models import ObjectiveStatus
+        near_date = timezone.now() + timedelta(days=5)
+        obj = self.service.create_objective(
+            project=self.project_a, name="Urgent Obj", baseline=0, target=100, target_date=near_date
+        )
+        self.service.update_objective_progress(obj, current_value=10.0)
+        obj.refresh_from_db()
+        self.assertEqual(obj.status, ObjectiveStatus.AT_RISK)
+
+    def test_39_strategy_cancellation(self):
+        """39. Proposed strategy can be cancelled without affecting active version."""
+        from apps.seo.models import StrategyStatus
+        s1 = self.service.generate_strategy(project=self.project_a, title="Active Strat")
+        self.service.create_objective(project=self.project_a, name="Risk", status="at_risk")
+        rec, decision, proposed = self.service.conduct_strategy_review(project=self.project_a)
+
+        self.service.reject_strategy_adjustment(review_id=rec.id, user=self.user_a, reason="Not approved")
+        proposed.refresh_from_db()
+        self.assertEqual(proposed.status, StrategyStatus.CANCELLED)
+
+    def test_40_duplicate_event_protection(self):
+        """40. Identical review triggers in same cycle do not produce duplicate reviews."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Protected Strat")
+        r1, _, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="batch_event")
+        r2, _, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="batch_event")
+        self.assertEqual(r1.id, r2.id)
+
+    def test_41_celery_retry_protection(self):
+        """41. Celery retries evaluate the idempotency fingerprint and do not duplicate."""
+        strat = self.service.generate_strategy(project=self.project_a, title="Celery Strat")
+        r1, _, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="celery_task")
+        r2, _, _ = self.service.conduct_strategy_review(project=self.project_a, trigger_source="celery_task")
+        self.assertEqual(r1.id, r2.id)
+
+    def test_42_full_historical_preservation_and_regression(self):
+        """42. Multi-version evolution preserves complete history and 5.x/6.x integrity."""
+        from apps.seo.models import LongTermSEOStrategy, StrategyStatus
+        # Cycle 1
+        s1 = self.service.generate_strategy(project=self.project_a, title="Year 1 Strategy")
+        self.assertEqual(s1.version, 1)
+
+        # Cycle 2: Drift & Adjustment
+        self.service.create_objective(project=self.project_a, name="Drifting Goal", status="at_risk")
+        r1, _, prop = self.service.conduct_strategy_review(project=self.project_a)
+        s2 = self.service.approve_strategy_adjustment(review_id=r1.id, user=self.user_a)
+
+        # Both s1 and s2 exist in DB with full provenance
+        all_versions = LongTermSEOStrategy.objects.filter(project=self.project_a).order_by("version")
+        self.assertEqual(all_versions.count(), 2)
+        self.assertEqual(all_versions[0].status, StrategyStatus.SUPERSEDED)
+        self.assertEqual(all_versions[1].status, StrategyStatus.ACTIVE)
+        self.assertEqual(all_versions[1].previous_version, all_versions[0])

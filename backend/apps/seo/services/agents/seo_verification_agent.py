@@ -34,6 +34,8 @@ class SEOVerificationAgent(BaseSpecializedAgent):
         "inspect_cms_page",
         "inspect_git_repository",
         "discover_external_capabilities",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

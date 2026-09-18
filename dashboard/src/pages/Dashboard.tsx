@@ -19,6 +19,7 @@ import { EventActivityPanel } from '../components/EventActivityPanel';
 import { MonitoringActivityPanel } from '../components/MonitoringActivityPanel';
 import { RemediationActivityPanel } from '../components/RemediationActivityPanel';
 import { ExternalIntegrationsPanel } from '../components/ExternalIntegrationsPanel';
+import { LongTermStrategyPanel } from '../components/LongTermStrategyPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -770,6 +771,13 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 6.10: MULTI-SYSTEM AGENT INTEGRATION (Milestone 6.5) */}
         {selectedProject && (
           <ExternalIntegrationsPanel
+            project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 6.11: LONG-TERM SEO STRATEGY (Milestone 6.6) */}
+        {selectedProject && (
+          <LongTermStrategyPanel
             project={selectedProject}
           />
         )}

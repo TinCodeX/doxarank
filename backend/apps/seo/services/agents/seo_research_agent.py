@@ -40,6 +40,8 @@ class SEOResearchAgent(BaseSpecializedAgent):
         "discover_external_capabilities",
         "inspect_cms_page",
         "inspect_git_repository",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

@@ -9,6 +9,8 @@ from .views import (
     SEOActionViewSet, SEOActionPlanViewSet, AgentRunViewSet,
     ContinuousOperationViewSet, SEOEventViewSet, AutonomousMonitoringViewSet,
     AutonomousRemediationViewSet, ExternalIntegrationViewSet,
+    LongTermSEOStrategyViewSet, StrategicObjectiveViewSet,
+    StrategicInitiativeViewSet, StrategyReviewRecordViewSet,
     GoogleOAuthAuthorizationUrlView, GoogleOAuthCallbackView,
     SEOAdaptiveStrategyView, SEOAgentOrchestrationView,
     MCPServersView, MCPToolsView, AgentEvaluationView,
@@ -42,6 +44,10 @@ router.register('ai/events', SEOEventViewSet, basename='seo-ai-events')
 router.register('ai/monitoring', AutonomousMonitoringViewSet, basename='ai-monitoring')
 router.register('ai/remediation', AutonomousRemediationViewSet, basename='ai-remediation')
 router.register('ai/integrations', ExternalIntegrationViewSet, basename='external-integrations')
+router.register('ai/long-term-strategy', LongTermSEOStrategyViewSet, basename='long-term-strategy')
+router.register('ai/strategic-objectives', StrategicObjectiveViewSet, basename='strategic-objective')
+router.register('ai/strategic-initiatives', StrategicInitiativeViewSet, basename='strategic-initiative')
+router.register('ai/strategy-reviews', StrategyReviewRecordViewSet, basename='strategy-review')
 
 
 urlpatterns = [

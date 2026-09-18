@@ -237,6 +237,21 @@ class AgentEventType(str, Enum):
     EXTERNAL_INTEGRATION_VERIFIED = "external.integration.verified"
     EXTERNAL_INTEGRATION_DUPLICATE_PREVENTED = "external.integration.duplicate_prevented"
 
+    # Long-Term SEO Strategy (Milestone 6.6)
+    SEO_STRATEGY_REVIEW_STARTED = "seo.strategy.review.started"
+    SEO_STRATEGY_REVIEW_COMPLETED = "seo.strategy.review.completed"
+    SEO_STRATEGY_REVIEW_FAILED = "seo.strategy.review.failed"
+    SEO_STRATEGY_OBJECTIVE_CREATED = "seo.strategy.objective.created"
+    SEO_STRATEGY_OBJECTIVE_UPDATED = "seo.strategy.objective.updated"
+    SEO_STRATEGY_INITIATIVE_CREATED = "seo.strategy.initiative.created"
+    SEO_STRATEGY_INITIATIVE_UPDATED = "seo.strategy.initiative.updated"
+    SEO_STRATEGY_RISK_DETECTED = "seo.strategy.risk.detected"
+    SEO_STRATEGY_ADJUSTMENT_PROPOSED = "seo.strategy.adjustment.proposed"
+    SEO_STRATEGY_ADJUSTMENT_APPROVED = "seo.strategy.adjustment.approved"
+    SEO_STRATEGY_ADJUSTMENT_REJECTED = "seo.strategy.adjustment.rejected"
+    SEO_STRATEGY_VERSION_CREATED = "seo.strategy.version.created"
+    SEO_STRATEGY_OUTCOME_RECORDED = "seo.strategy.outcome.recorded"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """
@@ -359,6 +374,11 @@ class InMemoryEventPublisher(AgentEventPublisher):
     @property
     def published_events(self) -> List[AgentEvent]:
         """Convenience property for testing harnesses."""
+        return self.get_events()
+
+    @property
+    def events(self) -> List[AgentEvent]:
+        """Alias for published_events."""
         return self.get_events()
 
     def get_event_types(self, run_id: Optional[int] = None) -> List[str]:

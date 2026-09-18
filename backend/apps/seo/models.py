@@ -2946,3 +2946,488 @@ class ExternalOperationRecord(models.Model):
 
     def __str__(self):
         return f"ExternalOp #{self.id} [{self.system_type}:{self.operation}] on {self.target} ({self.status})"
+
+
+# ==============================================================================
+# MILESTONE 6, PHASE 6.6: LONG-TERM SEO STRATEGY MODELS
+# ==============================================================================
+
+class StrategicHorizon(models.TextChoices):
+    SHORT_TERM = 'short_term', 'Short-Term (Days to Weeks)'
+    MEDIUM_TERM = 'medium_term', 'Medium-Term (Weeks to Months)'
+    LONG_TERM = 'long_term', 'Long-Term (Months to Year)'
+
+
+class StrategicPriority(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    HIGH = 'high', 'High'
+    MEDIUM = 'medium', 'Medium'
+    LOW = 'low', 'Low'
+
+
+class ObjectiveStatus(models.TextChoices):
+    DRAFT = 'draft', 'Draft'
+    ACTIVE = 'active', 'Active'
+    AT_RISK = 'at_risk', 'At Risk'
+    ACHIEVED = 'achieved', 'Achieved'
+    PAUSED = 'paused', 'Paused'
+    CANCELLED = 'cancelled', 'Cancelled'
+    EXPIRED = 'expired', 'Expired'
+
+
+class TargetDirection(models.TextChoices):
+    INCREASING = 'increasing', 'Increasing (Higher is Better)'
+    DECREASING = 'decreasing', 'Decreasing (Lower is Better, e.g. Rank)'
+
+
+class InitiativeStatus(models.TextChoices):
+    PLANNED = 'planned', 'Planned'
+    ACTIVE = 'active', 'Active'
+    AT_RISK = 'at_risk', 'At Risk'
+    COMPLETED = 'completed', 'Completed'
+    PAUSED = 'paused', 'Paused'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class StrategyStatus(models.TextChoices):
+    DRAFT = 'draft', 'Draft'
+    PROPOSED = 'proposed', 'Proposed (Awaiting HITL Approval)'
+    ACTIVE = 'active', 'Active'
+    SUPERSEDED = 'superseded', 'Superseded by Newer Version'
+    PAUSED = 'paused', 'Paused'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class StrategyHealth(models.TextChoices):
+    ON_TRACK = 'on_track', 'On Track'
+    AT_RISK = 'at_risk', 'At Risk'
+    OFF_TRACK = 'off_track', 'Off Track'
+    NO_DATA = 'no_data', 'No Data'
+
+
+class ReviewDecision(models.TextChoices):
+    KEEP = 'keep', 'Keep Current Strategy'
+    ADJUST = 'adjust', 'Adjust Initiatives / Objectives'
+    PAUSE = 'pause', 'Pause Strategy Execution'
+    COMPLETE = 'complete', 'Complete Strategy (All Goals Achieved)'
+    REPLACE = 'replace', 'Replace with New Strategic Direction'
+
+
+class ReviewApprovalStatus(models.TextChoices):
+    NOT_REQUIRED = 'not_required', 'Not Required (Low Impact / Keep)'
+    PENDING_APPROVAL = 'pending_approval', 'Pending Human Approval'
+    APPROVED = 'approved', 'Approved'
+    REJECTED = 'rejected', 'Rejected'
+
+
+class ReviewRecordStatus(models.TextChoices):
+    IN_PROGRESS = 'in_progress', 'In Progress'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class StrategicObjective(models.Model):
+    """
+    Persistent strategic SEO objective for a project over weeks/months.
+    Tracks quantitative targets, direction, progress, priority, and horizons.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='strategic_objectives',
+        db_index=True,
+        help_text='Associated project for this strategic objective.'
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text='Descriptive title of the strategic objective.'
+    )
+    description = models.TextField(
+        blank=True,
+        default='',
+        help_text='Detailed context, rationale, and strategic intent.'
+    )
+    metric = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text='Target metric (e.g. organic_traffic, average_position, indexed_pages, technical_health_score, amharic_keyword_growth).'
+    )
+    baseline = models.FloatField(
+        default=0.0,
+        help_text='Initial baseline metric value at start of objective.'
+    )
+    target = models.FloatField(
+        default=0.0,
+        help_text='Target metric value to achieve.'
+    )
+    target_direction = models.CharField(
+        max_length=20,
+        choices=TargetDirection.choices,
+        default=TargetDirection.INCREASING,
+        help_text='Direction: increasing (higher is better) or decreasing (lower is better, e.g. rank).'
+    )
+    current_value = models.FloatField(
+        default=0.0,
+        help_text='Latest observed or computed metric value.'
+    )
+    start_date = models.DateTimeField(
+        default=timezone.now,
+        help_text='Objective inception date.'
+    )
+    target_date = models.DateTimeField(
+        help_text='Target deadline for objective completion.'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=StrategicPriority.choices,
+        default=StrategicPriority.MEDIUM,
+        db_index=True,
+        help_text='Strategic priority rank.'
+    )
+    horizon = models.CharField(
+        max_length=20,
+        choices=StrategicHorizon.choices,
+        default=StrategicHorizon.MEDIUM_TERM,
+        db_index=True,
+        help_text='Strategic horizon (short_term, medium_term, long_term).'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ObjectiveStatus.choices,
+        default=ObjectiveStatus.ACTIVE,
+        db_index=True,
+        help_text='Lifecycle status of the objective.'
+    )
+    progress = models.FloatField(
+        default=0.0,
+        help_text='Derived progress score normalized between 0.0 and 1.0 (or >1.0 if exceeded).'
+    )
+    evidence = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Supporting empirical evidence, baseline observations, and provenance references.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_strategic_objectives'
+        verbose_name = 'strategic objective'
+        verbose_name_plural = 'strategic objectives'
+        ordering = ['-priority', '-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_obj_proj_stat_idx'),
+            models.Index(fields=['project', 'metric'], name='seo_obj_proj_met_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_obj_proj_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"StrategicObjective #{self.id}: {self.name} ({self.status}, {round(self.progress*100, 1)}%)"
+
+
+class LongTermSEOStrategy(models.Model):
+    """
+    Persistent, versioned SEO strategy document for a project over weeks/months.
+    Preserves historical strategy versions, rationale, assumptions, risks, and expected outcomes.
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='long_term_strategies',
+        db_index=True,
+        help_text='Associated project for this strategy.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Title of the long-term SEO strategy.'
+    )
+    version = models.PositiveIntegerField(
+        default=1,
+        db_index=True,
+        help_text='Strategy version number (1, 2, 3...).'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StrategyStatus.choices,
+        default=StrategyStatus.ACTIVE,
+        db_index=True,
+        help_text='Status of this strategy version.'
+    )
+    health = models.CharField(
+        max_length=20,
+        choices=StrategyHealth.choices,
+        default=StrategyHealth.ON_TRACK,
+        db_index=True,
+        help_text='Derived strategic health: on_track, at_risk, off_track, no_data.'
+    )
+    effective_from = models.DateTimeField(
+        default=timezone.now,
+        help_text='Start of the effective strategic period.'
+    )
+    effective_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='End of the effective strategic period.'
+    )
+    rationale = models.TextField(
+        blank=True,
+        default='',
+        help_text='Structured strategic rationale explaining priorities and approach.'
+    )
+    assumptions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Explicit operating baseline assumptions.'
+    )
+    risks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Identified strategic risks and mitigation paths.'
+    )
+    expected_outcomes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Measurable expected outcomes over the planning horizon.'
+    )
+    evidence = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Supporting historical GSC, ranking, audit, and monitoring evidence.'
+    )
+    adjustment_reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Explanation of why this strategy version was created or adjusted.'
+    )
+    previous_version = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='next_versions',
+        help_text='Previous strategy version this version adjusted or superseded.'
+    )
+    created_by_agent = models.CharField(
+        max_length=100,
+        default='seo_strategist',
+        help_text='Agent or system component that generated this strategy.'
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text='User who authorized this strategy version under HITL.'
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp of human authorization.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_long_term_strategies'
+        verbose_name = 'long-term SEO strategy'
+        verbose_name_plural = 'long-term SEO strategies'
+        ordering = ['-version']
+        unique_together = [('project', 'version')]
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_strat_proj_stat_idx'),
+            models.Index(fields=['project', 'version'], name='seo_strat_proj_ver_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_strat_proj_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"SEOStrategy v{self.version} for Project #{self.project_id}: {self.title} ({self.status}, {self.health})"
+
+
+class StrategicInitiative(models.Model):
+    """
+    A meaningful strategic body of work supporting one or more strategic objectives.
+    Decomposes down into concrete tasks in the TaskPlanner DAG and remediation actions.
+    """
+    objective = models.ForeignKey(
+        StrategicObjective,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='initiatives',
+        help_text='Optional primary objective this initiative advances.'
+    )
+    strategy = models.ForeignKey(
+        LongTermSEOStrategy,
+        on_delete=models.CASCADE,
+        related_name='initiatives',
+        db_index=True,
+        help_text='Associated long-term strategy.'
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text='Title of the strategic initiative.'
+    )
+    description = models.TextField(
+        blank=True,
+        default='',
+        help_text='Scope and methodology for this body of work.'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=StrategicPriority.choices,
+        default=StrategicPriority.MEDIUM,
+        db_index=True,
+        help_text='Execution priority.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=InitiativeStatus.choices,
+        default=InitiativeStatus.PLANNED,
+        db_index=True,
+        help_text='Lifecycle status of the initiative.'
+    )
+    horizon = models.CharField(
+        max_length=20,
+        choices=StrategicHorizon.choices,
+        default=StrategicHorizon.MEDIUM_TERM,
+        db_index=True,
+        help_text='Strategic planning horizon.'
+    )
+    start_date = models.DateTimeField(
+        default=timezone.now,
+        help_text='Target initiative start date.'
+    )
+    target_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Target completion date.'
+    )
+    progress = models.FloatField(
+        default=0.0,
+        help_text='Completion progress normalized between 0.0 and 1.0.'
+    )
+    risk_level = models.CharField(
+        max_length=20,
+        default='low',
+        help_text='Assessed risk level: low, medium, high, critical.'
+    )
+    owner = models.CharField(
+        max_length=100,
+        default='seo_action_planner',
+        help_text='Agent role or user responsible for executing this initiative.'
+    )
+    target_action_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of ActionType names targeted by this initiative (e.g. meta_tags, content, technical).'
+    )
+    action_plan = models.ForeignKey(
+        SEOActionPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='strategic_initiatives',
+        help_text='Concrete execution action plan linked to this initiative.'
+    )
+    evidence = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Supporting evidence and progress audit trails.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_strategic_initiatives'
+        verbose_name = 'strategic initiative'
+        verbose_name_plural = 'strategic initiatives'
+        ordering = ['priority', '-created_at']
+        indexes = [
+            models.Index(fields=['strategy', 'status'], name='seo_init_strat_stat_idx'),
+            models.Index(fields=['objective', 'status'], name='seo_init_obj_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"Initiative #{self.id}: {self.name} [{self.priority}] ({self.status}, {round(self.progress*100, 1)}%)"
+
+
+class StrategyReviewRecord(models.Model):
+    """
+    Audit record of an explicit, bounded strategic review cycle.
+    Records evaluation summary, decision, proposed changes, HITL approval, and SHA-256 fingerprint.
+    """
+    strategy = models.ForeignKey(
+        LongTermSEOStrategy,
+        on_delete=models.CASCADE,
+        related_name='reviews',
+        db_index=True,
+        help_text='Strategy being evaluated in this review cycle.'
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='strategy_reviews',
+        db_index=True,
+        help_text='Associated project.'
+    )
+    review_cycle = models.PositiveIntegerField(
+        default=1,
+        help_text='Sequential review cycle number.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ReviewRecordStatus.choices,
+        default=ReviewRecordStatus.COMPLETED,
+        db_index=True,
+        help_text='Status of the review evaluation execution.'
+    )
+    evaluation_summary = models.JSONField(
+        default=dict,
+        help_text='Calculated objectives progress, initiative status, detected risks, and trends.'
+    )
+    decision = models.CharField(
+        max_length=20,
+        choices=ReviewDecision.choices,
+        default=ReviewDecision.KEEP,
+        db_index=True,
+        help_text='Strategic decision reached (keep, adjust, pause, complete, replace).'
+    )
+    proposed_changes = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Proposed adjustments to strategy, objectives, or initiatives.'
+    )
+    approval_status = models.CharField(
+        max_length=30,
+        choices=ReviewApprovalStatus.choices,
+        default=ReviewApprovalStatus.NOT_REQUIRED,
+        db_index=True,
+        help_text='HITL governance status: not_required, pending_approval, approved, rejected.'
+    )
+    fingerprint = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='Deterministic SHA-256 fingerprint of review parameters preventing duplicate execution.'
+    )
+    reviewed_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when review was performed.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_strategy_reviews'
+        verbose_name = 'strategy review record'
+        verbose_name_plural = 'strategy review records'
+        ordering = ['-reviewed_at']
+        indexes = [
+            models.Index(fields=['project', 'fingerprint'], name='seo_rev_proj_fp_idx'),
+            models.Index(fields=['strategy', 'review_cycle'], name='seo_rev_strat_cyc_idx'),
+            models.Index(fields=['project', '-reviewed_at'], name='seo_rev_proj_rev_idx'),
+        ]
+
+    def __str__(self):
+        return f"StrategyReview #{self.id} [Cycle {self.review_cycle}] -> {self.decision} ({self.approval_status})"

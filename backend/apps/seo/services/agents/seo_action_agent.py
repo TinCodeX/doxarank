@@ -38,6 +38,8 @@ class SEOActionPlanningAgent(BaseSpecializedAgent):
         "inspect_cms_page",
         "inspect_git_repository",
         "execute_external_operation",
+        "get_long_term_strategy",
+        "get_strategy_metrics",
     ]
 
     def _execute(self, context: SharedContext) -> AgentResult:

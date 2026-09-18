@@ -21,7 +21,9 @@ from .models import (
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
     MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
     ProjectRemediationPolicy, RemediationRecord,
-    ExternalConnection, ExternalOperationRecord
+    ExternalConnection, ExternalOperationRecord,
+    StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
+    StrategyStatus, ReviewApprovalStatus
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -40,7 +42,9 @@ from .serializers import (
     MonitoringStateSerializer, MonitoringSnapshotSerializer, MonitoringTriggerSerializer,
     GoogleOAuthAuthorizationUrlResponseSerializer, GoogleOAuthCallbackRequestSerializer,
     ProjectRemediationPolicySerializer, RemediationRecordSerializer,
-    ExternalConnectionSerializer, ExternalOperationRecordSerializer
+    ExternalConnectionSerializer, ExternalOperationRecordSerializer,
+    StrategicObjectiveSerializer, StrategicInitiativeSerializer,
+    LongTermSEOStrategySerializer, StrategyReviewRecordSerializer
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.google_oauth import (
@@ -2631,3 +2635,207 @@ class SEOCollaborationIntegrationsView(APIView):
             "operations_count": ops.count(),
             "operations": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ==============================================================================
+# MILESTONE 6.6: LONG-TERM SEO STRATEGY VIEWS
+# ==============================================================================
+
+class LongTermSEOStrategyViewSet(viewsets.ModelViewSet):
+    """
+    Project-scoped CRUD and governance endpoints for LongTermSEOStrategy.
+    """
+    serializer_class = LongTermSEOStrategySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = LongTermSEOStrategy.objects.filter(project__owner=user)
+        project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except ValueError:
+                pass
+        return qs.order_by('-version')
+
+    @action(detail=True, methods=['get'])
+    def objectives(self, request, pk=None):
+        """List objectives for this strategy's project."""
+        strategy = self.get_object()
+        objectives = StrategicObjective.objects.filter(project=strategy.project).order_by('-priority', '-created_at')
+        serializer = StrategicObjectiveSerializer(objectives, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def initiatives(self, request, pk=None):
+        """List initiatives attached to this strategy."""
+        strategy = self.get_object()
+        initiatives = strategy.initiatives.all().order_by('priority', '-created_at')
+        serializer = StrategicInitiativeSerializer(initiatives, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def versions(self, request, pk=None):
+        """List all historical strategy versions for this project."""
+        strategy = self.get_object()
+        versions = LongTermSEOStrategy.objects.filter(project=strategy.project).order_by('-version')
+        serializer = LongTermSEOStrategySerializer(versions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def reviews(self, request, pk=None):
+        """List review records for this strategy."""
+        strategy = self.get_object()
+        reviews = strategy.reviews.all().order_by('-reviewed_at')
+        serializer = StrategyReviewRecordSerializer(reviews, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def metrics(self, request):
+        """Retrieve dynamic strategy evaluation metrics."""
+        from apps.projects.models import Project
+        from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+
+        project_id = request.query_params.get('project_id') or request.query_params.get('project')
+        if not project_id:
+            return Response({"detail": "project_id query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=int(project_id), owner=request.user)
+        except (Project.DoesNotExist, ValueError):
+            return Response({"detail": "Project not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        service = LongTermSEOStrategyService(project)
+        metrics_data = service.get_strategy_metrics(project)
+        return Response(metrics_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Human-in-the-Loop authorization of a proposed strategy version."""
+        from apps.seo.services.long_term_strategy import LongTermSEOStrategyService, StrategyHITLError
+
+        strategy = self.get_object()
+        review = StrategyReviewRecord.objects.filter(
+            project=strategy.project,
+            approval_status=ReviewApprovalStatus.PENDING_APPROVAL
+        ).order_by('-created_at').first()
+
+        if not review:
+            return Response({"detail": "No pending strategy review found for authorization."}, status=status.HTTP_400_BAD_REQUEST)
+
+        service = LongTermSEOStrategyService(strategy.project)
+        try:
+            activated_strategy = service.approve_strategy_adjustment(review_id=review.id, user=request.user)
+            serializer = LongTermSEOStrategySerializer(activated_strategy)
+            return Response({
+                "message": f"Strategy v{activated_strategy.version} successfully approved and activated.",
+                "strategy": serializer.data
+            }, status=status.HTTP_200_OK)
+        except StrategyHITLError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Human-in-the-Loop rejection of a proposed strategy version."""
+        from apps.seo.services.long_term_strategy import LongTermSEOStrategyService, StrategyHITLError
+
+        strategy = self.get_object()
+        review = StrategyReviewRecord.objects.filter(
+            project=strategy.project,
+            approval_status=ReviewApprovalStatus.PENDING_APPROVAL
+        ).order_by('-created_at').first()
+
+        if not review:
+            return Response({"detail": "No pending strategy review found for rejection."}, status=status.HTTP_400_BAD_REQUEST)
+
+        rejection_reason = request.data.get("reason", "Rejected by user.")
+        service = LongTermSEOStrategyService(strategy.project)
+        try:
+            rejected_review = service.reject_strategy_adjustment(review_id=review.id, user=request.user, rejection_reason=rejection_reason)
+            return Response({
+                "message": f"Strategy adaptation review #{rejected_review.id} rejected.",
+                "review_id": rejected_review.id,
+                "approval_status": rejected_review.approval_status
+            }, status=status.HTTP_200_OK)
+        except StrategyHITLError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'])
+    def review(self, request):
+        """Trigger an on-demand strategic review cycle."""
+        from apps.projects.models import Project
+        from apps.seo.services.long_term_strategy import LongTermSEOStrategyService
+
+        project_id = request.data.get('project_id') or request.data.get('project')
+        if not project_id:
+            return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = Project.objects.get(id=int(project_id), owner=request.user)
+        except (Project.DoesNotExist, ValueError):
+            return Response({"detail": "Project not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        trigger_source = request.data.get('trigger_source', 'user_initiated')
+        service = LongTermSEOStrategyService(project)
+        review, decision, proposed = service.conduct_strategy_review(project=project, trigger_source=trigger_source)
+
+        return Response({
+            "review_id": review.id,
+            "cycle": review.review_cycle,
+            "decision": decision,
+            "approval_status": review.approval_status,
+            "proposed_version": proposed.version if proposed else None,
+            "strategy_health": review.evaluation_summary.get("strategy_health", "on_track"),
+        }, status=status.HTTP_200_OK)
+
+
+class StrategicObjectiveViewSet(viewsets.ModelViewSet):
+    """Project-scoped CRUD endpoints for StrategicObjective."""
+    serializer_class = StrategicObjectiveSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = StrategicObjective.objects.filter(project__owner=user)
+        project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except ValueError:
+                pass
+        return qs.order_by('-priority', '-created_at')
+
+
+class StrategicInitiativeViewSet(viewsets.ModelViewSet):
+    """Project-scoped CRUD endpoints for StrategicInitiative."""
+    serializer_class = StrategicInitiativeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = StrategicInitiative.objects.filter(strategy__project__owner=user)
+        strategy_id = self.request.query_params.get('strategy_id') or self.request.query_params.get('strategy')
+        if strategy_id:
+            try:
+                qs = qs.filter(strategy_id=int(strategy_id))
+            except ValueError:
+                pass
+        return qs.order_by('priority', '-created_at')
+
+
+class StrategyReviewRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    """Project-scoped read-only audit endpoints for StrategyReviewRecord."""
+    serializer_class = StrategyReviewRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = StrategyReviewRecord.objects.filter(project__owner=user)
+        project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except ValueError:
+                pass
+        return qs.order_by('-reviewed_at')

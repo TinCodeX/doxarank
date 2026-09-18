@@ -17,7 +17,8 @@ from .models import (
     SEOEvent, SEOEventType, SEOEventSeverity, SEOEventStatus,
     MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
     ProjectRemediationPolicy, RemediationRecord,
-    ExternalConnection, ExternalOperationRecord
+    ExternalConnection, ExternalOperationRecord,
+    StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord
 )
 from apps.projects.models import Project
 
@@ -1821,6 +1822,131 @@ class ExternalOperationRecordSerializer(serializers.ModelSerializer):
             'duration_ms',
             'verification_status',
             'verification_data',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+# ==============================================================================
+# MILESTONE 6, PHASE 6.6: LONG-TERM SEO STRATEGY SERIALIZERS
+# ==============================================================================
+
+class StrategicObjectiveSerializer(serializers.ModelSerializer):
+    """Serializer for StrategicObjective model."""
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = StrategicObjective
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'name',
+            'description',
+            'metric',
+            'baseline',
+            'target',
+            'target_direction',
+            'current_value',
+            'start_date',
+            'target_date',
+            'priority',
+            'horizon',
+            'status',
+            'progress',
+            'evidence',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'project_name', 'created_at', 'updated_at')
+
+
+class StrategicInitiativeSerializer(serializers.ModelSerializer):
+    """Serializer for StrategicInitiative model."""
+    objective_name = serializers.ReadOnlyField(source='objective.name')
+
+    class Meta:
+        model = StrategicInitiative
+        fields = (
+            'id',
+            'objective',
+            'objective_name',
+            'strategy',
+            'name',
+            'description',
+            'priority',
+            'status',
+            'horizon',
+            'start_date',
+            'target_date',
+            'progress',
+            'risk_level',
+            'owner',
+            'target_action_types',
+            'action_plan',
+            'evidence',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'objective_name', 'created_at', 'updated_at')
+
+
+class LongTermSEOStrategySerializer(serializers.ModelSerializer):
+    """Serializer for LongTermSEOStrategy with nested initiatives."""
+    project_name = serializers.ReadOnlyField(source='project.name')
+    initiatives = StrategicInitiativeSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = LongTermSEOStrategy
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'title',
+            'version',
+            'status',
+            'health',
+            'effective_from',
+            'effective_until',
+            'rationale',
+            'assumptions',
+            'risks',
+            'expected_outcomes',
+            'evidence',
+            'adjustment_reason',
+            'previous_version',
+            'created_by_agent',
+            'approved_by',
+            'approved_at',
+            'initiatives',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'project_name', 'created_at', 'updated_at')
+
+
+class StrategyReviewRecordSerializer(serializers.ModelSerializer):
+    """Serializer for StrategyReviewRecord audit entries."""
+    project_name = serializers.ReadOnlyField(source='project.name')
+    strategy_version = serializers.ReadOnlyField(source='strategy.version')
+
+    class Meta:
+        model = StrategyReviewRecord
+        fields = (
+            'id',
+            'strategy',
+            'strategy_version',
+            'project',
+            'project_name',
+            'review_cycle',
+            'status',
+            'evaluation_summary',
+            'decision',
+            'proposed_changes',
+            'approval_status',
+            'fingerprint',
+            'reviewed_at',
             'created_at',
             'updated_at',
         )
