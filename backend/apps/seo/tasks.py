@@ -149,6 +149,16 @@ def execute_agent_run(
                 run.status = AgentRunStatus.RUNNING
                 run.save(update_fields=['status', 'updated_at'])
 
+        # 1b. Acquire execution lease for Celery worker
+        worker_id = getattr(self.request, 'id', None) or f"celery-worker-{run.id}"
+        from apps.seo.services.production_platform import ExecutionLeaseManager, RetryPolicy, FailureCategory, PlatformSecretRedactor
+        lease_mgr = ExecutionLeaseManager()
+        if not lease_mgr.acquire_lease(run, worker_id=worker_id, duration_seconds=120):
+            logger.warning(
+                f"[Celery Task] AgentRun #{run_id} execution lease held by another active worker. Skipping duplicate execution."
+            )
+            return run.id
+
     except Exception as lock_exc:
         logger.exception(f"[Celery Task] Database error acquiring lock for AgentRun #{run_id}: {lock_exc}")
         if isinstance(lock_exc, RETRYABLE_EXCEPTIONS) and self.request.retries < self.max_retries:
@@ -162,6 +172,7 @@ def execute_agent_run(
             user=run.user
         )
         orchestrator.execute_loop(run)
+        lease_mgr.release_lease(run, worker_id=worker_id)
         logger.info(f"[Celery Task] Completed execution loop for AgentRun #{run_id} (Final status: '{run.status}').")
         return run.id
 
@@ -169,6 +180,7 @@ def execute_agent_run(
         logger.warning(
             f"[Celery Task] Transient error executing AgentRun #{run_id} (attempt {self.request.retries + 1}/{self.max_retries}): {retry_exc}"
         )
+        lease_mgr.release_lease(run, worker_id=worker_id)
         if self.request.retries < self.max_retries:
             countdown = (2 ** self.request.retries) * 5
             raise self.retry(exc=retry_exc, countdown=countdown)
@@ -180,6 +192,7 @@ def execute_agent_run(
 
     except Exception as fatal_exc:
         logger.exception(f"[Celery Task] Non-retryable error executing AgentRun #{run_id}: {fatal_exc}")
+        lease_mgr.release_lease(run, worker_id=worker_id)
         _mark_run_failed(run, f"Fatal agent execution error: {fatal_exc.__class__.__name__} - {str(fatal_exc)}")
         return run.id
 
@@ -187,10 +200,11 @@ def execute_agent_run(
 def _mark_run_failed(run: AgentRun, error_summary: str) -> None:
     """Helper to transition an AgentRun to terminal FAILED state safely."""
     try:
+        from apps.seo.services.production_platform import PlatformSecretRedactor
         run.refresh_from_db()
         run.status = AgentRunStatus.FAILED
         # Sanitize message to prevent accidental token/key exposure
-        clean_summary = error_summary.replace("sk-", "sk-***")[:500]
+        clean_summary = PlatformSecretRedactor.redact(error_summary)[:500]
         run.summary = clean_summary
         run.completed_at = timezone.now()
         run.save(update_fields=['status', 'summary', 'completed_at', 'updated_at'])
@@ -930,3 +944,54 @@ def run_project_monitoring_task(self, project_id: int) -> Dict[str, Any]:
     except Exception as exc:
         logger.exception(f"[Celery Project Monitoring Task] Error monitoring project #{project_id}: {exc}")
         return {"error": str(exc)}
+
+
+@shared_task(
+    bind=True,
+    max_retries=1,
+    default_retry_delay=10,
+    name='apps.seo.tasks.sweep_and_recover_stale_runs_task'
+)
+def sweep_and_recover_stale_runs_task(self=None) -> Dict[str, Any]:
+    """
+    Periodic Celery task (Milestone 6.7: Production Agent Platform).
+    Scans for RUNNING AgentRun instances whose execution leases have expired
+    or whose worker heartbeats have timed out, and deterministically recovers them.
+    """
+    from apps.seo.services.production_platform import ExecutionLeaseManager
+    lease_mgr = ExecutionLeaseManager()
+    stale_runs = lease_mgr.detect_stale_runs(threshold_seconds=120)
+    recovered = []
+
+    for run in stale_runs:
+        try:
+            cat, rec_run = lease_mgr.recover_stale_run(run, reason="periodic_stale_sweep")
+            recovered.append({
+                "run_id": run.id,
+                "category": cat.value,
+                "status": rec_run.status,
+                "retry_count": rec_run.retry_count
+            })
+            logger.info(f"[StaleSweep] Stale AgentRun #{run.id} recovered via {cat.value} -> status '{rec_run.status}'.")
+        except Exception as exc:
+            logger.exception(f"[StaleSweep] Error recovering stale AgentRun #{run.id}: {exc}")
+
+    return {
+        "total_detected": len(stale_runs),
+        "total_recovered": len(recovered),
+        "recovered": recovered,
+        "timestamp": timezone.now().isoformat()
+    }
+
+
+@shared_task(
+    name='apps.seo.tasks.compact_platform_data_task'
+)
+def compact_platform_data_task(older_than_days: int = 30) -> Dict[str, int]:
+    """
+    Periodic Celery task (Milestone 6.7) to compact expired idempotency records
+    and resolved platform alerts while strictly preserving strategic evidence and audit logs.
+    """
+    from apps.seo.services.production_platform import DataRetentionManager
+    return DataRetentionManager.compact_ephemeral_data(older_than_days=older_than_days)
+

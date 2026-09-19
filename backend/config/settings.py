@@ -206,7 +206,7 @@ else:
     CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
     CELERY_TASK_EAGER_PROPAGATES = config('CELERY_TASK_EAGER_PROPAGATES', default=False, cast=bool)
 
-# Celery Beat Schedule for Periodic Autonomous Operations (Milestone 6.1 & 6.3)
+# Celery Beat Schedule for Periodic Autonomous Operations (Milestone 6.1, 6.3 & 6.7)
 CELERY_BEAT_SCHEDULE = {
     'evaluate-due-continuous-operations': {
         'task': 'apps.seo.tasks.evaluate_due_continuous_operations_task',
@@ -216,7 +216,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.seo.tasks.run_autonomous_seo_monitoring_task',
         'schedule': 300.0,  # Run autonomous SEO monitoring cycle every 5 minutes
     },
+    'sweep-stale-agent-runs': {
+        'task': 'apps.seo.tasks.sweep_and_recover_stale_runs_task',
+        'schedule': 60.0,  # Sweep and recover stale/interrupted agent runs every minute
+    },
+    'compact-platform-data': {
+        'task': 'apps.seo.tasks.compact_platform_data_task',
+        'schedule': 86400.0,  # Compact ephemeral idempotency/alerts daily
+    },
 }
+
 
 # ASGI & Django Channels Configuration
 ASGI_APPLICATION = 'config.asgi.application'

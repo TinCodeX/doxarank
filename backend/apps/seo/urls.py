@@ -20,7 +20,12 @@ from .views import (
     SEOCollaborationTasksGraphView,
     SEOAgentLearningPerformanceView, SEOCollaborationLearningView,
     SEOReasoningCaseDetailView, SEOCollaborationReasoningView,
-    SEOCollaborationIntegrationsView
+    SEOReasoningCaseDetailView, SEOCollaborationReasoningView,
+    SEOCollaborationIntegrationsView,
+    PlatformHealthCheckView, PlatformReadinessCheckView, PlatformLivenessCheckView,
+    PlatformMetricsView, PlatformAlertsView, PlatformCircuitBreakersView,
+    PlatformCircuitBreakerDetailView, PlatformOperatorActionsView,
+    PlatformRunInspectionView, PlatformRunRecoveryView, PlatformAuditLogView
 )
 
 app_name = 'seo'
@@ -51,6 +56,20 @@ router.register('ai/strategy-reviews', StrategyReviewRecordViewSet, basename='st
 
 
 urlpatterns = [
+    # Milestone 6.7: Production Agent Platform Endpoints
+    path('ai/platform/health/', PlatformHealthCheckView.as_view(), name='platform-health'),
+    path('ai/platform/readiness/', PlatformReadinessCheckView.as_view(), name='platform-readiness'),
+    path('ai/platform/liveness/', PlatformLivenessCheckView.as_view(), name='platform-liveness'),
+    path('ai/platform/metrics/', PlatformMetricsView.as_view(), name='platform-metrics'),
+    path('ai/platform/alerts/', PlatformAlertsView.as_view(), name='platform-alerts'),
+    path('ai/platform/circuit-breakers/', PlatformCircuitBreakersView.as_view(), name='platform-circuit-breakers'),
+    path('ai/platform/circuit-breakers/<str:service_name>/', PlatformCircuitBreakerDetailView.as_view(), name='platform-circuit-breaker-detail'),
+    path('ai/platform/operator/actions/', PlatformOperatorActionsView.as_view(), name='platform-operator-actions'),
+    path('ai/platform/runs/<int:run_id>/inspect/', PlatformRunInspectionView.as_view(), name='platform-run-inspect'),
+    path('ai/platform/runs/<int:run_id>/recover/', PlatformRunRecoveryView.as_view(), name='platform-run-recover'),
+    path('ai/platform/audit-log/', PlatformAuditLogView.as_view(), name='platform-audit-log'),
+
+    # Existing Milestone Endpoints
     path('ai/mcp/servers/', MCPServersView.as_view(), name='seo-mcp-servers'),
     path('ai/mcp/tools/', MCPToolsView.as_view(), name='seo-mcp-tools'),
     path('ai/agent/evaluation/<int:run_id>/', AgentEvaluationView.as_view(), name='seo-agent-evaluation'),
@@ -72,3 +91,4 @@ urlpatterns = [
     path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     path('', include(router.urls)),
 ]
+

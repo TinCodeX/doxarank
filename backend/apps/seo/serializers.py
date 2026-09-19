@@ -1329,6 +1329,14 @@ class AgentRunSerializer(serializers.ModelSerializer):
             'summary',
             'steps',
             'pending_action',
+            'worker_id',
+            'lease_expires_at',
+            'last_heartbeat_at',
+            'correlation_id',
+            'retry_count',
+            'max_retries',
+            'recovery_status',
+            'execution_metadata',
             'created_at',
             'updated_at',
             'completed_at'
@@ -1336,8 +1344,11 @@ class AgentRunSerializer(serializers.ModelSerializer):
         read_only_fields = (
             'id', 'user', 'status', 'status_display', 'plan', 'context_snapshot',
             'max_steps', 'total_steps', 'summary', 'steps', 'pending_action',
+            'worker_id', 'lease_expires_at', 'last_heartbeat_at', 'correlation_id',
+            'retry_count', 'max_retries', 'recovery_status', 'execution_metadata',
             'created_at', 'updated_at', 'completed_at'
         )
+
 
     def get_pending_action(self, obj):
         if obj.status == AgentRunStatus.WAITING_FOR_APPROVAL:
@@ -1951,3 +1962,121 @@ class StrategyReviewRecordSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = fields
+
+
+# ==============================================================================
+# Milestone 6.7: Production Agent Platform Serializers
+# ==============================================================================
+
+from apps.seo.models import (
+    PlatformCircuitBreaker,
+    PlatformIdempotencyRecord,
+    OperatorAuditLog,
+    PlatformAlertRecord,
+)
+
+
+class PlatformCircuitBreakerSerializer(serializers.ModelSerializer):
+    """Serializer for PlatformCircuitBreaker operational status."""
+    class Meta:
+        model = PlatformCircuitBreaker
+        fields = (
+            'id',
+            'service_name',
+            'state',
+            'failure_count',
+            'failure_threshold',
+            'cooldown_seconds',
+            'last_failure_at',
+            'last_state_change_at',
+            'opened_reason',
+            'trip_count',
+            'metadata'
+        )
+        read_only_fields = fields
+
+
+class PlatformIdempotencyRecordSerializer(serializers.ModelSerializer):
+    """Serializer for PlatformIdempotencyRecord tracking."""
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = PlatformIdempotencyRecord
+        fields = (
+            'id',
+            'idempotency_key',
+            'scope',
+            'project',
+            'project_name',
+            'status',
+            'request_hash',
+            'response_data',
+            'created_at',
+            'expires_at'
+        )
+        read_only_fields = fields
+
+
+class OperatorAuditLogSerializer(serializers.ModelSerializer):
+    """Serializer for OperatorAuditLog administrative events."""
+    user_email = serializers.ReadOnlyField(source='user.email')
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = OperatorAuditLog
+        fields = (
+            'id',
+            'user',
+            'user_email',
+            'project',
+            'project_name',
+            'action',
+            'target_type',
+            'target_id',
+            'rationale',
+            'details',
+            'ip_address',
+            'timestamp'
+        )
+        read_only_fields = fields
+
+
+class PlatformAlertRecordSerializer(serializers.ModelSerializer):
+    """Serializer for PlatformAlertRecord operational alerts."""
+    project_name = serializers.ReadOnlyField(source='project.name')
+
+    class Meta:
+        model = PlatformAlertRecord
+        fields = (
+            'id',
+            'alert_type',
+            'severity',
+            'project',
+            'project_name',
+            'message',
+            'details',
+            'is_resolved',
+            'resolved_at',
+            'created_at'
+        )
+        read_only_fields = fields
+
+
+class PlatformOperatorActionRequestSerializer(serializers.Serializer):
+    """
+    Serializer for operator action requests.
+    Validates controlled administrative actions.
+    """
+    action = serializers.ChoiceField(choices=[
+        ('pause_continuous_ops', 'Pause Continuous Operations'),
+        ('resume_continuous_ops', 'Resume Continuous Operations'),
+        ('retry_run', 'Retry Failed/Stale Run'),
+        ('reset_circuit_breaker', 'Reset Circuit Breaker'),
+        ('trip_circuit_breaker', 'Trip Circuit Breaker'),
+        ('reconcile_external_op', 'Reconcile Uncertain External Operation'),
+        ('compact_data', 'Compact Ephemeral Platform Data'),
+    ])
+    target_id = serializers.CharField(required=False, allow_blank=True, default="")
+    project_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    rationale = serializers.CharField(required=False, allow_blank=True, default="")
+

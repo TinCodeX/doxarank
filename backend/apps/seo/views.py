@@ -2839,3 +2839,435 @@ class StrategyReviewRecordViewSet(viewsets.ReadOnlyModelViewSet):
             except ValueError:
                 pass
         return qs.order_by('-reviewed_at')
+
+
+# ==============================================================================
+# MILESTONE 6.7: PRODUCTION AGENT PLATFORM VIEWS
+# ==============================================================================
+
+from apps.seo.models import (
+    PlatformCircuitBreaker,
+    PlatformIdempotencyRecord,
+    OperatorAuditLog,
+    PlatformAlertRecord,
+    CircuitBreakerState,
+)
+from apps.seo.serializers import (
+    PlatformCircuitBreakerSerializer,
+    PlatformIdempotencyRecordSerializer,
+    OperatorAuditLogSerializer,
+    PlatformAlertRecordSerializer,
+    PlatformOperatorActionRequestSerializer,
+)
+from apps.seo.services.production_platform import (
+    PlatformHealthChecker,
+    PlatformMetricsCollector,
+    ExecutionLeaseManager,
+    CircuitBreakerRegistry,
+    OperatorAuditService,
+    DataRetentionManager,
+    ExternalOperationReconciler,
+    PlatformRateLimiter,
+)
+
+
+class PlatformHealthCheckView(APIView):
+    """
+    Operational health check inspecting Database, Redis, Celery, Scheduler,
+    Agent Runtime, and External integration subsystems.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        health = PlatformHealthChecker.get_full_health()
+        http_status = status.HTTP_200_OK if health["status"] != "unavailable" else status.HTTP_503_SERVICE_UNAVAILABLE
+        return Response(health, status=http_status)
+
+
+class PlatformReadinessCheckView(APIView):
+    """
+    Readiness probe indicating whether the platform can safely accept agent workloads.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        is_ready, details = PlatformHealthChecker.get_readiness()
+        http_status = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
+        return Response(details, status=http_status)
+
+
+class PlatformLivenessCheckView(APIView):
+    """
+    Liveness probe indicating whether the web process is alive.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response(PlatformHealthChecker.get_liveness(), status=status.HTTP_200_OK)
+
+
+class PlatformMetricsView(APIView):
+    """
+    Retrieve runtime-derived observability metrics across the agent platform.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id') or request.query_params.get('project')
+        project = None
+        if project_id:
+            try:
+                project = Project.objects.get(id=int(project_id), owner=request.user)
+            except (Project.DoesNotExist, ValueError):
+                return Response({"detail": "Project not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        metrics = PlatformMetricsCollector.get_platform_metrics(project=project)
+        return Response(metrics, status=status.HTTP_200_OK)
+
+
+class PlatformAlertsView(APIView):
+    """
+    List and manage deterministic operational alerts.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = PlatformAlertRecord.objects.filter(
+            Q(project__owner=request.user) | Q(project__isnull=True)
+        ).order_by('-created_at')
+
+        is_resolved = request.query_params.get('is_resolved')
+        if is_resolved is not None:
+            qs = qs.filter(is_resolved=is_resolved.lower() in ['true', '1'])
+
+        serializer = PlatformAlertRecordSerializer(qs[:50], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        alert_id = request.data.get('alert_id')
+        if not alert_id:
+            return Response({"detail": "alert_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            alert = PlatformAlertRecord.objects.get(
+                id=alert_id,
+                project__owner=request.user if alert_id else None
+            )
+        except PlatformAlertRecord.DoesNotExist:
+            alert = PlatformAlertRecord.objects.filter(id=alert_id, project__isnull=True).first()
+            if not alert:
+                return Response({"detail": "Alert not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        alert.is_resolved = True
+        alert.resolved_at = timezone.now()
+        alert.save(update_fields=['is_resolved', 'resolved_at'])
+        return Response(PlatformAlertRecordSerializer(alert).data, status=status.HTTP_200_OK)
+
+
+class PlatformCircuitBreakersView(APIView):
+    """
+    Inspect operational status of external dependencies circuit breakers.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        registry = CircuitBreakerRegistry()
+        for svc in CircuitBreakerRegistry.KNOWN_SERVICES:
+            registry.get_or_create(svc)
+
+        breakers = PlatformCircuitBreaker.objects.all().order_by('service_name')
+        serializer = PlatformCircuitBreakerSerializer(breakers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PlatformCircuitBreakerDetailView(APIView):
+    """
+    Inspect or operate a specific dependency circuit breaker (Reset or Trip).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, service_name):
+        registry = CircuitBreakerRegistry()
+        breaker = registry.get_or_create(service_name)
+        return Response(PlatformCircuitBreakerSerializer(breaker).data, status=status.HTTP_200_OK)
+
+    def post(self, request, service_name):
+        action_name = request.data.get('action')
+        rationale = request.data.get('rationale', 'Operator manual action')
+        registry = CircuitBreakerRegistry()
+
+        if action_name == 'reset':
+            registry.reset_breaker(service_name, operator_user=request.user)
+            breaker = registry.get_or_create(service_name)
+            return Response(PlatformCircuitBreakerSerializer(breaker).data, status=status.HTTP_200_OK)
+        elif action_name == 'trip':
+            registry.trip_breaker(service_name, reason=rationale, operator_user=request.user)
+            breaker = registry.get_or_create(service_name)
+            return Response(PlatformCircuitBreakerSerializer(breaker).data, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {"detail": "Invalid action. Choose 'reset' or 'trip'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class PlatformOperatorActionsView(APIView):
+    """
+    Execute controlled, auditable administrative operator interventions.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = PlatformOperatorActionRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        action_type = serializer.validated_data['action']
+        target_id = serializer.validated_data.get('target_id', '')
+        project_id = serializer.validated_data.get('project_id')
+        rationale = serializer.validated_data.get('rationale', 'Operator intervention')
+
+        project = None
+        if project_id:
+            try:
+                project = Project.objects.get(id=project_id, owner=request.user)
+            except Project.DoesNotExist:
+                return Response({"detail": "Project not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        if action_type == 'pause_continuous_ops':
+            if not project:
+                return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            ops = ContinuousOperation.objects.filter(project=project, status=ContinuousOperationStatus.ACTIVE)
+            count = 0
+            for op in ops:
+                op.status = ContinuousOperationStatus.PAUSED
+                op.paused_at = timezone.now()
+                op.save(update_fields=['status', 'paused_at', 'updated_at'])
+                count += 1
+            OperatorAuditService.log_action(
+                user=request.user,
+                project=project,
+                action="continuous_ops.paused",
+                target_type="continuous_operation",
+                target_id=str(project.id),
+                rationale=rationale,
+                details={"paused_count": count}
+            )
+            return Response({"detail": f"Paused {count} continuous operations for project.", "paused_count": count}, status=status.HTTP_200_OK)
+
+        elif action_type == 'resume_continuous_ops':
+            if not project:
+                return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            ops = ContinuousOperation.objects.filter(project=project, status=ContinuousOperationStatus.PAUSED)
+            count = 0
+            for op in ops:
+                op.status = ContinuousOperationStatus.ACTIVE
+                op.resumed_at = timezone.now()
+                op.save(update_fields=['status', 'resumed_at', 'updated_at'])
+                count += 1
+            OperatorAuditService.log_action(
+                user=request.user,
+                project=project,
+                action="continuous_ops.resumed",
+                target_type="continuous_operation",
+                target_id=str(project.id),
+                rationale=rationale,
+                details={"resumed_count": count}
+            )
+            return Response({"detail": f"Resumed {count} continuous operations for project.", "resumed_count": count}, status=status.HTTP_200_OK)
+
+        elif action_type == 'retry_run':
+            if not target_id:
+                return Response({"detail": "target_id (run_id) is required."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                run = AgentRun.objects.get(id=int(target_id), project__owner=request.user)
+            except (AgentRun.DoesNotExist, ValueError):
+                return Response({"detail": "AgentRun not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+            lease_mgr = ExecutionLeaseManager()
+            cat, rec_run = lease_mgr.recover_stale_run(run, reason=f"Operator retry: {rationale}", operator_user=request.user)
+            return Response({
+                "detail": f"Run #{run.id} recovered via {cat.value}.",
+                "run": AgentRunSerializer(rec_run).data
+            }, status=status.HTTP_200_OK)
+
+        elif action_type == 'reset_circuit_breaker':
+            if not target_id:
+                return Response({"detail": "target_id (service_name) is required."}, status=status.HTTP_400_BAD_REQUEST)
+            registry = CircuitBreakerRegistry()
+            registry.reset_breaker(target_id, operator_user=request.user)
+            return Response({"detail": f"Circuit breaker for '{target_id}' reset."}, status=status.HTTP_200_OK)
+
+        elif action_type == 'trip_circuit_breaker':
+            if not target_id:
+                return Response({"detail": "target_id (service_name) is required."}, status=status.HTTP_400_BAD_REQUEST)
+            registry = CircuitBreakerRegistry()
+            registry.trip_breaker(target_id, reason=rationale, operator_user=request.user)
+            return Response({"detail": f"Circuit breaker for '{target_id}' tripped."}, status=status.HTTP_200_OK)
+
+        elif action_type == 'reconcile_external_op':
+            if not target_id:
+                return Response({"detail": "target_id (operation_id) is required."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                op_rec = ExternalOperationRecord.objects.get(id=int(target_id), project__owner=request.user)
+            except (ExternalOperationRecord.DoesNotExist, ValueError):
+                return Response({"detail": "External operation not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+            rec = ExternalOperationReconciler.reconcile(op_rec, op_rec.project)
+            OperatorAuditService.log_action(
+                user=request.user,
+                project=op_rec.project,
+                action="external_op.reconciled",
+                target_type="external_operation",
+                target_id=str(op_rec.id),
+                rationale=rationale
+            )
+            return Response({"detail": f"External operation #{op_rec.id} reconciled.", "status": rec.status}, status=status.HTTP_200_OK)
+
+        elif action_type == 'compact_data':
+            res = DataRetentionManager.compact_ephemeral_data(older_than_days=30)
+            OperatorAuditService.log_action(
+                user=request.user,
+                action="platform.compact_data",
+                target_type="data_retention",
+                target_id="global",
+                rationale=rationale,
+                details=res
+            )
+            return Response(res, status=status.HTTP_200_OK)
+
+        return Response({"detail": "Unhandled operator action."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PlatformRunInspectionView(APIView):
+    """
+    Deep inspection endpoint tracing complete execution lifecycle of an AgentRun:
+    Run -> Tasks -> Agents -> Tools -> External Operations -> Verification -> Outcome.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, run_id):
+        try:
+            run = AgentRun.objects.select_related('project', 'user').prefetch_related('steps__tool_calls').get(
+                id=run_id,
+                project__owner=request.user
+            )
+        except AgentRun.DoesNotExist:
+            return Response({"detail": "AgentRun not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Step & Tool calls hierarchy
+        steps_data = []
+        for step in run.steps.all().order_by('step_number'):
+            tools_data = []
+            for tc in step.tool_calls.all():
+                tools_data.append({
+                    "id": tc.id,
+                    "tool_name": tc.tool_name,
+                    "duration_ms": tc.duration_ms,
+                    "is_mutating": tc.is_mutating,
+                    "error": tc.error_message or None,
+                    "input": tc.tool_input,
+                    "output": tc.tool_output,
+                })
+            steps_data.append({
+                "step_number": step.step_number,
+                "action_type": step.action_type,
+                "status": step.status,
+                "thought": step.thought,
+                "tool_calls": tools_data,
+                "created_at": step.created_at.isoformat(),
+                "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+            })
+
+        # 2. External Operations
+        ext_ops = ExternalOperationRecord.objects.filter(agent_run=run).order_by('created_at')
+        ext_ops_data = [{
+            "id": op.id,
+            "operation_type": op.operation_type,
+            "status": op.status,
+            "verification_status": op.verification_status,
+            "is_mutating": op.is_mutating,
+            "created_at": op.created_at.isoformat(),
+        } for op in ext_ops]
+
+        # 3. Correlated SEO Actions & Verifications
+        actions = SEOAction.objects.filter(project=run.project, created_at__gte=run.created_at)
+        actions_data = [{
+            "id": act.id,
+            "title": act.title,
+            "action_type": act.action_type,
+            "status": act.status,
+            "verification_status": act.verification_status,
+            "is_mutating": act.is_mutating,
+        } for act in actions[:10]]
+
+        # 4. Assembled inspection payload
+        payload = {
+            "run": {
+                "id": run.id,
+                "project_id": run.project_id,
+                "project_name": run.project.name,
+                "goal": run.goal,
+                "status": run.status,
+                "worker_id": run.worker_id,
+                "correlation_id": run.correlation_id,
+                "retry_count": run.retry_count,
+                "max_retries": run.max_retries,
+                "recovery_status": run.recovery_status,
+                "lease_expires_at": run.lease_expires_at.isoformat() if run.lease_expires_at else None,
+                "last_heartbeat_at": run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
+                "total_steps": run.total_steps,
+                "summary": run.summary,
+                "created_at": run.created_at.isoformat(),
+                "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            },
+            "steps": steps_data,
+            "external_operations": ext_ops_data,
+            "actions": actions_data,
+            "correlation_chain": {
+                "request_id": run.correlation_id,
+                "run_id": run.id,
+                "steps_count": len(steps_data),
+                "tools_count": sum(len(s["tool_calls"]) for s in steps_data),
+                "external_ops_count": len(ext_ops_data),
+            }
+        }
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class PlatformRunRecoveryView(APIView):
+    """
+    Direct operator endpoint to trigger safe recovery of a stale or failed run.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, run_id):
+        try:
+            run = AgentRun.objects.get(id=run_id, project__owner=request.user)
+        except AgentRun.DoesNotExist:
+            return Response({"detail": "AgentRun not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+        lease_mgr = ExecutionLeaseManager()
+        cat, rec_run = lease_mgr.recover_stale_run(run, reason="Manual operator recovery", operator_user=request.user)
+
+        return Response({
+            "detail": f"AgentRun #{run.id} recovered.",
+            "recovery_category": cat.value,
+            "run": AgentRunSerializer(rec_run).data
+        }, status=status.HTTP_200_OK)
+
+
+class PlatformAuditLogView(APIView):
+    """
+    Inspect immutable operator audit logs.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = OperatorAuditLog.objects.filter(
+            Q(project__owner=request.user) | Q(user=request.user) | Q(project__isnull=True)
+        ).order_by('-timestamp')
+
+        serializer = OperatorAuditLogSerializer(qs[:100], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

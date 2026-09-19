@@ -20,6 +20,7 @@ import { MonitoringActivityPanel } from '../components/MonitoringActivityPanel';
 import { RemediationActivityPanel } from '../components/RemediationActivityPanel';
 import { ExternalIntegrationsPanel } from '../components/ExternalIntegrationsPanel';
 import { LongTermStrategyPanel } from '../components/LongTermStrategyPanel';
+import { ProductionOperationsPanel } from '../components/ProductionOperationsPanel';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -782,7 +783,13 @@ export const Dashboard: React.FC = () => {
           />
         )}
 
+        {/* SECTION 6.12: PRODUCTION AGENT PLATFORM (Milestone 6.7) */}
+        <ProductionOperationsPanel
+          project={selectedProject}
+        />
+
         {/* SECTION 7: AI SEO AGENT & RECOMMENDATIONS (Visible when a project is selected) */}
+
         {selectedProject && (
           <AIRecommendationsPanel
             project={selectedProject}

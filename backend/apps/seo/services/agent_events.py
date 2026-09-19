@@ -252,6 +252,22 @@ class AgentEventType(str, Enum):
     SEO_STRATEGY_VERSION_CREATED = "seo.strategy.version.created"
     SEO_STRATEGY_OUTCOME_RECORDED = "seo.strategy.outcome.recorded"
 
+    # Production Agent Platform (Milestone 6.7)
+    PLATFORM_HEARTBEAT = "platform.heartbeat"
+    PLATFORM_LEASE_EXPIRED = "platform.lease_expired"
+    PLATFORM_STALE_RUN_DETECTED = "platform.stale_run_detected"
+    PLATFORM_RUN_RECOVERED = "platform.run_recovered"
+    PLATFORM_RETRY_ATTEMPTED = "platform.retry_attempted"
+    PLATFORM_CIRCUIT_BREAKER_OPENED = "platform.circuit_breaker_opened"
+    PLATFORM_CIRCUIT_BREAKER_CLOSED = "platform.circuit_breaker_closed"
+    PLATFORM_CIRCUIT_BREAKER_HALF_OPEN = "platform.circuit_breaker_half_open"
+    PLATFORM_RATE_LIMIT_EXCEEDED = "platform.rate_limit_exceeded"
+    PLATFORM_CONCURRENCY_LIMITED = "platform.concurrency_limited"
+    PLATFORM_OPERATOR_ACTION = "platform.operator_action"
+    PLATFORM_ALERT_EMITTED = "platform.alert_emitted"
+    PLATFORM_UNCERTAIN_RECONCILED = "platform.uncertain_reconciled"
+    PLATFORM_DATA_COMPACTED = "platform.data_compacted"
+
 
 def sanitize_event_payload(data: Any) -> Any:
     """

@@ -1970,6 +1970,52 @@ class AgentRun(models.Model):
         default='',
         help_text='Final executive summary or conclusion of the agent run.'
     )
+    # Milestone 6.7: Production Agent Platform Fields
+    worker_id = models.CharField(
+        max_length=128,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Identifier of the Celery worker currently executing this run.'
+    )
+    lease_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp when worker execution lease expires.'
+    )
+    last_heartbeat_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the most recent worker heartbeat.'
+    )
+    correlation_id = models.CharField(
+        max_length=128,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Distributed tracing correlation ID linking requests, runs, tasks, and tools.'
+    )
+    retry_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of retries attempted for this agent run session.'
+    )
+    max_retries = models.PositiveIntegerField(
+        default=3,
+        help_text='Maximum allowed retry attempts before marking run as permanently failed.'
+    )
+    recovery_status = models.CharField(
+        max_length=32,
+        default='none',
+        db_index=True,
+        help_text='Current recovery state: none, recovered, reconciling, failed, blocked.'
+    )
+    execution_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Resource consumption telemetry: llm_calls, tool_calls, duration_ms, external_ops.'
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         help_text='Timestamp when the agent run was created.'
@@ -1994,6 +2040,8 @@ class AgentRun(models.Model):
             models.Index(fields=['user', 'status'], name='seo_agent_run_user_stat_idx'),
             models.Index(fields=['project', '-created_at'], name='seo_agent_run_proj_date_idx'),
             models.Index(fields=['continuous_operation', '-created_at'], name='seo_agent_run_cont_date_idx'),
+            models.Index(fields=['status', 'lease_expires_at'], name='seo_agent_run_lease_idx'),
+            models.Index(fields=['correlation_id'], name='seo_agent_run_correl_idx'),
         ]
 
     def __str__(self):
@@ -3431,3 +3479,291 @@ class StrategyReviewRecord(models.Model):
 
     def __str__(self):
         return f"StrategyReview #{self.id} [Cycle {self.review_cycle}] -> {self.decision} ({self.approval_status})"
+
+
+# ==============================================================================
+# Milestone 6.7: Production Agent Platform Models
+# ==============================================================================
+
+class CircuitBreakerState(models.TextChoices):
+    CLOSED = 'closed', 'Closed (Healthy)'
+    OPEN = 'open', 'Open (Tripped)'
+    HALF_OPEN = 'half_open', 'Half-Open (Testing Recovery)'
+
+
+class PlatformCircuitBreaker(models.Model):
+    """
+    PlatformCircuitBreaker model tracking operational availability and failure thresholds
+    for external systems (CMS, Git, Webhook, SERP, GSC, LLM) to protect downstream providers
+    and fast-fail repeated dependent errors.
+    """
+    service_name = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text='Unique identifier of the external dependency or provider (e.g. cms, git, webhook, serp, gsc, llm).'
+    )
+    state = models.CharField(
+        max_length=32,
+        choices=CircuitBreakerState.choices,
+        default=CircuitBreakerState.CLOSED,
+        db_index=True,
+        help_text='Current circuit state (closed=normal, open=fast-fail, half_open=probing).'
+    )
+    failure_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Consecutive failure count within current window.'
+    )
+    failure_threshold = models.PositiveIntegerField(
+        default=5,
+        help_text='Number of consecutive failures before tripping to OPEN.'
+    )
+    cooldown_seconds = models.PositiveIntegerField(
+        default=60,
+        help_text='Seconds to wait in OPEN state before transitioning to HALF_OPEN probe.'
+    )
+    last_failure_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp of the most recent registered failure.'
+    )
+    last_state_change_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when circuit state last transitioned.'
+    )
+    opened_reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Diagnostic summary of why the circuit breaker opened.'
+    )
+    trip_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Lifetime count of times this circuit breaker has tripped to OPEN.'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Provider-specific diagnostic state, error samples, or operator notes.'
+    )
+
+    class Meta:
+        db_table = 'seo_platform_circuit_breakers'
+        verbose_name = 'Platform circuit breaker'
+        verbose_name_plural = 'Platform circuit breakers'
+        ordering = ['service_name']
+
+    def __str__(self):
+        return f"CircuitBreaker [{self.service_name}]: {self.state.upper()} (failures: {self.failure_count}/{self.failure_threshold})"
+
+
+class IdempotencyStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+
+
+class PlatformIdempotencyRecord(models.Model):
+    """
+    PlatformIdempotencyRecord model guaranteeing that repeated requests, worker retries,
+    or duplicate triggers produce deterministic results without duplicate execution or mutation.
+    """
+    idempotency_key = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text='Unique idempotency key identifying the logical operation.'
+    )
+    scope = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='Classification scope (e.g. run_creation, task_execution, remediation, external_op).'
+    )
+    project = models.ForeignKey(
+        Project,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='idempotency_records',
+        help_text='The project context for this idempotent operation, if scoped.'
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=IdempotencyStatus.choices,
+        default=IdempotencyStatus.PENDING,
+        db_index=True,
+        help_text='Execution state of the idempotent operation.'
+    )
+    request_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        help_text='SHA-256 hash of payload/arguments to verify payload consistency on duplicate calls.'
+    )
+    response_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Cached structured response payload returned on subsequent duplicate requests.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp when idempotency record expires and can be compacted.'
+    )
+
+    class Meta:
+        db_table = 'seo_platform_idempotency_records'
+        verbose_name = 'Platform idempotency record'
+        verbose_name_plural = 'Platform idempotency records'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['scope', 'status'], name='seo_idemp_scope_stat_idx'),
+            models.Index(fields=['project', 'scope'], name='seo_idemp_proj_scope_idx'),
+        ]
+
+    def __str__(self):
+        return f"Idempotency [{self.scope}]: {self.idempotency_key[:32]}... ({self.status})"
+
+
+class OperatorAuditLog(models.Model):
+    """
+    OperatorAuditLog model maintaining an immutable audit log of administrative actions,
+    lifecycle overrides, and operational interventions for complete governance compliance.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='operator_audit_logs',
+        help_text='The authenticated operator or user who performed the administrative action.'
+    )
+    project = models.ForeignKey(
+        Project,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='operator_audit_logs',
+        help_text='Project context if the operator action was project-scoped.'
+    )
+    action = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Audited action identifier (e.g. run.retried, continuous_ops.paused, circuit_breaker.reset).'
+    )
+    target_type = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='Entity type affected by operator action (e.g. agent_run, circuit_breaker, continuous_operation).'
+    )
+    target_id = models.CharField(
+        max_length=128,
+        db_index=True,
+        help_text='Identifier of the entity affected.'
+    )
+    rationale = models.TextField(
+        blank=True,
+        default='',
+        help_text='Operator-provided justification for manual intervention.'
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured metadata describing state changes before and after operator action.'
+    )
+    ip_address = models.CharField(
+        max_length=45,
+        blank=True,
+        default='',
+        help_text='Client IP address from which operator request originated.'
+    )
+    timestamp = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when administrative action was committed.'
+    )
+
+    class Meta:
+        db_table = 'seo_operator_audit_logs'
+        verbose_name = 'Operator audit log'
+        verbose_name_plural = 'Operator audit logs'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['action', '-timestamp'], name='seo_op_audit_act_ts_idx'),
+            models.Index(fields=['target_type', 'target_id'], name='seo_op_audit_tgt_idx'),
+            models.Index(fields=['project', '-timestamp'], name='seo_op_audit_proj_ts_idx'),
+        ]
+
+    def __str__(self):
+        user_email = self.user.email if self.user else "System"
+        return f"AuditLog [{self.action}] by {user_email} on {self.target_type}#{self.target_id} at {self.timestamp}"
+
+
+class AlertSeverity(models.TextChoices):
+    LOW = 'low', 'Low'
+    MEDIUM = 'medium', 'Medium'
+    HIGH = 'high', 'High'
+    CRITICAL = 'critical', 'Critical'
+
+
+class PlatformAlertRecord(models.Model):
+    """
+    PlatformAlertRecord model storing deterministic operational alerts triggered by
+    runtime anomalies, high failure rates, circuit breaker trips, or backlog build-up.
+    """
+    alert_type = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text='Classification of alert (e.g. high_failure_rate, circuit_breaker_opened, stale_run_detected).'
+    )
+    severity = models.CharField(
+        max_length=32,
+        choices=AlertSeverity.choices,
+        default=AlertSeverity.MEDIUM,
+        db_index=True,
+        help_text='Alert priority level.'
+    )
+    project = models.ForeignKey(
+        Project,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='platform_alerts',
+        help_text='Project context if alert is tenant-scoped.'
+    )
+    message = models.TextField(
+        help_text='Human-readable description of alert condition.'
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Diagnostic runtime evidence and metrics at time of alert generation.'
+    )
+    is_resolved = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Whether alert condition has been cleared or acknowledged.'
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when alert was resolved.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'seo_platform_alerts'
+        verbose_name = 'Platform alert record'
+        verbose_name_plural = 'Platform alert records'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['alert_type', 'is_resolved'], name='seo_alert_type_res_idx'),
+            models.Index(fields=['severity', 'is_resolved'], name='seo_alert_sev_res_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_alert_proj_ts_idx'),
+        ]
+
+    def __str__(self):
+        status_str = "RESOLVED" if self.is_resolved else "ACTIVE"
+        return f"Alert [{self.severity.upper()} - {self.alert_type}] ({status_str}): {self.message[:60]}"
+
