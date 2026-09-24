@@ -38,3 +38,13 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not parsed.netloc:
             raise serializers.ValidationError("Please provide a valid domain name (e.g., https://example.com).")
         return trimmed
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # Check quota when creating a new project
+        if not self.instance:
+            request = self.context.get('request')
+            if request and request.user and request.user.is_authenticated:
+                from apps.subscriptions.services import PlanEntitlementService
+                PlanEntitlementService.check_can_create_project(request.user)
+        return attrs

@@ -96,6 +96,13 @@ class KeywordSerializer(serializers.ModelSerializer):
                     'keyword': f"The keyword '{keyword}' is already being tracked for this project under the selected configuration."
                 })
 
+        # Enforce subscription plan keyword quota limit when creating a new keyword
+        if not self.instance:
+            request = self.context.get('request')
+            if request and request.user and request.user.is_authenticated:
+                from apps.subscriptions.services import PlanEntitlementService
+                PlanEntitlementService.check_can_add_keyword(request.user)
+
         return attrs
 
 

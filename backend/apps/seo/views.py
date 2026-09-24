@@ -92,6 +92,14 @@ class KeywordViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def perform_create(self, serializer):
+        """
+        Enforce subscription plan keyword quota limits across all user projects.
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        PlanEntitlementService.check_can_add_keyword(self.request.user)
+        serializer.save()
+
 
 class KeywordRankingViewSet(viewsets.ModelViewSet):
     """

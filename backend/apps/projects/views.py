@@ -26,5 +26,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Automatically associate the newly created project with the authenticated user.
+        Enforces subscription plan project quota limits.
         """
+        from apps.subscriptions.services import PlanEntitlementService
+        PlanEntitlementService.check_can_create_project(self.request.user)
         serializer.save(owner=self.request.user)

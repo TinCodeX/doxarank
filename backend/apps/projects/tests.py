@@ -26,6 +26,9 @@ class ProjectAPITests(TestCase):
             last_name='B'
         )
 
+        from apps.subscriptions.services import SubscriptionService
+        SubscriptionService.assign_plan(self.user_a, 'STARTER')
+
         # Create a project owned by User A and one owned by User B
         self.project_a = Project.objects.create(
             owner=self.user_a,

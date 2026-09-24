@@ -25,12 +25,16 @@ import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
 import { SEOActionsPanel } from '../components/SEOActionsPanel';
+import { SEOToolsPanel } from '../components/SEOToolsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
+import { getUserSubscription } from '../api/subscriptions';
+import type { UserSubscriptionSummary } from '../types/subscription';
 
 
 export const Dashboard: React.FC = () => {
 
   const { user, logout } = useAuth();
+  const [subscriptionSummary, setSubscriptionSummary] = useState<UserSubscriptionSummary | null>(null);
 
   // Project state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -104,8 +108,18 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const fetchSubscription = async () => {
+    try {
+      const summary = await getUserSubscription();
+      setSubscriptionSummary(summary);
+    } catch (err) {
+      console.warn('Could not load subscription summary:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUserProjects();
+    fetchSubscription();
   }, []);
 
   // Fetch keywords whenever active project changes
@@ -302,9 +316,72 @@ export const Dashboard: React.FC = () => {
               <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{selectedProject.name}</span>
             </div>
           )}
+
+          <button
+            id="nav-seo-tools-btn"
+            onClick={() => {
+              const el = document.getElementById('seo-tools-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: '#1e293b',
+              cursor: 'pointer',
+            }}
+          >
+            🛠️ SEO Tools
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {subscriptionSummary && (
+            <div
+              id="dashboard-plan-badge"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '12px',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color:
+                    subscriptionSummary.plan.code === 'AGENCY'
+                      ? '#7c3aed'
+                      : subscriptionSummary.plan.code === 'STARTER'
+                      ? '#2563eb'
+                      : '#475569',
+                }}
+              >
+                {subscriptionSummary.plan.name} PLAN
+              </span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span style={{ color: '#475569' }}>
+                Sites: <strong>{subscriptionSummary.usage.projects.current}</strong>/{subscriptionSummary.usage.projects.limit}
+              </span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span style={{ color: '#475569' }}>
+                Keywords: <strong>{subscriptionSummary.usage.keywords.current}</strong>/{subscriptionSummary.usage.keywords.limit}
+              </span>
+            </div>
+          )}
+
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>
               {user?.full_name || 'DoxaRank User'}
@@ -863,6 +940,9 @@ export const Dashboard: React.FC = () => {
             }}
           />
         )}
+
+        {/* SECTION: STANDALONE CORE SEO TOOLS (Original SRS Tools 1-3) */}
+        <SEOToolsPanel />
 
         {/* SECTION 11: PROJECTS MANAGEMENT */}
         <section style={{ marginTop: '48px', borderTop: '1px solid #e5e7eb', paddingTop: '32px' }}>
