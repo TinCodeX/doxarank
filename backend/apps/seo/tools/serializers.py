@@ -83,3 +83,55 @@ class SocialPreviewInputSerializer(serializers.Serializer):
     )
     twitter_site = serializers.CharField(required=False, allow_blank=True, max_length=100)
     twitter_creator = serializers.CharField(required=False, allow_blank=True, max_length=100)
+
+
+class RobotsToolInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(
+        choices=['generate', 'test'],
+        default='generate',
+    )
+    # Generator fields
+    groups = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        default=list,
+    )
+    sitemaps = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
+    host = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    # Tester fields
+    robots_content = serializers.CharField(required=False, allow_blank=True)
+    path = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    user_agent = serializers.CharField(required=False, default='*', max_length=100)
+
+
+class SitemapToolInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(
+        choices=['generate', 'validate'],
+        default='generate',
+    )
+    # Generator fields
+    entries = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        default=list,
+    )
+    # Validator fields
+    xml_content = serializers.CharField(required=False, allow_blank=True)
+
+
+class HreflangInputSerializer(serializers.Serializer):
+    entries = serializers.ListField(
+        child=serializers.DictField(),
+        required=True,
+        error_messages={'required': 'List of language/URL entries is required.'}
+    )
+    x_default = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        error_messages={'invalid': 'x-default must be a valid HTTP or HTTPS URL.'}
+    )

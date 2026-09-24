@@ -46,7 +46,10 @@ def run_tests():
     assert status_res.data['plan_code'] == PlanCode.FREE
     assert status_res.data['daily_limit'] == 5
     assert status_res.data['tools']['meta_tag_generator']['used_today'] == 0
-    print("   [PASS] Initial quota status fetched. Used today: 0, Daily limit: 5.")
+    assert 'robots_txt_tool' in status_res.data['tools']
+    assert 'xml_sitemap_tool' in status_res.data['tools']
+    assert 'hreflang_builder' in status_res.data['tools']
+    print("   [PASS] Initial quota status fetched. All 6 core tools verified in status response.")
 
     # 3. Meta Tag Generator API
     print("\n3. Testing Meta Tag Generator (POST /api/seo/tools/meta/)...")
@@ -65,7 +68,7 @@ def run_tests():
     assert meta_res.data['usage']['remaining_today'] == 4
     print("   [PASS] Meta tags generated successfully. Daily quota atomically decremented to 4 remaining.")
 
-    # 4. Schema Generator API (LocalBusiness, Article, FAQ, Breadcrumbs)
+    # 4. Schema Generator API (FAQ)
     print("\n4. Testing Schema.org JSON-LD Generator (POST /api/seo/tools/schema/)...")
     schema_payload = {
         'schema_type': 'FAQ',
@@ -103,9 +106,81 @@ def run_tests():
     assert social_res.data['preview']['twitter_site'] == '@doxarank'
     print("   [PASS] Social preview tags generated. SSRF-safe deterministic card models returned.")
 
-    # 6. Quota Limit Enforcement
-    print("\n6. Testing Daily Tool Usage Quota Enforcement (Free Plan = 5 runs/day)...")
-    # We already ran 1 meta tool. Let's run 4 more so total is 5
+    # 6. Robots.txt Generator & Access Tester API
+    print("\n6. Testing Robots.txt Generator & Tester (POST /api/seo/tools/robots/)...")
+    robots_gen_payload = {
+        'action': 'generate',
+        'groups': [
+            {'user_agent': '*', 'disallow': ['/admin/', '/private/'], 'allow': ['/public/', '/'], 'crawl_delay': 2},
+            {'user_agent': 'Googlebot', 'disallow': ['/no-google/']},
+        ],
+        'sitemaps': ['https://example.com/sitemap.xml'],
+        'host': 'example.com',
+    }
+    robots_gen_res = client.post('/api/seo/tools/robots/', robots_gen_payload, format='json')
+    assert robots_gen_res.status_code == status.HTTP_200_OK
+    assert 'User-agent: *' in robots_gen_res.data['content']
+    assert 'Disallow: /admin/' in robots_gen_res.data['content']
+    assert 'Sitemap: https://example.com/sitemap.xml' in robots_gen_res.data['content']
+
+    # Robots tester test
+    robots_test_payload = {
+        'action': 'test',
+        'robots_content': robots_gen_res.data['content'],
+        'path': '/admin/confidential',
+        'user_agent': '*',
+    }
+    robots_test_res = client.post('/api/seo/tools/robots/', robots_test_payload, format='json')
+    assert robots_test_res.status_code == status.HTTP_200_OK
+    assert robots_test_res.data['allowed'] is False
+    assert robots_test_res.data['status'] == 'BLOCKED'
+    print("   [PASS] Robots.txt generated and access rule correctly evaluated (/admin/ is BLOCKED).")
+
+    # 7. XML Sitemap Generator & Validator API
+    print("\n7. Testing XML Sitemap Generator & Validator (POST /api/seo/tools/sitemap/)...")
+    sitemap_gen_payload = {
+        'action': 'generate',
+        'entries': [
+            {'loc': 'https://example.com/', 'changefreq': 'daily', 'priority': '1.0'},
+            {'loc': 'https://example.com/services', 'changefreq': 'weekly', 'priority': '0.8'},
+        ]
+    }
+    sitemap_gen_res = client.post('/api/seo/tools/sitemap/', sitemap_gen_payload, format='json')
+    assert sitemap_gen_res.status_code == status.HTTP_200_OK
+    assert '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' in sitemap_gen_res.data['xml']
+    assert '<loc>https://example.com/</loc>' in sitemap_gen_res.data['xml']
+
+    sitemap_val_payload = {
+        'action': 'validate',
+        'xml_content': sitemap_gen_res.data['xml'],
+    }
+    sitemap_val_res = client.post('/api/seo/tools/sitemap/', sitemap_val_payload, format='json')
+    assert sitemap_val_res.status_code == status.HTTP_200_OK
+    assert sitemap_val_res.data['is_valid'] is True
+    assert sitemap_val_res.data['url_count'] == 2
+    print("   [PASS] XML Sitemap generated and local validation passed (is_valid=True, count=2).")
+
+    # 8. hreflang Builder API (English, Amharic, Afaan Oromo, x-default)
+    print("\n8. Testing hreflang Builder (POST /api/seo/tools/hreflang/)...")
+    hreflang_payload = {
+        'entries': [
+            {'lang': 'en', 'url': 'https://example.com/en/'},
+            {'lang': 'am', 'url': 'https://example.com/am/'},
+            {'lang': 'om', 'url': 'https://example.com/om/'},
+        ],
+        'x_default': 'https://example.com/',
+    }
+    hreflang_res = client.post('/api/seo/tools/hreflang/', hreflang_payload, format='json')
+    assert hreflang_res.status_code == status.HTTP_200_OK
+    assert '<link rel="alternate" hreflang="am" href="https://example.com/am/" />' in hreflang_res.data['html']
+    assert '<link rel="alternate" hreflang="om" href="https://example.com/om/" />' in hreflang_res.data['html']
+    assert '<link rel="alternate" hreflang="x-default" href="https://example.com/" />' in hreflang_res.data['html']
+    assert '<xhtml:link rel="alternate" hreflang="am" href="https://example.com/am/"/>' in hreflang_res.data['xml_snippet']
+    print("   [PASS] hreflang annotations generated with Ethiopian multilingual coverage (en, am, om, x-default).")
+
+    # 9. Quota Limit Enforcement
+    print("\n9. Testing Daily Tool Usage Quota Enforcement (Free Plan = 5 runs/day)...")
+    # For meta tool, we already executed 1. Let's execute 4 more
     for i in range(2, 6):
         res = client.post('/api/seo/tools/meta/', {'title': f'Title {i}', 'description': f'Description {i}'}, format='json')
         assert res.status_code == status.HTTP_200_OK
@@ -116,8 +191,8 @@ def run_tests():
     assert blocked_res.data['code'] == 'PLAN_LIMIT_REACHED'
     print("   [PASS] 6th tool execution correctly blocked with 403 PLAN_LIMIT_REACHED.")
 
-    # 7. Unmetered Paid Plan Verification
-    print("\n7. Testing Starter Plan Unmetered Usage...")
+    # 10. Unmetered Paid Plan Verification
+    print("\n10. Testing Starter Plan Unmetered Usage...")
     SubscriptionService.assign_plan(user, PlanCode.STARTER)
     starter_res = client.post('/api/seo/tools/meta/', {'title': 'Starter Title', 'description': 'Starter Description'}, format='json')
     assert starter_res.status_code == status.HTTP_200_OK
@@ -129,7 +204,7 @@ def run_tests():
     user.delete()
 
     print("\n==========================================")
-    print("   ALL 7 SEO TOOLS TESTS PASSED! (100%)   ")
+    print("   ALL 10 SEO TOOLS TESTS PASSED! (100%)  ")
     print("==========================================")
 
 

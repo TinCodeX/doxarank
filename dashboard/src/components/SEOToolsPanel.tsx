@@ -4,17 +4,22 @@ import {
   type MetaTagResult,
   type SchemaResult,
   type SocialPreviewResult,
+  type RobotsToolResult,
+  type SitemapToolResult,
+  type HreflangResult,
   type SEOToolsQuotaStatus,
 } from '../api/seoTools';
 
-type ToolTab = 'meta' | 'schema' | 'social';
+type ToolTab = 'meta' | 'schema' | 'social' | 'robots' | 'sitemap' | 'hreflang';
 
 export const SEOToolsPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ToolTab>('meta');
   const [quotaStatus, setQuotaStatus] = useState<SEOToolsQuotaStatus | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Meta Tag Generator State
+  // =========================================================================
+  // 1. Meta Tag Generator State
+  // =========================================================================
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [metaCanonical, setMetaCanonical] = useState('');
@@ -25,14 +30,15 @@ export const SEOToolsPanel: React.FC = () => {
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
 
-  // Schema Generator State
+  // =========================================================================
+  // 2. Schema Generator State
+  // =========================================================================
   const [schemaType, setSchemaType] = useState<'LocalBusiness' | 'Article' | 'Product' | 'FAQ' | 'BreadcrumbList'>('LocalBusiness');
   const [schemaResult, setSchemaResult] = useState<SchemaResult | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
 
-  // Schema Form Fields
-  // LocalBusiness
+  // LocalBusiness Fields
   const [bizName, setBizName] = useState('');
   const [bizUrl, setBizUrl] = useState('');
   const [bizPhone, setBizPhone] = useState('');
@@ -42,7 +48,7 @@ export const SEOToolsPanel: React.FC = () => {
   const [bizCountry, setBizCountry] = useState('ET');
   const [bizHours, setBizHours] = useState('Mo-Fr 08:30-17:30');
 
-  // Article
+  // Article Fields
   const [artHeadline, setArtHeadline] = useState('');
   const [artAuthor, setArtAuthor] = useState('');
   const [artDate, setArtDate] = useState(new Date().toISOString().split('T')[0]);
@@ -51,7 +57,7 @@ export const SEOToolsPanel: React.FC = () => {
   const [artImage, setArtImage] = useState('');
   const [artPublisher, setArtPublisher] = useState('');
 
-  // Product
+  // Product Fields
   const [prodName, setProdName] = useState('');
   const [prodDesc, setProdDesc] = useState('');
   const [prodImage, setProdImage] = useState('');
@@ -60,20 +66,22 @@ export const SEOToolsPanel: React.FC = () => {
   const [prodPrice, setProdPrice] = useState('');
   const [prodCurrency, setProdCurrency] = useState('USD');
 
-  // FAQ
+  // FAQ Fields
   const [faqItems, setFaqItems] = useState<Array<{ question: string; answer: string }>>([
     { question: 'What is DoxaRank?', answer: 'An autonomous SEO rank tracking and intelligence platform.' },
     { question: 'Does DoxaRank support Ethiopian queries?', answer: 'Yes, with native Amharic keyword tracking on google.com.et.' },
   ]);
 
-  // Breadcrumbs
+  // Breadcrumbs Fields
   const [breadcrumbItems, setBreadcrumbItems] = useState<Array<{ name: string; item: string }>>([
     { name: 'Home', item: 'https://example.com' },
     { name: 'Services', item: 'https://example.com/services' },
     { name: 'SEO Audits', item: 'https://example.com/services/seo-audits' },
   ]);
 
-  // Social Preview State
+  // =========================================================================
+  // 3. Social Preview State
+  // =========================================================================
   const [socialTitle, setSocialTitle] = useState('');
   const [socialDesc, setSocialDesc] = useState('');
   const [socialUrl, setSocialUrl] = useState('');
@@ -86,13 +94,57 @@ export const SEOToolsPanel: React.FC = () => {
   const [socialLoading, setSocialLoading] = useState(false);
   const [socialError, setSocialError] = useState<string | null>(null);
 
-  // Fetch Quota Status
+  // =========================================================================
+  // 4. Robots.txt Tool State
+  // =========================================================================
+  const [robotsMode, setRobotsMode] = useState<'generate' | 'test'>('generate');
+  const [robotsGroups, setRobotsGroups] = useState<Array<{ user_agent: string; disallow: string; allow: string; crawl_delay: string }>>([
+    { user_agent: '*', disallow: '/admin/\n/private/', allow: '/public/\n/', crawl_delay: '' },
+  ]);
+  const [robotsSitemaps, setRobotsSitemaps] = useState('https://example.com/sitemap.xml');
+  const [robotsHost, setRobotsHost] = useState('');
+  const [robotsTestContent, setRobotsTestContent] = useState('User-agent: *\nDisallow: /admin/\nAllow: /\n\nSitemap: https://example.com/sitemap.xml');
+  const [robotsTestPath, setRobotsTestPath] = useState('/admin/users');
+  const [robotsTestAgent, setRobotsTestAgent] = useState('*');
+  const [robotsResult, setRobotsResult] = useState<RobotsToolResult | null>(null);
+  const [robotsLoading, setRobotsLoading] = useState(false);
+  const [robotsError, setRobotsError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 5. XML Sitemap Tool State
+  // =========================================================================
+  const [sitemapMode, setSitemapMode] = useState<'generate' | 'validate'>('generate');
+  const [sitemapEntries, setSitemapEntries] = useState<Array<{ loc: string; lastmod: string; changefreq: string; priority: string }>>([
+    { loc: 'https://example.com/', lastmod: new Date().toISOString().split('T')[0], changefreq: 'daily', priority: '1.0' },
+    { loc: 'https://example.com/services', lastmod: new Date().toISOString().split('T')[0], changefreq: 'weekly', priority: '0.8' },
+  ]);
+  const [sitemapXmlContent, setSitemapXmlContent] = useState('');
+  const [sitemapResult, setSitemapResult] = useState<SitemapToolResult | null>(null);
+  const [sitemapLoading, setSitemapLoading] = useState(false);
+  const [sitemapError, setSitemapError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 6. hreflang Builder State
+  // =========================================================================
+  const [hreflangEntries, setHreflangEntries] = useState<Array<{ lang: string; url: string }>>([
+    { lang: 'en', url: 'https://example.com/en/' },
+    { lang: 'am', url: 'https://example.com/am/' },
+    { lang: 'om', url: 'https://example.com/om/' },
+  ]);
+  const [hreflangXDefault, setHreflangXDefault] = useState('https://example.com/');
+  const [hreflangResult, setHreflangResult] = useState<HreflangResult | null>(null);
+  const [hreflangLoading, setHreflangLoading] = useState(false);
+  const [hreflangError, setHreflangError] = useState<string | null>(null);
+
+  // =========================================================================
+  // Quota Status Management
+  // =========================================================================
   const refreshQuota = async () => {
     try {
       const data = await seoToolsApi.getQuotaStatus();
       setQuotaStatus(data);
     } catch {
-      // Ignored if user not yet authenticated
+      // Ignored if unauthenticated
     }
   };
 
@@ -106,7 +158,7 @@ export const SEOToolsPanel: React.FC = () => {
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
-  // --- META ACTIONS ---
+  // --- META HANDLERS ---
   const handleGenerateMeta = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setMetaLoading(true);
@@ -140,7 +192,7 @@ export const SEOToolsPanel: React.FC = () => {
     setMetaError(null);
   };
 
-  // --- SCHEMA ACTIONS ---
+  // --- SCHEMA HANDLERS ---
   const handleGenerateSchema = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setSchemaLoading(true);
@@ -213,7 +265,7 @@ export const SEOToolsPanel: React.FC = () => {
     setProdName('');
   };
 
-  // --- SOCIAL PREVIEW ACTIONS ---
+  // --- SOCIAL PREVIEW HANDLERS ---
   const handleGenerateSocial = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setSocialLoading(true);
@@ -249,6 +301,114 @@ export const SEOToolsPanel: React.FC = () => {
     setSocialError(null);
   };
 
+  // --- ROBOTS.TXT HANDLERS ---
+  const handleProcessRobots = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setRobotsLoading(true);
+    setRobotsError(null);
+    try {
+      if (robotsMode === 'generate') {
+        const parsedGroups = robotsGroups.map((g) => ({
+          user_agent: g.user_agent,
+          disallow: g.disallow.split('\n').map((d) => d.trim()).filter(Boolean),
+          allow: g.allow.split('\n').map((a) => a.trim()).filter(Boolean),
+          crawl_delay: g.crawl_delay || undefined,
+        }));
+        const parsedSitemaps = robotsSitemaps.split('\n').map((s) => s.trim()).filter(Boolean);
+
+        const res = await seoToolsApi.processRobots({
+          action: 'generate',
+          groups: parsedGroups,
+          sitemaps: parsedSitemaps,
+          host: robotsHost || undefined,
+        });
+        setRobotsResult(res);
+        if (res.content) {
+          setRobotsTestContent(res.content);
+        }
+      } else {
+        const res = await seoToolsApi.processRobots({
+          action: 'test',
+          robots_content: robotsTestContent,
+          path: robotsTestPath,
+          user_agent: robotsTestAgent,
+        });
+        setRobotsResult(res);
+      }
+      refreshQuota();
+    } catch (err: any) {
+      setRobotsError(err?.data?.detail || err?.data?.error || 'Failed to process robots.txt request.');
+    } finally {
+      setRobotsLoading(false);
+    }
+  };
+
+  const handleResetRobots = () => {
+    setRobotsResult(null);
+    setRobotsError(null);
+    setRobotsTestPath('/admin/users');
+  };
+
+  // --- SITEMAP HANDLERS ---
+  const handleProcessSitemap = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSitemapLoading(true);
+    setSitemapError(null);
+    try {
+      if (sitemapMode === 'generate') {
+        const res = await seoToolsApi.processSitemap({
+          action: 'generate',
+          entries: sitemapEntries.filter((e) => e.loc.trim()),
+        });
+        setSitemapResult(res);
+        if (res.xml) {
+          setSitemapXmlContent(res.xml);
+        }
+      } else {
+        const res = await seoToolsApi.processSitemap({
+          action: 'validate',
+          xml_content: sitemapXmlContent,
+        });
+        setSitemapResult(res);
+      }
+      refreshQuota();
+    } catch (err: any) {
+      setSitemapError(err?.data?.detail || err?.data?.error || 'Failed to process sitemap request.');
+    } finally {
+      setSitemapLoading(false);
+    }
+  };
+
+  const handleResetSitemap = () => {
+    setSitemapResult(null);
+    setSitemapError(null);
+    setSitemapXmlContent('');
+  };
+
+  // --- HREFLANG HANDLERS ---
+  const handleGenerateHreflang = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setHreflangLoading(true);
+    setHreflangError(null);
+    try {
+      const res = await seoToolsApi.generateHreflang({
+        entries: hreflangEntries.filter((e) => e.lang.trim() && e.url.trim()),
+        x_default: hreflangXDefault || undefined,
+      });
+      setHreflangResult(res);
+      refreshQuota();
+    } catch (err: any) {
+      setHreflangError(err?.data?.detail || err?.data?.error || 'Failed to generate hreflang annotations.');
+    } finally {
+      setHreflangLoading(false);
+    }
+  };
+
+  const handleResetHreflang = () => {
+    setHreflangResult(null);
+    setHreflangError(null);
+  };
+
   return (
     <section id="seo-tools-section" style={sectionCardStyle}>
       {/* Section Header */}
@@ -257,12 +417,12 @@ export const SEOToolsPanel: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '20px' }}>🛠️</span>
             <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
-              Core SEO Tools
+              Standalone Core SEO Tools
             </h3>
             <span style={toolBadgeStyle}>BASIC SEO TOOLS</span>
           </div>
           <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-            Production-grade metadata and structured data generators for on-page SEO optimization.
+            Original DoxaRank standalone utility tools for meta tags, Schema markup, social previews, robots, sitemaps, and Ethiopian hreflang localization.
           </p>
         </div>
 
@@ -272,21 +432,18 @@ export const SEOToolsPanel: React.FC = () => {
             <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
               Daily Tool Usage ({quotaStatus.plan_code})
             </span>
-            <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '12px' }}>
-              <span>
-                Meta: <strong>{quotaStatus.tools.meta_tag_generator.used_today}</strong>
-                {quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}
-              </span>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px', fontSize: '12px', flexWrap: 'wrap' }}>
+              <span>Meta: <strong>{quotaStatus.tools.meta_tag_generator?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
               <span style={{ color: '#cbd5e1' }}>|</span>
-              <span>
-                Schema: <strong>{quotaStatus.tools.schema_generator.used_today}</strong>
-                {quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}
-              </span>
+              <span>Schema: <strong>{quotaStatus.tools.schema_generator?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
               <span style={{ color: '#cbd5e1' }}>|</span>
-              <span>
-                Social: <strong>{quotaStatus.tools.open_graph_previewer.used_today}</strong>
-                {quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}
-              </span>
+              <span>Social: <strong>{quotaStatus.tools.open_graph_previewer?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>Robots: <strong>{quotaStatus.tools.robots_txt_tool?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>Sitemap: <strong>{quotaStatus.tools.xml_sitemap_tool?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>hreflang: <strong>{quotaStatus.tools.hreflang_builder?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
             </div>
           </div>
         )}
@@ -304,7 +461,7 @@ export const SEOToolsPanel: React.FC = () => {
             fontWeight: activeTab === 'meta' ? 700 : 500,
           }}
         >
-          🏷️ Meta Tag Generator
+          🏷️ Meta Tags
         </button>
         <button
           id="seo-tool-tab-schema"
@@ -316,7 +473,7 @@ export const SEOToolsPanel: React.FC = () => {
             fontWeight: activeTab === 'schema' ? 700 : 500,
           }}
         >
-          📐 Schema.org JSON-LD Generator
+          📐 Schema JSON-LD
         </button>
         <button
           id="seo-tool-tab-social"
@@ -328,7 +485,43 @@ export const SEOToolsPanel: React.FC = () => {
             fontWeight: activeTab === 'social' ? 700 : 500,
           }}
         >
-          📱 Open Graph & Twitter Preview
+          📱 Social Preview
+        </button>
+        <button
+          id="seo-tool-tab-robots"
+          onClick={() => setActiveTab('robots')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'robots' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'robots' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'robots' ? 700 : 500,
+          }}
+        >
+          🤖 Robots.txt
+        </button>
+        <button
+          id="seo-tool-tab-sitemap"
+          onClick={() => setActiveTab('sitemap')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'sitemap' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'sitemap' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'sitemap' ? 700 : 500,
+          }}
+        >
+          🗺️ XML Sitemap
+        </button>
+        <button
+          id="seo-tool-tab-hreflang"
+          onClick={() => setActiveTab('hreflang')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'hreflang' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'hreflang' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'hreflang' ? 700 : 500,
+          }}
+        >
+          🌐 hreflang Builder
         </button>
       </div>
 
@@ -338,19 +531,14 @@ export const SEOToolsPanel: React.FC = () => {
       {activeTab === 'meta' && (
         <div style={{ marginTop: '20px' }}>
           {metaError && <div style={errorBannerStyle}>{metaError}</div>}
-
           <div style={grid2ColStyle}>
-            {/* Input Form */}
             <form onSubmit={handleGenerateMeta} style={formCardStyle}>
               <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700, color: '#111827' }}>
                 Page Metadata Inputs
               </h4>
-
               <div style={formGroupStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={labelStyle}>
-                    Page Title <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
+                  <label style={labelStyle}>Page Title <span style={{ color: '#ef4444' }}>*</span></label>
                   <span style={{ fontSize: '11px', color: metaTitle.length >= 30 && metaTitle.length <= 60 ? '#10b981' : '#f59e0b' }}>
                     {metaTitle.length} / 60 chars {metaTitle.length >= 30 && metaTitle.length <= 60 ? '(Optimal)' : ''}
                   </span>
@@ -365,12 +553,9 @@ export const SEOToolsPanel: React.FC = () => {
                   style={inputStyle}
                 />
               </div>
-
               <div style={formGroupStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={labelStyle}>
-                    Meta Description <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
+                  <label style={labelStyle}>Meta Description <span style={{ color: '#ef4444' }}>*</span></label>
                   <span style={{ fontSize: '11px', color: metaDescription.length >= 70 && metaDescription.length <= 160 ? '#10b981' : '#f59e0b' }}>
                     {metaDescription.length} / 160 chars {metaDescription.length >= 70 && metaDescription.length <= 160 ? '(Optimal)' : ''}
                   </span>
@@ -379,13 +564,12 @@ export const SEOToolsPanel: React.FC = () => {
                   id="meta-input-description"
                   value={metaDescription}
                   onChange={(e) => setMetaDescription(e.target.value)}
-                  placeholder="e.g. Discover certified Ethiopian specialty coffee beans, direct export prices, and origin grading standards in Addis Ababa."
+                  placeholder="Discover certified Ethiopian specialty coffee beans in Addis Ababa."
                   rows={3}
                   required
                   style={textareaStyle}
                 />
               </div>
-
               <div style={formGroupStyle}>
                 <label style={labelStyle}>Canonical URL</label>
                 <input
@@ -397,7 +581,6 @@ export const SEOToolsPanel: React.FC = () => {
                   style={inputStyle}
                 />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={formGroupStyle}>
                   <label style={labelStyle}>Robots Directive</label>
@@ -413,7 +596,6 @@ export const SEOToolsPanel: React.FC = () => {
                     <option value="noindex, nofollow">noindex, nofollow</option>
                   </select>
                 </div>
-
                 <div style={formGroupStyle}>
                   <label style={labelStyle}>Author</label>
                   <input
@@ -426,19 +608,17 @@ export const SEOToolsPanel: React.FC = () => {
                   />
                 </div>
               </div>
-
               <div style={formGroupStyle}>
-                <label style={labelStyle}>Keywords (Comma-separated)</label>
+                <label style={labelStyle}>Keywords</label>
                 <input
                   id="meta-input-keywords"
                   type="text"
                   value={metaKeywords}
                   onChange={(e) => setMetaKeywords(e.target.value)}
-                  placeholder="ethiopian coffee, yirgacheffe, arabica beans"
+                  placeholder="ethiopian coffee, arabica beans"
                   style={inputStyle}
                 />
               </div>
-
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   id="meta-generate-btn"
@@ -448,56 +628,27 @@ export const SEOToolsPanel: React.FC = () => {
                 >
                   {metaLoading ? 'Generating...' : '⚡ Generate Meta Tags'}
                 </button>
-                <button
-                  id="meta-reset-btn"
-                  type="button"
-                  onClick={handleResetMeta}
-                  style={secondaryBtnStyle}
-                >
+                <button id="meta-reset-btn" type="button" onClick={handleResetMeta} style={secondaryBtnStyle}>
                   Reset
                 </button>
               </div>
             </form>
-
-            {/* Output Card */}
             <div style={resultCardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
-                  Generated HTML Output
-                </h4>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>Generated HTML</h4>
                 {metaResult && (
-                  <button
-                    id="meta-copy-btn"
-                    onClick={() => handleCopy(metaResult.html, 'meta')}
-                    style={copyBtnStyle}
-                  >
+                  <button id="meta-copy-btn" onClick={() => handleCopy(metaResult.html, 'meta')} style={copyBtnStyle}>
                     {copiedKey === 'meta' ? '✓ Copied!' : '📋 Copy HTML'}
                   </button>
                 )}
               </div>
-
               {metaResult ? (
                 <div>
                   <pre style={codeBlockStyle}>{metaResult.html}</pre>
-
-                  {metaResult.warnings && metaResult.warnings.length > 0 && (
-                    <div style={{ marginTop: '14px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>
-                        SEO Guidance Recommendations:
-                      </span>
-                      <ul style={{ margin: '6px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#92400e' }}>
-                        {metaResult.warnings.map((w, idx) => (
-                          <li key={idx}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
-                    Enter page title and description on the left, then click <strong>Generate</strong> to inspect valid, HTML-escaped meta tags.
-                  </p>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>Enter title and description to generate tags.</p>
                 </div>
               )}
             </div>
@@ -506,13 +657,11 @@ export const SEOToolsPanel: React.FC = () => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 2: SCHEMA.ORG / JSON-LD GENERATOR */}
+      {/* TAB 2: SCHEMA GENERATOR */}
       {/* ============================================================== */}
       {activeTab === 'schema' && (
         <div style={{ marginTop: '20px' }}>
           {schemaError && <div style={errorBannerStyle}>{schemaError}</div>}
-
-          {/* Type Selector Pills */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
             {(['LocalBusiness', 'Article', 'Product', 'FAQ', 'BreadcrumbList'] as const).map((type) => (
               <button
@@ -534,51 +683,25 @@ export const SEOToolsPanel: React.FC = () => {
               </button>
             ))}
           </div>
-
           <div style={grid2ColStyle}>
-            {/* Dynamic Type Form */}
             <form onSubmit={handleGenerateSchema} style={formCardStyle}>
               <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700, color: '#111827' }}>
                 {schemaType} Parameters
               </h4>
-
-              {/* LocalBusiness Fields */}
               {schemaType === 'LocalBusiness' && (
                 <>
                   <div style={formGroupStyle}>
                     <label style={labelStyle}>Business Name <span style={{ color: '#ef4444' }}>*</span></label>
-                    <input
-                      id="schema-biz-name"
-                      type="text"
-                      value={bizName}
-                      onChange={(e) => setBizName(e.target.value)}
-                      placeholder="e.g. Abyssinia Tech Solutions"
-                      required
-                      style={inputStyle}
-                    />
+                    <input type="text" value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="Abyssinia Tech" required style={inputStyle} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Website URL</label>
-                      <input
-                        id="schema-biz-url"
-                        type="url"
-                        value={bizUrl}
-                        onChange={(e) => setBizUrl(e.target.value)}
-                        placeholder="https://example.com"
-                        style={inputStyle}
-                      />
+                      <input type="url" value={bizUrl} onChange={(e) => setBizUrl(e.target.value)} placeholder="https://example.com" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Phone Number</label>
-                      <input
-                        id="schema-biz-phone"
-                        type="text"
-                        value={bizPhone}
-                        onChange={(e) => setBizPhone(e.target.value)}
-                        placeholder="+251 911 000000"
-                        style={inputStyle}
-                      />
+                      <input type="text" value={bizPhone} onChange={(e) => setBizPhone(e.target.value)} placeholder="+251 911 000000" style={inputStyle} />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
@@ -606,357 +729,534 @@ export const SEOToolsPanel: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Price Range</label>
-                      <input
-                        type="text"
-                        value={bizPrice}
-                        onChange={(e) => setBizPrice(e.target.value)}
-                        placeholder="$$"
-                        style={inputStyle}
-                      />
+                      <input type="text" value={bizPrice} onChange={(e) => setBizPrice(e.target.value)} placeholder="$$" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
-                      <label style={labelStyle}>Country Code</label>
-                      <input
-                        type="text"
-                        value={bizCountry}
-                        onChange={(e) => setBizCountry(e.target.value)}
-                        placeholder="ET"
-                        style={inputStyle}
-                      />
+                      <label style={labelStyle}>Country</label>
+                      <input type="text" value={bizCountry} onChange={(e) => setBizCountry(e.target.value)} placeholder="ET" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
-                      <label style={labelStyle}>Opening Hours</label>
-                      <input
-                        type="text"
-                        value={bizHours}
-                        onChange={(e) => setBizHours(e.target.value)}
-                        placeholder="Mo-Fr 08:30-17:30"
-                        style={inputStyle}
-                      />
+                      <label style={labelStyle}>Hours</label>
+                      <input type="text" value={bizHours} onChange={(e) => setBizHours(e.target.value)} placeholder="Mo-Fr 08:30-17:30" style={inputStyle} />
                     </div>
                   </div>
                 </>
               )}
-
-              {/* Article Fields */}
               {schemaType === 'Article' && (
                 <>
                   <div style={formGroupStyle}>
-                    <label style={labelStyle}>Article Headline <span style={{ color: '#ef4444' }}>*</span></label>
-                    <input
-                      id="schema-art-headline"
-                      type="text"
-                      value={artHeadline}
-                      onChange={(e) => setArtHeadline(e.target.value)}
-                      placeholder="Complete Guide to SEO in Ethiopia"
-                      required
-                      style={inputStyle}
-                    />
+                    <label style={labelStyle}>Headline <span style={{ color: '#ef4444' }}>*</span></label>
+                    <input type="text" value={artHeadline} onChange={(e) => setArtHeadline(e.target.value)} placeholder="Ethiopian SEO Guide" required style={inputStyle} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
-                      <label style={labelStyle}>Author Name</label>
-                      <input
-                        type="text"
-                        value={artAuthor}
-                        onChange={(e) => setArtAuthor(e.target.value)}
-                        placeholder="Bizrat Tekle"
-                        style={inputStyle}
-                      />
+                      <label style={labelStyle}>Author</label>
+                      <input type="text" value={artAuthor} onChange={(e) => setArtAuthor(e.target.value)} placeholder="Bizrat Tekle" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
-                      <label style={labelStyle}>Date Published</label>
-                      <input
-                        type="date"
-                        value={artDate}
-                        onChange={(e) => setArtDate(e.target.value)}
-                        style={inputStyle}
-                      />
+                      <label style={labelStyle}>Date</label>
+                      <input type="date" value={artDate} onChange={(e) => setArtDate(e.target.value)} style={inputStyle} />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
-                      <label style={labelStyle}>Article URL</label>
-                      <input
-                        type="url"
-                        value={artUrl}
-                        onChange={(e) => setArtUrl(e.target.value)}
-                        placeholder="https://example.com/guide"
-                        style={inputStyle}
-                      />
+                      <label style={labelStyle}>URL</label>
+                      <input type="url" value={artUrl} onChange={(e) => setArtUrl(e.target.value)} placeholder="https://example.com/guide" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Image URL</label>
-                      <input
-                        type="url"
-                        value={artImage}
-                        onChange={(e) => setArtImage(e.target.value)}
-                        placeholder="https://example.com/cover.jpg"
-                        style={inputStyle}
-                      />
+                      <input type="url" value={artImage} onChange={(e) => setArtImage(e.target.value)} placeholder="https://example.com/img.jpg" style={inputStyle} />
                     </div>
                   </div>
                   <div style={formGroupStyle}>
-                    <label style={labelStyle}>Publisher Name</label>
-                    <input
-                      type="text"
-                      value={artPublisher}
-                      onChange={(e) => setArtPublisher(e.target.value)}
-                      placeholder="DoxaRank Media"
-                      style={inputStyle}
-                    />
+                    <label style={labelStyle}>Publisher</label>
+                    <input type="text" value={artPublisher} onChange={(e) => setArtPublisher(e.target.value)} placeholder="DoxaRank Media" style={inputStyle} />
                   </div>
                   <div style={formGroupStyle}>
-                    <label style={labelStyle}>Article Description</label>
-                    <textarea
-                      value={artDesc}
-                      onChange={(e) => setArtDesc(e.target.value)}
-                      placeholder="Brief overview of organic search factors in the Horn of Africa."
-                      rows={2}
-                      style={textareaStyle}
-                    />
+                    <label style={labelStyle}>Description</label>
+                    <textarea value={artDesc} onChange={(e) => setArtDesc(e.target.value)} rows={2} style={textareaStyle} />
                   </div>
                 </>
               )}
-
-              {/* Product Fields */}
               {schemaType === 'Product' && (
                 <>
                   <div style={formGroupStyle}>
                     <label style={labelStyle}>Product Name <span style={{ color: '#ef4444' }}>*</span></label>
-                    <input
-                      id="schema-prod-name"
-                      type="text"
-                      value={prodName}
-                      onChange={(e) => setProdName(e.target.value)}
-                      placeholder="DoxaRank Starter Subscription"
-                      required
-                      style={inputStyle}
-                    />
+                    <input type="text" value={prodName} onChange={(e) => setProdName(e.target.value)} placeholder="Starter Subscription" required style={inputStyle} />
                   </div>
                   <div style={formGroupStyle}>
-                    <label style={labelStyle}>Product Description</label>
-                    <textarea
-                      value={prodDesc}
-                      onChange={(e) => setProdDesc(e.target.value)}
-                      placeholder="High-performance SEO software package."
-                      rows={2}
-                      style={textareaStyle}
-                    />
+                    <label style={labelStyle}>Description</label>
+                    <textarea value={prodDesc} onChange={(e) => setProdDesc(e.target.value)} rows={2} style={textareaStyle} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Image URL</label>
-                      <input
-                        type="url"
-                        value={prodImage}
-                        onChange={(e) => setProdImage(e.target.value)}
-                        placeholder="https://example.com/product.jpg"
-                        style={inputStyle}
-                      />
+                      <input type="url" value={prodImage} onChange={(e) => setProdImage(e.target.value)} placeholder="https://example.com/img.jpg" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>SKU</label>
-                      <input
-                        type="text"
-                        value={prodSku}
-                        onChange={(e) => setProdSku(e.target.value)}
-                        placeholder="DX-STARTER"
-                        style={inputStyle}
-                      />
+                      <input type="text" value={prodSku} onChange={(e) => setProdSku(e.target.value)} placeholder="DX-STARTER" style={inputStyle} />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Price ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={prodPrice}
-                        onChange={(e) => setProdPrice(e.target.value)}
-                        placeholder="49.00"
-                        style={inputStyle}
-                      />
+                      <input type="number" step="0.01" value={prodPrice} onChange={(e) => setProdPrice(e.target.value)} placeholder="49.00" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Currency</label>
-                      <input
-                        type="text"
-                        value={prodCurrency}
-                        onChange={(e) => setProdCurrency(e.target.value)}
-                        placeholder="USD"
-                        style={inputStyle}
-                      />
+                      <input type="text" value={prodCurrency} onChange={(e) => setProdCurrency(e.target.value)} placeholder="USD" style={inputStyle} />
                     </div>
                     <div style={formGroupStyle}>
                       <label style={labelStyle}>Brand</label>
-                      <input
-                        type="text"
-                        value={prodBrand}
-                        onChange={(e) => setProdBrand(e.target.value)}
-                        placeholder="DoxaRank"
-                        style={inputStyle}
-                      />
+                      <input type="text" value={prodBrand} onChange={(e) => setProdBrand(e.target.value)} placeholder="DoxaRank" style={inputStyle} />
                     </div>
                   </div>
                 </>
               )}
-
-              {/* FAQ Fields */}
               {schemaType === 'FAQ' && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label style={labelStyle}>Questions & Answers ({faqItems.length})</label>
-                    <button
-                      type="button"
-                      onClick={() => setFaqItems([...faqItems, { question: '', answer: '' }])}
-                      style={addPillBtnStyle}
-                    >
+                    <label style={labelStyle}>Q&A Pairs ({faqItems.length})</label>
+                    <button type="button" onClick={() => setFaqItems([...faqItems, { question: '', answer: '' }])} style={addPillBtnStyle}>
                       + Add Question
                     </button>
                   </div>
                   {faqItems.map((item, idx) => (
                     <div key={idx} style={itemBoxStyle}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Q&A #{idx + 1}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700 }}>Q&A #{idx + 1}</span>
                         {faqItems.length > 1 && (
+                          <button type="button" onClick={() => setFaqItems(faqItems.filter((_, i) => i !== idx))} style={removeBtnStyle}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <input type="text" value={item.question} onChange={(e) => { const u = [...faqItems]; u[idx].question = e.target.value; setFaqItems(u); }} placeholder="Question..." style={{ ...inputStyle, marginBottom: '6px' }} />
+                      <textarea value={item.answer} onChange={(e) => { const u = [...faqItems]; u[idx].answer = e.target.value; setFaqItems(u); }} placeholder="Answer..." rows={2} style={textareaStyle} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {schemaType === 'BreadcrumbList' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={labelStyle}>Breadcrumbs ({breadcrumbItems.length})</label>
+                    <button type="button" onClick={() => setBreadcrumbItems([...breadcrumbItems, { name: '', item: '' }])} style={addPillBtnStyle}>
+                      + Add Item
+                    </button>
+                  </div>
+                  {breadcrumbItems.map((bc, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, width: '20px' }}>#{idx + 1}</span>
+                      <input type="text" value={bc.name} onChange={(e) => { const u = [...breadcrumbItems]; u[idx].name = e.target.value; setBreadcrumbItems(u); }} placeholder="Label" style={{ ...inputStyle, flex: 1 }} />
+                      <input type="url" value={bc.item} onChange={(e) => { const u = [...breadcrumbItems]; u[idx].item = e.target.value; setBreadcrumbItems(u); }} placeholder="https://example.com" style={{ ...inputStyle, flex: 2 }} />
+                      {breadcrumbItems.length > 1 && (
+                        <button type="button" onClick={() => setBreadcrumbItems(breadcrumbItems.filter((_, i) => i !== idx))} style={removeBtnStyle}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button id="schema-generate-btn" type="submit" disabled={schemaLoading} style={primaryBtnStyle}>
+                  {schemaLoading ? 'Generating...' : `⚡ Generate ${schemaType}`}
+                </button>
+                <button type="button" onClick={handleResetSchema} style={secondaryBtnStyle}>Reset</button>
+              </div>
+            </form>
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>JSON-LD Output</h4>
+                {schemaResult && (
+                  <button id="schema-copy-script-btn" onClick={() => handleCopy(schemaResult.script_tag, 'schema_script')} style={copyBtnStyle}>
+                    {copiedKey === 'schema_script' ? '✓ Copied!' : '📋 Copy <script>'}
+                  </button>
+                )}
+              </div>
+              {schemaResult ? (
+                <pre style={codeBlockStyle}>{schemaResult.script_tag}</pre>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>Select schema type and click generate.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 3: SOCIAL PREVIEW */}
+      {/* ============================================================== */}
+      {activeTab === 'social' && (
+        <div style={{ marginTop: '20px' }}>
+          {socialError && <div style={errorBannerStyle}>{socialError}</div>}
+          <div style={grid2ColStyle}>
+            <form onSubmit={handleGenerateSocial} style={formCardStyle}>
+              <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700 }}>Social Card Inputs</h4>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Title <span style={{ color: '#ef4444' }}>*</span></label>
+                <input type="text" value={socialTitle} onChange={(e) => setSocialTitle(e.target.value)} placeholder="Autonomous SEO Intelligence" required style={inputStyle} />
+              </div>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Description <span style={{ color: '#ef4444' }}>*</span></label>
+                <textarea value={socialDesc} onChange={(e) => setSocialDesc(e.target.value)} rows={3} placeholder="Track rankings on Google Ethiopia." required style={textareaStyle} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Target URL</label>
+                  <input type="url" value={socialUrl} onChange={(e) => setSocialUrl(e.target.value)} placeholder="https://example.com" style={inputStyle} />
+                </div>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Image URL</label>
+                  <input type="url" value={socialImage} onChange={(e) => setSocialImage(e.target.value)} placeholder="https://example.com/banner.png" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Site Name</label>
+                  <input type="text" value={socialSiteName} onChange={(e) => setSocialSiteName(e.target.value)} placeholder="DoxaRank" style={inputStyle} />
+                </div>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Twitter Handle</label>
+                  <input type="text" value={socialTwitterSite} onChange={(e) => setSocialTwitterSite(e.target.value)} placeholder="@doxarank" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>OG Type</label>
+                  <select value={socialOgType} onChange={(e) => setSocialOgType(e.target.value)} style={selectStyle}>
+                    <option value="website">website</option>
+                    <option value="article">article</option>
+                    <option value="book">book</option>
+                    <option value="profile">profile</option>
+                  </select>
+                </div>
+                <div style={formGroupStyle}>
+                  <label style={labelStyle}>Twitter Card</label>
+                  <select value={socialTwitterCard} onChange={(e) => setSocialTwitterCard(e.target.value)} style={selectStyle}>
+                    <option value="summary_large_image">summary_large_image</option>
+                    <option value="summary">summary</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" disabled={socialLoading || !socialTitle.trim() || !socialDesc.trim()} style={primaryBtnStyle}>
+                  {socialLoading ? 'Generating...' : '⚡ Generate Tags & Preview'}
+                </button>
+                <button type="button" onClick={handleResetSocial} style={secondaryBtnStyle}>Reset</button>
+              </div>
+            </form>
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Card Preview & Tags</h4>
+                {socialResult && (
+                  <button onClick={() => handleCopy(socialResult.html, 'social')} style={copyBtnStyle}>
+                    {copiedKey === 'social' ? '✓ Copied!' : '📋 Copy Meta Tags'}
+                  </button>
+                )}
+              </div>
+              <div style={ogCardPreviewStyle}>
+                {socialImage ? (
+                  <div style={{ height: '120px', overflow: 'hidden' }}>
+                    <img src={socialImage} alt="Preview" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ) : (
+                  <div style={cardImagePlaceholderStyle}><span>🖼️ No image URL specified</span></div>
+                )}
+                <div style={{ padding: '10px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                    {socialResult?.preview.domain || 'example.com'}
+                  </span>
+                  <h5 style={{ margin: '4px 0', fontSize: '14px', fontWeight: 700 }}>{socialTitle || 'Title preview'}</h5>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{socialDesc || 'Description snippet'}</p>
+                </div>
+              </div>
+              {socialResult && <pre style={{ ...codeBlockStyle, marginTop: '12px' }}>{socialResult.html}</pre>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 4: ROBOTS.TXT (GENERATOR & TESTER) */}
+      {/* ============================================================== */}
+      {activeTab === 'robots' && (
+        <div style={{ marginTop: '20px' }}>
+          {robotsError && <div style={errorBannerStyle}>{robotsError}</div>}
+
+          {/* Sub-mode selector */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              id="robots-mode-generate"
+              type="button"
+              onClick={() => { setRobotsMode('generate'); setRobotsResult(null); }}
+              style={{
+                ...schemaPillStyle,
+                backgroundColor: robotsMode === 'generate' ? '#eff6ff' : '#ffffff',
+                borderColor: robotsMode === 'generate' ? '#2563eb' : '#e2e8f0',
+                color: robotsMode === 'generate' ? '#1d4ed8' : '#475569',
+                fontWeight: robotsMode === 'generate' ? 700 : 500,
+              }}
+            >
+              🛠️ Robots.txt Generator
+            </button>
+            <button
+              id="robots-mode-test"
+              type="button"
+              onClick={() => { setRobotsMode('test'); setRobotsResult(null); }}
+              style={{
+                ...schemaPillStyle,
+                backgroundColor: robotsMode === 'test' ? '#eff6ff' : '#ffffff',
+                borderColor: robotsMode === 'test' ? '#2563eb' : '#e2e8f0',
+                color: robotsMode === 'test' ? '#1d4ed8' : '#475569',
+                fontWeight: robotsMode === 'test' ? 700 : 500,
+              }}
+            >
+              🧪 URL Access Tester
+            </button>
+          </div>
+
+          <div style={grid2ColStyle}>
+            {/* Input Form */}
+            <form onSubmit={handleProcessRobots} style={formCardStyle}>
+              {robotsMode === 'generate' ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Rule Groups ({robotsGroups.length})</h4>
+                    <button
+                      type="button"
+                      onClick={() => setRobotsGroups([...robotsGroups, { user_agent: 'Googlebot', disallow: '', allow: '', crawl_delay: '' }])}
+                      style={addPillBtnStyle}
+                    >
+                      + Add Rule Group
+                    </button>
+                  </div>
+
+                  {robotsGroups.map((group, idx) => (
+                    <div key={idx} style={itemBoxStyle}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700 }}>Group #{idx + 1}</span>
+                        {robotsGroups.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => setFaqItems(faqItems.filter((_, i) => i !== idx))}
+                            onClick={() => setRobotsGroups(robotsGroups.filter((_, i) => i !== idx))}
                             style={removeBtnStyle}
                           >
                             Remove
                           </button>
                         )}
                       </div>
-                      <input
-                        type="text"
-                        value={item.question}
-                        onChange={(e) => {
-                          const updated = [...faqItems];
-                          updated[idx].question = e.target.value;
-                          setFaqItems(updated);
-                        }}
-                        placeholder="Question..."
-                        style={{ ...inputStyle, marginBottom: '6px' }}
-                      />
-                      <textarea
-                        value={item.answer}
-                        onChange={(e) => {
-                          const updated = [...faqItems];
-                          updated[idx].answer = e.target.value;
-                          setFaqItems(updated);
-                        }}
-                        placeholder="Answer text..."
-                        rows={2}
-                        style={textareaStyle}
-                      />
+                      <div style={formGroupStyle}>
+                        <label style={labelStyle}>User-agent</label>
+                        <input
+                          type="text"
+                          value={group.user_agent}
+                          onChange={(e) => {
+                            const u = [...robotsGroups];
+                            u[idx].user_agent = e.target.value;
+                            setRobotsGroups(u);
+                          }}
+                          placeholder="* or Googlebot"
+                          required
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div style={formGroupStyle}>
+                          <label style={labelStyle}>Disallow (1 per line)</label>
+                          <textarea
+                            value={group.disallow}
+                            onChange={(e) => {
+                              const u = [...robotsGroups];
+                              u[idx].disallow = e.target.value;
+                              setRobotsGroups(u);
+                            }}
+                            rows={3}
+                            placeholder="/admin/&#10;/cart/"
+                            style={textareaStyle}
+                          />
+                        </div>
+                        <div style={formGroupStyle}>
+                          <label style={labelStyle}>Allow (1 per line)</label>
+                          <textarea
+                            value={group.allow}
+                            onChange={(e) => {
+                              const u = [...robotsGroups];
+                              u[idx].allow = e.target.value;
+                              setRobotsGroups(u);
+                            }}
+                            rows={3}
+                            placeholder="/public/&#10;/"
+                            style={textareaStyle}
+                          />
+                        </div>
+                      </div>
+                      <div style={formGroupStyle}>
+                        <label style={labelStyle}>Crawl-delay (Optional seconds)</label>
+                        <input
+                          type="number"
+                          value={group.crawl_delay}
+                          onChange={(e) => {
+                            const u = [...robotsGroups];
+                            u[idx].crawl_delay = e.target.value;
+                            setRobotsGroups(u);
+                          }}
+                          placeholder="e.g. 5"
+                          style={inputStyle}
+                        />
+                      </div>
                     </div>
                   ))}
-                </div>
-              )}
 
-              {/* BreadcrumbList Fields */}
-              {schemaType === 'BreadcrumbList' && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label style={labelStyle}>Breadcrumb Hierarchy ({breadcrumbItems.length})</label>
-                    <button
-                      type="button"
-                      onClick={() => setBreadcrumbItems([...breadcrumbItems, { name: '', item: '' }])}
-                      style={addPillBtnStyle}
-                    >
-                      + Add Item
-                    </button>
+                  <div style={formGroupStyle}>
+                    <label style={labelStyle}>Sitemap Declarations (1 per line)</label>
+                    <textarea
+                      value={robotsSitemaps}
+                      onChange={(e) => setRobotsSitemaps(e.target.value)}
+                      rows={2}
+                      placeholder="https://example.com/sitemap.xml"
+                      style={textareaStyle}
+                    />
                   </div>
-                  {breadcrumbItems.map((bc, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '20px' }}>
-                        #{idx + 1}
-                      </span>
+
+                  <div style={formGroupStyle}>
+                    <label style={labelStyle}>Host (Optional preferred domain)</label>
+                    <input
+                      type="text"
+                      value={robotsHost}
+                      onChange={(e) => setRobotsHost(e.target.value)}
+                      placeholder="example.com"
+                      style={inputStyle}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 style={{ margin: '0 0 14px 0', fontSize: '15px', fontWeight: 700 }}>Robots.txt Content & Test Path</h4>
+                  <div style={formGroupStyle}>
+                    <label style={labelStyle}>Robots.txt Content to Test</label>
+                    <textarea
+                      id="robots-test-content-input"
+                      value={robotsTestContent}
+                      onChange={(e) => setRobotsTestContent(e.target.value)}
+                      rows={6}
+                      required
+                      style={textareaStyle}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                    <div style={formGroupStyle}>
+                      <label style={labelStyle}>Path or URL to Test <span style={{ color: '#ef4444' }}>*</span></label>
                       <input
+                        id="robots-test-path-input"
                         type="text"
-                        value={bc.name}
-                        onChange={(e) => {
-                          const updated = [...breadcrumbItems];
-                          updated[idx].name = e.target.value;
-                          setBreadcrumbItems(updated);
-                        }}
-                        placeholder="Label (e.g. Products)"
-                        style={{ ...inputStyle, flex: 1 }}
+                        value={robotsTestPath}
+                        onChange={(e) => setRobotsTestPath(e.target.value)}
+                        placeholder="/admin/dashboard"
+                        required
+                        style={inputStyle}
                       />
-                      <input
-                        type="url"
-                        value={bc.item}
-                        onChange={(e) => {
-                          const updated = [...breadcrumbItems];
-                          updated[idx].item = e.target.value;
-                          setBreadcrumbItems(updated);
-                        }}
-                        placeholder="https://example.com/products"
-                        style={{ ...inputStyle, flex: 2 }}
-                      />
-                      {breadcrumbItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setBreadcrumbItems(breadcrumbItems.filter((_, i) => i !== idx))}
-                          style={removeBtnStyle}
-                        >
-                          ✕
-                        </button>
-                      )}
                     </div>
-                  ))}
-                </div>
+                    <div style={formGroupStyle}>
+                      <label style={labelStyle}>User-agent</label>
+                      <input
+                        id="robots-test-agent-input"
+                        type="text"
+                        value={robotsTestAgent}
+                        onChange={(e) => setRobotsTestAgent(e.target.value)}
+                        placeholder="*"
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
-                  id="schema-generate-btn"
+                  id="robots-submit-btn"
                   type="submit"
-                  disabled={schemaLoading}
+                  disabled={robotsLoading}
                   style={primaryBtnStyle}
                 >
-                  {schemaLoading ? 'Generating...' : `⚡ Generate ${schemaType} JSON-LD`}
+                  {robotsLoading ? 'Processing...' : robotsMode === 'generate' ? '⚡ Generate Robots.txt' : '🧪 Test Access'}
                 </button>
-                <button
-                  id="schema-reset-btn"
-                  type="button"
-                  onClick={handleResetSchema}
-                  style={secondaryBtnStyle}
-                >
+                <button type="button" onClick={handleResetRobots} style={secondaryBtnStyle}>
                   Reset
                 </button>
               </div>
             </form>
 
-            {/* Schema Output */}
+            {/* Output Card */}
             <div style={resultCardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
-                  JSON-LD & Script Tag
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
+                  {robotsMode === 'generate' ? 'Generated Robots.txt' : 'Access Test Verdict'}
                 </h4>
-                {schemaResult && (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      id="schema-copy-script-btn"
-                      onClick={() => handleCopy(schemaResult.script_tag, 'schema_script')}
-                      style={copyBtnStyle}
-                    >
-                      {copiedKey === 'schema_script' ? '✓ Copied Tag!' : '📋 Copy <script>'}
-                    </button>
-                  </div>
+                {robotsResult?.content && (
+                  <button id="robots-copy-btn" onClick={() => handleCopy(robotsResult.content!, 'robots')} style={copyBtnStyle}>
+                    {copiedKey === 'robots' ? '✓ Copied!' : '📋 Copy Robots.txt'}
+                  </button>
                 )}
               </div>
 
-              {schemaResult ? (
+              {robotsResult ? (
                 <div>
-                  <pre style={codeBlockStyle}>{schemaResult.script_tag}</pre>
+                  {robotsResult.action === 'generate' && robotsResult.content && (
+                    <>
+                      <pre style={codeBlockStyle}>{robotsResult.content}</pre>
+                      {robotsResult.warnings && robotsResult.warnings.length > 0 && (
+                        <div style={{ marginTop: '12px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>Robots.txt Warnings:</span>
+                          <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#92400e' }}>
+                            {robotsResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {robotsResult.action === 'test' && (
+                    <div>
+                      <div
+                        style={{
+                          padding: '16px',
+                          borderRadius: '8px',
+                          backgroundColor: robotsResult.allowed ? '#f0fdf4' : '#fef2f2',
+                          border: `1px solid ${robotsResult.allowed ? '#bbf7d0' : '#fecaca'}`,
+                          marginBottom: '14px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '18px' }}>{robotsResult.allowed ? '✅' : '🚫'}</span>
+                          <span
+                            style={{
+                              fontSize: '15px',
+                              fontWeight: 700,
+                              color: robotsResult.allowed ? '#166534' : '#991b1b',
+                            }}
+                          >
+                            {robotsResult.status}: {robotsResult.test_path}
+                          </span>
+                        </div>
+                        <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: robotsResult.allowed ? '#14532d' : '#7f1d1d' }}>
+                          {robotsResult.reason}
+                        </p>
+                        {robotsResult.matched_rule && (
+                          <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569' }}>
+                            Matched rule: <code>{robotsResult.matched_rule}</code>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
                   <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
-                    Select a schema type and fill in required fields to generate canonical Schema.org JSON-LD markup.
+                    Configure rule groups or enter test URL to evaluate robots.txt behavior.
                   </p>
                 </div>
               )}
@@ -966,261 +1266,407 @@ export const SEOToolsPanel: React.FC = () => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 3: OPEN GRAPH & TWITTER CARD PREVIEW */}
+      {/* TAB 5: XML SITEMAP (GENERATOR & VALIDATOR) */}
       {/* ============================================================== */}
-      {activeTab === 'social' && (
+      {activeTab === 'sitemap' && (
         <div style={{ marginTop: '20px' }}>
-          {socialError && <div style={errorBannerStyle}>{socialError}</div>}
+          {sitemapError && <div style={errorBannerStyle}>{sitemapError}</div>}
+
+          {/* Sub-mode selector */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              id="sitemap-mode-generate"
+              type="button"
+              onClick={() => { setSitemapMode('generate'); setSitemapResult(null); }}
+              style={{
+                ...schemaPillStyle,
+                backgroundColor: sitemapMode === 'generate' ? '#eff6ff' : '#ffffff',
+                borderColor: sitemapMode === 'generate' ? '#2563eb' : '#e2e8f0',
+                color: sitemapMode === 'generate' ? '#1d4ed8' : '#475569',
+                fontWeight: sitemapMode === 'generate' ? 700 : 500,
+              }}
+            >
+              🗺️ Sitemap Generator
+            </button>
+            <button
+              id="sitemap-mode-validate"
+              type="button"
+              onClick={() => { setSitemapMode('validate'); setSitemapResult(null); }}
+              style={{
+                ...schemaPillStyle,
+                backgroundColor: sitemapMode === 'validate' ? '#eff6ff' : '#ffffff',
+                borderColor: sitemapMode === 'validate' ? '#2563eb' : '#e2e8f0',
+                color: sitemapMode === 'validate' ? '#1d4ed8' : '#475569',
+                fontWeight: sitemapMode === 'validate' ? 700 : 500,
+              }}
+            >
+              🔍 Local XML Validator
+            </button>
+          </div>
 
           <div style={grid2ColStyle}>
-            {/* Social Inputs */}
-            <form onSubmit={handleGenerateSocial} style={formCardStyle}>
-              <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700, color: '#111827' }}>
-                Social Card Inputs
-              </h4>
+            {/* Input Form */}
+            <form onSubmit={handleProcessSitemap} style={formCardStyle}>
+              {sitemapMode === 'generate' ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Sitemap URLs ({sitemapEntries.length})</h4>
+                    <button
+                      type="button"
+                      onClick={() => setSitemapEntries([...sitemapEntries, { loc: '', lastmod: new Date().toISOString().split('T')[0], changefreq: 'weekly', priority: '0.8' }])}
+                      style={addPillBtnStyle}
+                    >
+                      + Add URL Entry
+                    </button>
+                  </div>
 
-              <div style={formGroupStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={labelStyle}>
-                    Card Title <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <span style={{ fontSize: '11px', color: socialTitle.length <= 60 ? '#10b981' : '#f59e0b' }}>
-                    {socialTitle.length} / 60 chars
-                  </span>
-                </div>
-                <input
-                  id="social-input-title"
-                  type="text"
-                  value={socialTitle}
-                  onChange={(e) => setSocialTitle(e.target.value)}
-                  placeholder="e.g. Autonomous SEO Intelligence for Emerging Markets"
-                  required
-                  style={inputStyle}
-                />
-              </div>
-
-              <div style={formGroupStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={labelStyle}>
-                    Card Description <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <span style={{ fontSize: '11px', color: socialDesc.length <= 160 ? '#10b981' : '#f59e0b' }}>
-                    {socialDesc.length} / 160 chars
-                  </span>
-                </div>
-                <textarea
-                  id="social-input-desc"
-                  value={socialDesc}
-                  onChange={(e) => setSocialDesc(e.target.value)}
-                  placeholder="Track rankings on Google Ethiopia and automate your technical SEO roadmap with multi-agent orchestration."
-                  rows={3}
-                  required
-                  style={textareaStyle}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>Target URL</label>
-                  <input
-                    id="social-input-url"
-                    type="url"
-                    value={socialUrl}
-                    onChange={(e) => setSocialUrl(e.target.value)}
-                    placeholder="https://doxarank.com/platform"
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>Image URL</label>
-                  <input
-                    id="social-input-image"
-                    type="url"
-                    value={socialImage}
-                    onChange={(e) => setSocialImage(e.target.value)}
-                    placeholder="https://doxarank.com/og-banner.png"
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>Site Name</label>
-                  <input
-                    type="text"
-                    value={socialSiteName}
-                    onChange={(e) => setSocialSiteName(e.target.value)}
-                    placeholder="DoxaRank"
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>Twitter @Handle</label>
-                  <input
-                    type="text"
-                    value={socialTwitterSite}
-                    onChange={(e) => setSocialTwitterSite(e.target.value)}
-                    placeholder="@doxarank"
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>OG Type</label>
-                  <select
-                    id="social-select-og-type"
-                    value={socialOgType}
-                    onChange={(e) => setSocialOgType(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="website">website</option>
-                    <option value="article">article</option>
-                    <option value="book">book</option>
-                    <option value="profile">profile</option>
-                  </select>
-                </div>
-                <div style={formGroupStyle}>
-                  <label style={labelStyle}>Twitter Card Format</label>
-                  <select
-                    id="social-select-twitter-card"
-                    value={socialTwitterCard}
-                    onChange={(e) => setSocialTwitterCard(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="summary_large_image">summary_large_image (Large Banner)</option>
-                    <option value="summary">summary (Small Square)</option>
-                  </select>
-                </div>
-              </div>
+                  {sitemapEntries.map((item, idx) => (
+                    <div key={idx} style={itemBoxStyle}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700 }}>URL #{idx + 1}</span>
+                        {sitemapEntries.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setSitemapEntries(sitemapEntries.filter((_, i) => i !== idx))}
+                            style={removeBtnStyle}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <div style={formGroupStyle}>
+                        <label style={labelStyle}>URL (loc) <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input
+                          type="url"
+                          value={item.loc}
+                          onChange={(e) => {
+                            const u = [...sitemapEntries];
+                            u[idx].loc = e.target.value;
+                            setSitemapEntries(u);
+                          }}
+                          placeholder="https://example.com/page"
+                          required
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                        <div style={formGroupStyle}>
+                          <label style={labelStyle}>Lastmod</label>
+                          <input
+                            type="date"
+                            value={item.lastmod}
+                            onChange={(e) => {
+                              const u = [...sitemapEntries];
+                              u[idx].lastmod = e.target.value;
+                              setSitemapEntries(u);
+                            }}
+                            style={inputStyle}
+                          />
+                        </div>
+                        <div style={formGroupStyle}>
+                          <label style={labelStyle}>Changefreq</label>
+                          <select
+                            value={item.changefreq}
+                            onChange={(e) => {
+                              const u = [...sitemapEntries];
+                              u[idx].changefreq = e.target.value;
+                              setSitemapEntries(u);
+                            }}
+                            style={selectStyle}
+                          >
+                            <option value="daily">daily</option>
+                            <option value="weekly">weekly</option>
+                            <option value="monthly">monthly</option>
+                            <option value="hourly">hourly</option>
+                            <option value="yearly">yearly</option>
+                            <option value="always">always</option>
+                            <option value="never">never</option>
+                          </select>
+                        </div>
+                        <div style={formGroupStyle}>
+                          <label style={labelStyle}>Priority</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0.0"
+                            max="1.0"
+                            value={item.priority}
+                            onChange={(e) => {
+                              const u = [...sitemapEntries];
+                              u[idx].priority = e.target.value;
+                              setSitemapEntries(u);
+                            }}
+                            placeholder="0.8"
+                            style={inputStyle}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 700 }}>Paste XML Sitemap</h4>
+                  <div style={formGroupStyle}>
+                    <label style={labelStyle}>Sitemap XML String <span style={{ color: '#ef4444' }}>*</span></label>
+                    <textarea
+                      id="sitemap-xml-input"
+                      value={sitemapXmlContent}
+                      onChange={(e) => setSitemapXmlContent(e.target.value)}
+                      rows={8}
+                      placeholder="<?xml version='1.0' encoding='UTF-8'?>&#10;<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>&#10;  <url>&#10;    <loc>https://example.com/</loc>&#10;  </url>&#10;</urlset>"
+                      required
+                      style={textareaStyle}
+                    />
+                  </div>
+                </>
+              )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                <button
-                  id="social-generate-btn"
-                  type="submit"
-                  disabled={socialLoading || !socialTitle.trim() || !socialDesc.trim()}
-                  style={primaryBtnStyle}
-                >
-                  {socialLoading ? 'Generating...' : '⚡ Generate Tags & Preview'}
+                <button id="sitemap-submit-btn" type="submit" disabled={sitemapLoading} style={primaryBtnStyle}>
+                  {sitemapLoading ? 'Processing...' : sitemapMode === 'generate' ? '⚡ Generate XML Sitemap' : '🔍 Validate XML'}
                 </button>
-                <button
-                  id="social-reset-btn"
-                  type="button"
-                  onClick={handleResetSocial}
-                  style={secondaryBtnStyle}
-                >
+                <button type="button" onClick={handleResetSitemap} style={secondaryBtnStyle}>
                   Reset
                 </button>
               </div>
             </form>
 
-            {/* Visual Previews and Meta Tags */}
+            {/* Sitemap Output */}
             <div style={resultCardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
-                  Interactive Social Previews
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
+                  {sitemapMode === 'generate' ? 'Generated XML Sitemap' : 'Validation Report'}
                 </h4>
-                {socialResult && (
-                  <button
-                    id="social-copy-btn"
-                    onClick={() => handleCopy(socialResult.html, 'social')}
-                    style={copyBtnStyle}
-                  >
-                    {copiedKey === 'social' ? '✓ Copied Tags!' : '📋 Copy Meta Tags'}
+                {sitemapResult?.xml && (
+                  <button id="sitemap-copy-btn" onClick={() => handleCopy(sitemapResult.xml!, 'sitemap')} style={copyBtnStyle}>
+                    {copiedKey === 'sitemap' ? '✓ Copied XML!' : '📋 Copy XML'}
                   </button>
                 )}
               </div>
 
-              {/* Dynamic Live Cards */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* 1. Open Graph Card */}
+              {sitemapResult ? (
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                    Open Graph Card (Facebook / LinkedIn)
-                  </span>
-                  <div style={ogCardPreviewStyle}>
-                    {socialImage ? (
-                      <div style={{ height: '140px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
-                        <img
-                          src={socialImage}
-                          alt="Social Preview"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                  {sitemapResult.action === 'generate' && sitemapResult.xml && (
+                    <>
+                      <pre style={codeBlockStyle}>{sitemapResult.xml}</pre>
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
+                        Total URLs: <strong>{sitemapResult.metrics?.url_count}</strong> | Size: <strong>{sitemapResult.metrics?.byte_size} bytes</strong>
                       </div>
-                    ) : (
-                      <div style={cardImagePlaceholderStyle}>
-                        <span>🖼️ No image URL specified (Text-only display)</span>
-                      </div>
-                    )}
-                    <div style={{ padding: '12px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
-                        {socialResult?.preview.domain || 'example.com'}
-                      </span>
-                      <h5 style={{ margin: '4px 0', fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
-                        {socialTitle || 'Card Title will appear here'}
-                      </h5>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: 1.4 }}>
-                        {socialDesc || 'Enter a descriptive snippet to see how social platforms format this card.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                    </>
+                  )}
 
-                {/* 2. Twitter / X Card */}
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                    Twitter / X Card Preview
-                  </span>
-                  <div style={twitterCardPreviewStyle}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <div style={avatarMockStyle}>D</div>
-                      <div>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f1419' }}>DoxaRank</span>
-                        <span style={{ fontSize: '12px', color: '#536471', marginLeft: '6px' }}>
-                          {socialTwitterSite || '@doxarank'} · Now
+                  {sitemapResult.action === 'validate' && (
+                    <div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          borderRadius: '8px',
+                          backgroundColor: sitemapResult.is_valid ? '#f0fdf4' : '#fef2f2',
+                          border: `1px solid ${sitemapResult.is_valid ? '#bbf7d0' : '#fecaca'}`,
+                          marginBottom: '12px',
+                        }}
+                      >
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: sitemapResult.is_valid ? '#166534' : '#991b1b' }}>
+                          {sitemapResult.is_valid ? '✅ VALID SITEMAP PROTOCOL' : '❌ INVALID SITEMAP STRUCTURE'}
                         </span>
-                      </div>
-                    </div>
-                    <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #cfd9de' }}>
-                      {socialImage ? (
-                        <div style={{ height: '120px', backgroundColor: '#e2e8f0' }}>
-                          <img
-                            src={socialImage}
-                            alt="Twitter Card"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </div>
-                      ) : null}
-                      <div style={{ padding: '8px 12px', backgroundColor: '#ffffff' }}>
-                        <span style={{ fontSize: '11px', color: '#536471' }}>
-                          {socialResult?.preview.domain || 'example.com'}
-                        </span>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f1419', marginTop: '2px' }}>
-                          {socialTitle || 'Post title preview'}
+                        <div style={{ fontSize: '12px', marginTop: '4px', color: '#475569' }}>
+                          Parsed URLs: <strong>{sitemapResult.url_count}</strong> | Root element: <code>&lt;{sitemapResult.root_tag}&gt;</code>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Generated Tags Code Block */}
-                {socialResult && (
-                  <div style={{ marginTop: '10px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>
-                      Generated Social HTML Tags:
-                    </span>
-                    <pre style={{ ...codeBlockStyle, marginTop: '6px' }}>{socialResult.html}</pre>
-                  </div>
+                      {sitemapResult.errors && sitemapResult.errors.length > 0 && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#b91c1c' }}>Errors Found:</span>
+                          <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#dc2626' }}>
+                            {sitemapResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      {sitemapResult.warnings && sitemapResult.warnings.length > 0 && (
+                        <div>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>Recommendations:</span>
+                          <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#d97706' }}>
+                            {sitemapResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Generate valid XML sitemaps or validate existing markup locally without SSRF risks.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 6: HREFLANG BUILDER */}
+      {/* ============================================================== */}
+      {activeTab === 'hreflang' && (
+        <div style={{ marginTop: '20px' }}>
+          {hreflangError && <div style={errorBannerStyle}>{hreflangError}</div>}
+
+          <div style={grid2ColStyle}>
+            {/* Form */}
+            <form onSubmit={handleGenerateHreflang} style={formCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Language Cluster ({hreflangEntries.length})</h4>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setHreflangEntries([...hreflangEntries, { lang: '', url: '' }])}
+                    style={addPillBtnStyle}
+                  >
+                    + Add Language
+                  </button>
+                </div>
+              </div>
+
+              {/* Ethiopian Quick Presets */}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Quick Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!hreflangEntries.some((e) => e.lang === 'am')) {
+                      setHreflangEntries([...hreflangEntries, { lang: 'am', url: 'https://example.com/am/' }]);
+                    }
+                  }}
+                  style={presetBtnStyle}
+                >
+                  + Amharic (am)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!hreflangEntries.some((e) => e.lang === 'om')) {
+                      setHreflangEntries([...hreflangEntries, { lang: 'om', url: 'https://example.com/om/' }]);
+                    }
+                  }}
+                  style={presetBtnStyle}
+                >
+                  + Afaan Oromo (om)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!hreflangEntries.some((e) => e.lang === 'ti')) {
+                      setHreflangEntries([...hreflangEntries, { lang: 'ti', url: 'https://example.com/ti/' }]);
+                    }
+                  }}
+                  style={presetBtnStyle}
+                >
+                  + Tigrinya (ti)
+                </button>
+              </div>
+
+              {hreflangEntries.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={item.lang}
+                    onChange={(e) => {
+                      const u = [...hreflangEntries];
+                      u[idx].lang = e.target.value;
+                      setHreflangEntries(u);
+                    }}
+                    placeholder="e.g. en, am, om"
+                    required
+                    style={{ ...inputStyle, width: '90px' }}
+                  />
+                  <input
+                    type="url"
+                    value={item.url}
+                    onChange={(e) => {
+                      const u = [...hreflangEntries];
+                      u[idx].url = e.target.value;
+                      setHreflangEntries(u);
+                    }}
+                    placeholder="https://example.com/am/page"
+                    required
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  {hreflangEntries.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setHreflangEntries(hreflangEntries.filter((_, i) => i !== idx))}
+                      style={removeBtnStyle}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <div style={{ ...formGroupStyle, marginTop: '14px' }}>
+                <label style={labelStyle}>x-default Fallback URL (Recommended)</label>
+                <input
+                  type="url"
+                  value={hreflangXDefault}
+                  onChange={(e) => setHreflangXDefault(e.target.value)}
+                  placeholder="https://example.com/"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button id="hreflang-submit-btn" type="submit" disabled={hreflangLoading} style={primaryBtnStyle}>
+                  {hreflangLoading ? 'Generating...' : '⚡ Generate hreflang Tags'}
+                </button>
+                <button type="button" onClick={handleResetHreflang} style={secondaryBtnStyle}>
+                  Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Output */}
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>hreflang Annotations</h4>
+                {hreflangResult && (
+                  <button id="hreflang-copy-btn" onClick={() => handleCopy(hreflangResult.html, 'hreflang')} style={copyBtnStyle}>
+                    {copiedKey === 'hreflang' ? '✓ Copied HTML!' : '📋 Copy HTML Tags'}
+                  </button>
                 )}
               </div>
+
+              {hreflangResult ? (
+                <div>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>HTML Link Tags (&lt;head&gt;):</span>
+                  <pre style={{ ...codeBlockStyle, marginTop: '4px', marginBottom: '12px' }}>{hreflangResult.html}</pre>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>XML Sitemap Snippet:</span>
+                    <button onClick={() => handleCopy(hreflangResult.xml_snippet, 'hreflang_xml')} style={copyBtnStyle}>
+                      {copiedKey === 'hreflang_xml' ? '✓ Copied!' : 'Copy XML'}
+                    </button>
+                  </div>
+                  <pre style={{ ...codeBlockStyle, marginBottom: '12px' }}>{hreflangResult.xml_snippet}</pre>
+
+                  {hreflangResult.warnings && hreflangResult.warnings.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>Recommendations:</span>
+                      <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#d97706' }}>
+                        {hreflangResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Add English, Amharic, and Afaan Oromo variants to generate reciprocal hreflang annotations.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1260,16 +1706,17 @@ const quotaCardStyle: React.CSSProperties = {
 
 const tabContainerStyle: React.CSSProperties = {
   display: 'flex',
-  gap: '16px',
+  gap: '12px',
   borderBottom: '1px solid #e2e8f0',
   paddingBottom: '2px',
+  flexWrap: 'wrap',
 };
 
 const tabButtonStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '8px 12px',
-  fontSize: '14px',
+  fontSize: '13px',
   cursor: 'pointer',
   transition: 'all 0.15s ease',
 };
@@ -1281,6 +1728,17 @@ const schemaPillStyle: React.CSSProperties = {
   fontSize: '12px',
   cursor: 'pointer',
   transition: 'all 0.15s ease',
+};
+
+const presetBtnStyle: React.CSSProperties = {
+  backgroundColor: '#f1f5f9',
+  border: '1px solid #cbd5e1',
+  borderRadius: '12px',
+  padding: '2px 8px',
+  fontSize: '11px',
+  fontWeight: 600,
+  color: '#1e293b',
+  cursor: 'pointer',
 };
 
 const grid2ColStyle: React.CSSProperties = {
@@ -1434,27 +1892,6 @@ const cardImagePlaceholderStyle: React.CSSProperties = {
   justifyContent: 'center',
   color: '#94a3b8',
   fontSize: '12px',
-};
-
-const twitterCardPreviewStyle: React.CSSProperties = {
-  border: '1px solid #e2e8f0',
-  borderRadius: '12px',
-  padding: '12px',
-  backgroundColor: '#ffffff',
-  marginTop: '6px',
-};
-
-const avatarMockStyle: React.CSSProperties = {
-  width: '32px',
-  height: '32px',
-  borderRadius: '50%',
-  backgroundColor: '#1d9bf0',
-  color: '#ffffff',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontWeight: 700,
-  fontSize: '13px',
 };
 
 const itemBoxStyle: React.CSSProperties = {

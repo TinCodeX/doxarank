@@ -7,6 +7,9 @@ from .serializers import (
     MetaTagInputSerializer,
     SchemaInputSerializer,
     SocialPreviewInputSerializer,
+    RobotsToolInputSerializer,
+    SitemapToolInputSerializer,
+    HreflangInputSerializer,
 )
 from .services import SEOToolsService
 
@@ -73,6 +76,66 @@ class SocialPreviewGeneratorView(APIView):
 
         try:
             result = SEOToolsService.generate_social_preview(request.user, serializer.validated_data)
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RobotsToolView(APIView):
+    """
+    POST /api/seo/tools/robots/
+    Generates or tests robots.txt access rules with syntax validation.
+    Enforces BASIC_SEO_TOOLS entitlement and Free daily quota.
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessBasicSEOTools]
+
+    def post(self, request, *args, **kwargs):
+        serializer = RobotsToolInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = SEOToolsService.process_robots_tool(request.user, serializer.validated_data)
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SitemapToolView(APIView):
+    """
+    POST /api/seo/tools/sitemap/
+    Generates official XML sitemaps or validates sitemap structure locally.
+    Enforces BASIC_SEO_TOOLS entitlement and Free daily quota.
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessBasicSEOTools]
+
+    def post(self, request, *args, **kwargs):
+        serializer = SitemapToolInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = SEOToolsService.process_sitemap_tool(request.user, serializer.validated_data)
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class HreflangToolView(APIView):
+    """
+    POST /api/seo/tools/hreflang/
+    Builds localized alternate annotations for English, Amharic, Afaan Oromo, and x-default.
+    Enforces BASIC_SEO_TOOLS entitlement and Free daily quota.
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessBasicSEOTools]
+
+    def post(self, request, *args, **kwargs):
+        serializer = HreflangInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = SEOToolsService.generate_hreflang(request.user, serializer.validated_data)
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
