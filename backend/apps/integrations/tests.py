@@ -13,6 +13,8 @@ from apps.integrations.models import (
     IntegrationConnection,
     IntegrationProvider,
     IntegrationStatus,
+    ProjectGA4Connection,
+    ProjectClarityConnection,
 )
 from apps.integrations.services.google_oauth import (
     GoogleOAuthIntegrationService,
@@ -34,6 +36,9 @@ MOCK_OAUTH_SETTINGS = {
     'GOOGLE_CLIENT_ID': 'mock-test-client-id.apps.googleusercontent.com',
     'GOOGLE_CLIENT_SECRET': 'mock-test-client-secret-xyz123',
     'GOOGLE_REDIRECT_URI': 'http://localhost:5173/integrations/google/callback',
+    'MICROSOFT_OAUTH_CLIENT_ID': 'mock-ms-client-id-1234',
+    'MICROSOFT_OAUTH_CLIENT_SECRET': 'mock-ms-client-secret-5678',
+    'MICROSOFT_OAUTH_REDIRECT_URI': 'http://localhost:5173/integrations/microsoft/callback',
 }
 
 
@@ -715,3 +720,319 @@ class GA4IntegrationTests(TestCase):
             mock_list.return_value = []
             response = self.client.get('/api/integrations/google/analytics/properties/')
             self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+@override_settings(**MOCK_OAUTH_SETTINGS)
+class ClarityIntegrationTests(TestCase):
+    """
+    Focused test suite for Microsoft Clarity Integration:
+    - Connection initiation & callback
+    - Disconnect behavior
+    - Project discovery & normalization
+    - Google/Microsoft error mappings (401, 403, 429, 500)
+    - Project association & tenant isolation
+    - Subscription gating (Free rejected, Starter/Agency allowed)
+    - Security: no token serialization, tenant isolation
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        SubscriptionService.bootstrap_default_plans()
+
+        self.user = User.objects.create_user(
+            email='clarity_user@example.com',
+            password='TestPassword123!'
+        )
+        self.other_user = User.objects.create_user(
+            email='other_clarity_user@example.com',
+            password='TestPassword123!'
+        )
+
+
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        SubscriptionService.assign_plan(self.other_user, PlanCode.STARTER)
+
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Clarity Test Project',
+            website_url='https://clarityexample.com'
+        )
+
+        # Set up an active Microsoft connection for self.user
+        self.connection = IntegrationConnection.objects.create(
+            user=self.user,
+            provider=IntegrationProvider.MICROSOFT,
+            status=IntegrationStatus.CONNECTED,
+            account_email='clarity_user@example.com',
+            account_name='Clarity User',
+            metadata={
+                'projects': [
+                    {
+                        'project_id': 'k9xyz123',
+                        'name': 'Clarity Main Site',
+                        'website': 'https://clarityexample.com'
+                    },
+                    {
+                        'project_id': 'abc98765',
+                        'name': 'Clarity Blog',
+                        'website': 'https://blog.clarityexample.com'
+                    }
+                ]
+            }
+        )
+        self.connection.set_access_token('initial_ms_access_token')
+        self.connection.set_refresh_token('initial_ms_refresh_token')
+        self.connection.token_expires_at = timezone.now() + timedelta(hours=1)
+        self.connection.save()
+
+        self.client.force_authenticate(user=self.user)
+
+    def test_unauthenticated_requests_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_connect_initiation_returns_authorization_url(self):
+        response = self.client.get('/api/integrations/microsoft/clarity/connect/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('authorization_url', response.data)
+        auth_url = response.data['authorization_url']
+        self.assertIn('login.microsoftonline.com', auth_url)
+        self.assertIn('client_id=', auth_url)
+        self.assertIn('state=', auth_url)
+
+    @patch('apps.integrations.services.clarity.requests.post')
+    @patch('apps.integrations.services.clarity.requests.get')
+    def test_successful_oauth_callback(self, mock_get, mock_post):
+        # Mock token exchange
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {
+            'access_token': 'new_ms_access_token',
+            'refresh_token': 'new_ms_refresh_token',
+            'expires_in': 3600,
+            'scope': 'openid profile email User.Read'
+        }
+        mock_post.return_value = mock_token_resp
+
+        # Mock Microsoft Graph profile
+        mock_profile_resp = MagicMock()
+        mock_profile_resp.status_code = 200
+        mock_profile_resp.json.return_value = {
+            'mail': 'live_ms_user@example.com',
+            'displayName': 'Live MS User',
+            'id': 'ms-guid-1234'
+        }
+        mock_get.return_value = mock_profile_resp
+
+        state = OAuthStateService.generate_state(self.user, metadata={'provider': 'microsoft'})
+        response = self.client.get(f'/api/integrations/microsoft/clarity/callback/?code=valid_code&state={state}')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.connection.refresh_from_db()
+        self.assertEqual(self.connection.get_access_token(), 'new_ms_access_token')
+        self.assertEqual(self.connection.get_refresh_token(), 'new_ms_refresh_token')
+        self.assertEqual(self.connection.account_email, 'live_ms_user@example.com')
+
+    def test_oauth_callback_denied_error(self):
+        response = self.client.get('/api/integrations/microsoft/clarity/callback/?error=access_denied&error_description=User+cancelled')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'OAUTH_DENIED')
+
+    def test_disconnect_microsoft_clarity(self):
+        # Pre-associate a project
+        ProjectClarityConnection.objects.create(
+            project=self.project,
+            clarity_project_id='k9xyz123',
+            is_connected=True
+        )
+
+        response = self.client.post('/api/integrations/microsoft/clarity/disconnect/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.connection.refresh_from_db()
+        self.assertEqual(self.connection.status, IntegrationStatus.DISCONNECTED)
+        self.assertIsNone(self.connection.get_access_token())
+        self.assertIsNone(self.connection.get_refresh_token())
+
+        # Verify project connection was marked disconnected
+        project_conn = ProjectClarityConnection.objects.get(project=self.project)
+        self.assertFalse(project_conn.is_connected)
+
+    def test_list_projects_normalized_response(self):
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]['project_id'], 'k9xyz123')
+        self.assertEqual(response.data[0]['name'], 'Clarity Main Site')
+        self.assertEqual(response.data[0]['website'], 'https://clarityexample.com')
+
+    def test_list_projects_when_not_connected(self):
+        self.connection.status = IntegrationStatus.DISCONNECTED
+        self.connection.save()
+
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'CLARITY_NOT_CONNECTED')
+
+    @patch('apps.integrations.services.clarity.requests.get')
+    def test_clarity_api_403_error_handled(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.text = 'Forbidden'
+        mock_get.return_value = mock_resp
+
+        # Association with API token triggers live validation
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+            'api_token': 'invalid_token_403',
+        })
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'CLARITY_AUTH_ERROR')
+
+    @patch('apps.integrations.services.clarity.requests.get')
+    def test_clarity_api_429_rate_limit_handled(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.text = 'Too Many Requests'
+        mock_get.return_value = mock_resp
+
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+            'api_token': 'rate_limited_token',
+        })
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data.get('code'), 'CLARITY_RATE_LIMIT')
+
+    @patch('apps.integrations.services.clarity.requests.get')
+    def test_clarity_api_500_server_error_handled(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.text = 'Internal Server Error'
+        mock_get.return_value = mock_resp
+
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+            'api_token': 'server_error_token',
+        })
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data.get('code'), 'CLARITY_API_ERROR')
+
+    def test_valid_project_association_succeeds(self):
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+            'name': 'Clarity Main Site',
+            'website': 'https://clarityexample.com',
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['clarity_project_id'], 'k9xyz123')
+        self.assertEqual(response.data['project_name'], self.project.name)
+        self.assertTrue(response.data['is_connected'])
+
+        # Verify persisted in database
+        conn = ProjectClarityConnection.objects.get(project=self.project)
+        self.assertEqual(conn.clarity_project_id, 'k9xyz123')
+        self.assertTrue(conn.is_connected)
+
+    def test_project_owned_by_another_user_rejected(self):
+        other_project = Project.objects.create(
+            owner=self.other_user,
+            name="Other User's Project",
+            website_url='https://other.com'
+        )
+
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': other_project.id,
+            'clarity_project_id': 'k9xyz123',
+        })
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data.get('code'), 'PROJECT_NOT_FOUND')
+
+    def test_clarity_project_belonging_to_another_account_rejected(self):
+        other_project = Project.objects.create(
+            owner=self.other_user,
+            name="Other Project",
+            website_url='https://other.com'
+        )
+        # Other user already linked k9xyz123
+        ProjectClarityConnection.objects.create(
+            project=other_project,
+            clarity_project_id='k9xyz123',
+            is_connected=True
+        )
+
+        # Self attempts to associate the same project
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+        })
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'CLARITY_AUTH_ERROR')
+
+    def test_duplicate_association_updates_safely(self):
+        # First association
+        self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'k9xyz123',
+            'name': 'Old Name',
+        })
+
+        # Second association updates existing record
+        response = self.client.post('/api/integrations/microsoft/clarity/associate/', data={
+            'project_id': self.project.id,
+            'clarity_project_id': 'abc98765',
+            'name': 'Updated Name',
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['clarity_project_id'], 'abc98765')
+        self.assertEqual(response.data['name'], 'Updated Name')
+        self.assertEqual(ProjectClarityConnection.objects.filter(project=self.project).count(), 1)
+
+    def test_free_tier_rejected_from_clarity(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.FREE)
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'FEATURE_NOT_ENTITLED')
+        self.assertTrue(response.data.get('upgrade_required'))
+
+    def test_starter_tier_allowed_clarity(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_agency_tier_allowed_clarity(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.AGENCY)
+        response = self.client.get('/api/integrations/microsoft/clarity/projects/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_status_endpoint_exposes_microsoft_and_project_clarity(self):
+        # Associate project
+        ProjectClarityConnection.objects.create(
+            project=self.project,
+            clarity_project_id='k9xyz123',
+            name='Clarity Site',
+            website_url='https://clarityexample.com',
+            is_connected=True
+        )
+
+        response = self.client.get(f'/api/integrations/status/?project_id={self.project.id}')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('microsoft', response.data)
+        self.assertTrue(response.data['microsoft']['connected'])
+        self.assertIn('project_clarity', response.data)
+        self.assertEqual(response.data['project_clarity']['clarity_project_id'], 'k9xyz123')
+
+    def test_credentials_never_serialized_to_frontend(self):
+        response = self.client.get('/api/integrations/status/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ms_data = response.data.get('microsoft', {})
+        self.assertNotIn('encrypted_access_token', ms_data)
+        self.assertNotIn('encrypted_refresh_token', ms_data)
+        self.assertNotIn('access_token', ms_data)
+        self.assertNotIn('refresh_token', ms_data)
+

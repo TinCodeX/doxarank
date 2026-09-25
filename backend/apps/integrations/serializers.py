@@ -73,3 +73,23 @@ class OAuthCallbackRequestSerializer(serializers.Serializer):
     error = serializers.CharField(required=False, allow_blank=True, default='')
     error_description = serializers.CharField(required=False, allow_blank=True, default='')
     redirect_uri = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class ClarityProjectSerializer(serializers.Serializer):
+    """
+    Normalized Microsoft Clarity project/site representation.
+    """
+    project_id = serializers.CharField()
+    name = serializers.CharField()
+    website = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class ClarityAssociateSerializer(serializers.Serializer):
+    """
+    Payload for associating a Microsoft Clarity project with a DoxaRank project.
+    """
+    project_id = serializers.IntegerField(required=True)
+    clarity_project_id = serializers.CharField(required=True, max_length=100)
+    name = serializers.CharField(required=False, allow_blank=True, default='')
+    website = serializers.CharField(required=False, allow_blank=True, default='')
+    api_token = serializers.CharField(required=False, allow_blank=True, default='', write_only=True)

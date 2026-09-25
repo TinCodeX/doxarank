@@ -269,3 +269,21 @@ GOOGLE_OAUTH_SCOPES = [
 
 # Dedicated AES key for encrypting OAuth refresh tokens at rest (falls back to SECRET_KEY derived key)
 GSC_TOKEN_ENCRYPTION_KEY = config('GSC_TOKEN_ENCRYPTION_KEY', default='')
+
+# ==============================================================================
+# Microsoft Clarity & OAuth2 Configuration
+# ==============================================================================
+MICROSOFT_OAUTH_CLIENT_ID = config('MICROSOFT_OAUTH_CLIENT_ID', default=config('MICROSOFT_CLIENT_ID', default=''))
+MICROSOFT_OAUTH_CLIENT_SECRET = config('MICROSOFT_OAUTH_CLIENT_SECRET', default=config('MICROSOFT_CLIENT_SECRET', default=''))
+MICROSOFT_OAUTH_REDIRECT_URI = config(
+    'MICROSOFT_OAUTH_REDIRECT_URI',
+    default=config('MICROSOFT_REDIRECT_URI', default='http://localhost:5173/integrations/microsoft/callback')
+)
+MICROSOFT_OAUTH_SCOPES = [
+    'openid',
+    'profile',
+    'email',
+    'offline_access',
+    'User.Read',
+]
+CLARITY_API_BASE_URL = config('CLARITY_API_BASE_URL', default='https://www.clarity.ms')

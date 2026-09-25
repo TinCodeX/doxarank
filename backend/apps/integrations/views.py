@@ -11,6 +11,7 @@ from apps.integrations.models import (
     IntegrationProvider,
     IntegrationStatus,
     ProjectGA4Connection,
+    ProjectClarityConnection,
 )
 from apps.integrations.serializers import (
     IntegrationStatusSerializer,
@@ -18,6 +19,8 @@ from apps.integrations.serializers import (
     SearchConsoleAssociateSerializer,
     GA4PropertySerializer,
     GA4AssociateSerializer,
+    ClarityProjectSerializer,
+    ClarityAssociateSerializer,
     OAuthCallbackRequestSerializer,
 )
 from apps.integrations.services.google_oauth import (
@@ -42,7 +45,16 @@ from apps.integrations.services.analytics import (
     GA4RateLimitError,
     GA4ApiError,
 )
-from apps.subscriptions.permissions import CanAccessGSC, CanAccessGA4
+from apps.integrations.services.clarity import (
+    ClarityIntegrationService,
+    ClarityError,
+    ClarityNotConnectedError,
+    ClarityCredentialsError,
+    ClarityRateLimitError,
+    ClarityApiError,
+    ClarityProjectNotFoundError,
+)
+from apps.subscriptions.permissions import CanAccessGSC, CanAccessGA4, CanAccessClarity
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +215,19 @@ class IntegrationStatusView(APIView):
                 'has_analytics_scope': False,
             }
 
+        # Ensure microsoft entry exists even if not yet connected
+        if IntegrationProvider.MICROSOFT not in results:
+            results[IntegrationProvider.MICROSOFT] = {
+                'connected': False,
+                'status': IntegrationStatus.DISCONNECTED,
+                'account_email': None,
+                'account_name': None,
+                'scopes': [],
+                'connected_at': None,
+                'updated_at': None,
+                'has_valid_credentials': False,
+            }
+
         project_id = request.query_params.get('project_id')
         if project_id:
             try:
@@ -220,8 +245,25 @@ class IntegrationStatusView(APIView):
                     }
                 else:
                     results['project_ga4'] = None
+
+                clarity_conn = ProjectClarityConnection.objects.filter(
+                    project_id=project_id,
+                    project__owner=request.user,
+                    is_connected=True
+                ).first()
+                if clarity_conn:
+                    results['project_clarity'] = {
+                        'clarity_project_id': clarity_conn.clarity_project_id,
+                        'name': clarity_conn.name,
+                        'website_url': clarity_conn.website_url,
+                        'is_connected': clarity_conn.is_connected,
+                        'connected_at': clarity_conn.connected_at,
+                    }
+                else:
+                    results['project_clarity'] = None
             except (ValueError, TypeError):
                 results['project_ga4'] = None
+                results['project_clarity'] = None
 
         return Response(results, status=status.HTTP_200_OK)
 
@@ -381,3 +423,212 @@ class GA4ProjectConnectionView(APIView):
             return Response(info, status=status.HTTP_200_OK)
         except (ValueError, TypeError):
             return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MicrosoftClarityConnectView(APIView):
+    """
+    Initiate Microsoft OAuth2 connection flow or directly connect Microsoft Clarity account.
+    (GET/POST /api/integrations/microsoft/clarity/connect/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessClarity]
+
+    def get(self, request):
+        redirect_uri = request.query_params.get('redirect_uri')
+        try:
+            auth_url = ClarityIntegrationService.get_authorization_url(
+                user=request.user,
+                redirect_uri=redirect_uri
+            )
+            return Response({'authorization_url': auth_url}, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return Response(
+                {'detail': f"Microsoft OAuth configuration error: {str(exc)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as exc:
+            logger.error(f"[MicrosoftClarityConnectView] Error generating authorization URL: {exc}")
+            return Response(
+                {'detail': f"Failed to initiate Microsoft connection: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def post(self, request):
+        """
+        Directly connect or update Microsoft Clarity account with email/name or initial projects.
+        """
+        account_email = request.data.get('account_email')
+        account_name = request.data.get('account_name')
+        projects = request.data.get('projects')
+
+        conn = ClarityIntegrationService.connect_account(
+            user=request.user,
+            account_email=account_email,
+            account_name=account_name,
+            projects=projects if isinstance(projects, list) else None,
+        )
+        serializer = IntegrationStatusSerializer(conn)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MicrosoftClarityCallbackView(APIView):
+    """
+    Handle Microsoft OAuth2 callback with authorization code and state token.
+    (GET/POST /api/integrations/microsoft/clarity/callback/)
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return self._process_callback(request, data=request.query_params)
+
+    def post(self, request):
+        return self._process_callback(request, data=request.data)
+
+    def _process_callback(self, request, data):
+        serializer = OAuthCallbackRequestSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        error = validated.get('error')
+        if error:
+            desc = validated.get('error_description') or error
+            logger.warning(f"[MicrosoftClarityCallbackView] Microsoft OAuth error: {error} - {desc}")
+            return Response(
+                {'detail': f"Microsoft authorization denied: {desc}", 'code': 'OAUTH_DENIED'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        code = validated.get('code')
+        state = validated.get('state')
+        redirect_uri = validated.get('redirect_uri') or None
+
+        if not code or not state:
+            return Response(
+                {'detail': "Missing 'code' or 'state' parameter in OAuth callback.", 'code': 'MISSING_PARAMS'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            connection = ClarityIntegrationService.exchange_code_for_tokens(
+                code=code,
+                state=state,
+                redirect_uri=redirect_uri
+            )
+            serializer = IntegrationStatusSerializer(connection)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except InvalidOAuthStateError as exc:
+            return Response({'detail': str(exc), 'code': 'INVALID_STATE'}, status=status.HTTP_400_BAD_REQUEST)
+        except ClarityCredentialsError as exc:
+            return Response({'detail': str(exc), 'code': 'EXCHANGE_FAILED'}, status=status.HTTP_400_BAD_REQUEST)
+        except ClarityApiError as exc:
+            return Response({'detail': str(exc), 'code': 'PROVIDER_ERROR'}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as exc:
+            logger.error(f"[MicrosoftClarityCallbackView] Unexpected error: {exc}")
+            return Response(
+                {'detail': "An unexpected error occurred processing Microsoft callback."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MicrosoftClarityDisconnectView(APIView):
+    """
+    Safely disconnect user's Microsoft Clarity connection and clear credentials.
+    (POST /api/integrations/microsoft/clarity/disconnect/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessClarity]
+
+    def post(self, request):
+        ClarityIntegrationService.disconnect(request.user)
+        return Response({'detail': "Microsoft Clarity disconnected successfully."}, status=status.HTTP_200_OK)
+
+
+class MicrosoftClarityProjectsView(APIView):
+    """
+    Retrieve accessible Microsoft Clarity projects for the connected user.
+    (GET /api/integrations/microsoft/clarity/projects/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessClarity]
+
+    def get(self, request):
+        try:
+            projects = ClarityIntegrationService.list_projects(user=request.user)
+            serializer = ClarityProjectSerializer(projects, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ClarityNotConnectedError as exc:
+            return Response({'code': 'CLARITY_NOT_CONNECTED', 'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ClarityCredentialsError as exc:
+            return Response({'code': 'CLARITY_AUTH_ERROR', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except ClarityRateLimitError as exc:
+            return Response({'code': 'CLARITY_RATE_LIMIT', 'detail': str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except ClarityApiError as exc:
+            return Response({'code': 'CLARITY_API_ERROR', 'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as exc:
+            logger.error(f"[MicrosoftClarityProjectsView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to retrieve Microsoft Clarity projects: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MicrosoftClarityAssociatePropertyView(APIView):
+    """
+    Associate an accessible Microsoft Clarity project with a DoxaRank project.
+    (POST /api/integrations/microsoft/clarity/associate/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessClarity]
+
+    def post(self, request):
+        serializer = ClarityAssociateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        try:
+            result = ClarityIntegrationService.associate_project(
+                user=request.user,
+                project_id=validated['project_id'],
+                clarity_project_id=validated['clarity_project_id'],
+                name=validated.get('name'),
+                website=validated.get('website'),
+                api_token=validated.get('api_token'),
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ClarityNotConnectedError as exc:
+            return Response({'code': 'CLARITY_NOT_CONNECTED', 'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ClarityProjectNotFoundError as exc:
+            return Response({'code': 'PROJECT_NOT_FOUND', 'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except ClarityCredentialsError as exc:
+            return Response({'code': 'CLARITY_AUTH_ERROR', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except ClarityRateLimitError as exc:
+            return Response({'code': 'CLARITY_RATE_LIMIT', 'detail': str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except ClarityApiError as exc:
+            return Response({'code': 'CLARITY_API_ERROR', 'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as exc:
+            logger.error(f"[MicrosoftClarityAssociatePropertyView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to associate Microsoft Clarity project: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MicrosoftClarityProjectConnectionView(APIView):
+    """
+    Retrieve active Clarity connection for a specific DoxaRank Project.
+    (GET /api/integrations/microsoft/clarity/project/?project_id=<id>)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessClarity]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'detail': "project_id query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            info = ClarityIntegrationService.get_project_connection(user=request.user, project_id=int(project_id))
+            if not info:
+                return Response(
+                    {'is_connected': False, 'detail': "No Microsoft Clarity project linked to this project."},
+                    status=status.HTTP_200_OK
+                )
+            return Response(info, status=status.HTTP_200_OK)
+        except (ValueError, TypeError):
+            return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)
+

@@ -12,6 +12,7 @@ export interface IntegrationConnectionStatus {
   has_valid_credentials?: boolean;
   has_analytics_scope?: boolean;
   project_ga4?: ProjectGA4ConnectionResponse | null;
+  project_clarity?: ProjectClarityConnectionResponse | null;
 }
 
 export type IntegrationsStatusResponse = Record<string, IntegrationConnectionStatus>;
@@ -68,6 +69,40 @@ export interface ProjectGA4ConnectionResponse {
   property_id: string;
   display_name: string;
   account_id?: string;
+  is_connected: boolean;
+  connected_at: string;
+}
+
+export interface ClarityProject {
+  project_id: string;
+  name: string;
+  website?: string;
+}
+
+export interface AssociateClarityPayload {
+  project_id: number;
+  clarity_project_id: string;
+  name?: string;
+  website?: string;
+  api_token?: string;
+}
+
+export interface AssociateClarityResponse {
+  project_id: number;
+  project_name: string;
+  clarity_project_id: string;
+  name: string;
+  website: string;
+  is_connected: boolean;
+  connected_at: string;
+}
+
+export interface ProjectClarityConnectionResponse {
+  project_id: number;
+  project_name: string;
+  clarity_project_id: string;
+  name: string;
+  website: string;
   is_connected: boolean;
   connected_at: string;
 }
@@ -174,4 +209,64 @@ export async function getProjectGA4Connection(
     throw err;
   }
 }
+
+/**
+ * Generate Microsoft OAuth2 authorization URL to connect user's Microsoft account.
+ * (GET /api/integrations/microsoft/clarity/connect/)
+ */
+export async function getMicrosoftClarityConnectUrl(redirectUri?: string): Promise<{ authorization_url: string }> {
+  const query = redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : '';
+  return apiFetch<{ authorization_url: string }>(`/api/integrations/microsoft/clarity/connect/${query}`);
+}
+
+/**
+ * Safely disconnect user's connected Microsoft Clarity account.
+ * (POST /api/integrations/microsoft/clarity/disconnect/)
+ */
+export async function disconnectMicrosoftClarity(): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>('/api/integrations/microsoft/clarity/disconnect/', {
+    method: 'POST',
+  });
+}
+
+/**
+ * Retrieve accessible Microsoft Clarity projects for the connected user.
+ * (GET /api/integrations/microsoft/clarity/projects/)
+ */
+export async function getClarityProjects(): Promise<ClarityProject[]> {
+  return apiFetch<ClarityProject[]>('/api/integrations/microsoft/clarity/projects/');
+}
+
+/**
+ * Associate an accessible Microsoft Clarity project with a DoxaRank project.
+ * (POST /api/integrations/microsoft/clarity/associate/)
+ */
+export async function associateClarityProject(
+  payload: AssociateClarityPayload
+): Promise<AssociateClarityResponse> {
+  return apiFetch<AssociateClarityResponse>('/api/integrations/microsoft/clarity/associate/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Retrieve active Clarity connection for a specific project.
+ * (GET /api/integrations/microsoft/clarity/project/?project_id=<id>)
+ */
+export async function getProjectClarityConnection(
+  projectId: number
+): Promise<ProjectClarityConnectionResponse | null> {
+  try {
+    return await apiFetch<ProjectClarityConnectionResponse>(
+      `/api/integrations/microsoft/clarity/project/?project_id=${encodeURIComponent(projectId)}`
+    );
+  } catch (err: any) {
+    if (err?.status === 404 || err?.data?.detail?.includes('not associated') || err?.data?.code === 'NOT_FOUND') {
+      return null;
+    }
+    throw err;
+  }
+}
+
 

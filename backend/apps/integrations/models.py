@@ -203,3 +203,67 @@ class ProjectGA4Connection(models.Model):
 
     def __str__(self):
         return f"GA4: {self.property_id} ({self.project.name})"
+
+
+class ProjectClarityConnection(models.Model):
+    """
+    Links a DoxaRank Project to an associated Microsoft Clarity project/site.
+    Relationship: Project 1 <---> 1 ProjectClarityConnection (OneToOne)
+    Ownership: project.owner (tenant isolation)
+    """
+    project = models.OneToOneField(
+        'projects.Project',
+        on_delete=models.CASCADE,
+        related_name='clarity_connection',
+        help_text='The project linked to this Microsoft Clarity project.'
+    )
+    clarity_project_id = models.CharField(
+        max_length=100,
+        help_text='The Microsoft Clarity project/site ID (e.g. "k9xyz123").'
+    )
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Display name of the Clarity project.'
+    )
+    website_url = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Website URL configured in Clarity.'
+    )
+    encrypted_api_token = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Encrypted Clarity Data Export API token if configured.'
+    )
+    is_connected = models.BooleanField(
+        default=True,
+        help_text='Whether this project is actively connected to Microsoft Clarity.'
+    )
+    connected_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the Clarity project was associated.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp of last update.'
+    )
+
+    class Meta:
+        db_table = 'integrations_clarity_connections'
+        verbose_name = 'Project Clarity Connection'
+        verbose_name_plural = 'Project Clarity Connections'
+        ordering = ['-connected_at']
+
+    def __str__(self):
+        return f"Clarity: {self.clarity_project_id} ({self.project.name})"
+
+    def set_api_token(self, raw_token: Optional[str]) -> None:
+        """Encrypt and store Clarity API token."""
+        self.encrypted_api_token = encrypt_token(raw_token) if raw_token else None
+
+    def get_api_token(self) -> Optional[str]:
+        """Decrypt and return plaintext Clarity API token."""
+        return decrypt_token(self.encrypted_api_token) if self.encrypted_api_token else None

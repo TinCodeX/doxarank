@@ -17,6 +17,7 @@ import { getGoogleAuthorizationUrl } from '../api/googleOAuth';
 import { SearchConsoleFormModal } from './SearchConsoleFormModal';
 import { GoogleIntegrationSection } from './GoogleIntegrationSection';
 import { GoogleAnalyticsSection } from './GoogleAnalyticsSection';
+import { MicrosoftClaritySection } from './MicrosoftClaritySection';
 
 interface SearchConsolePanelProps {
   project: Project;
@@ -238,6 +239,11 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
 
       {/* Google Analytics 4 Integration Section (Original SRS GA4 Integration) */}
       <GoogleAnalyticsSection
+        project={project}
+      />
+
+      {/* Microsoft Clarity Integration Section (Original SRS Clarity Integration) */}
+      <MicrosoftClaritySection
         project={project}
       />
 

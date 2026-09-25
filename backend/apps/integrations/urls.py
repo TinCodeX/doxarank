@@ -9,6 +9,12 @@ from apps.integrations.views import (
     GA4PropertiesView,
     GA4AssociatePropertyView,
     GA4ProjectConnectionView,
+    MicrosoftClarityConnectView,
+    MicrosoftClarityCallbackView,
+    MicrosoftClarityDisconnectView,
+    MicrosoftClarityProjectsView,
+    MicrosoftClarityAssociatePropertyView,
+    MicrosoftClarityProjectConnectionView,
 )
 
 app_name = 'integrations'
@@ -30,4 +36,13 @@ urlpatterns = [
     path('google/analytics/properties/', GA4PropertiesView.as_view(), name='ga4-properties'),
     path('google/analytics/associate/', GA4AssociatePropertyView.as_view(), name='ga4-associate'),
     path('google/analytics/project/', GA4ProjectConnectionView.as_view(), name='ga4-project-connection'),
+
+    # Microsoft Clarity
+    path('microsoft/clarity/connect/', MicrosoftClarityConnectView.as_view(), name='clarity-connect'),
+    path('microsoft/clarity/callback/', MicrosoftClarityCallbackView.as_view(), name='clarity-callback'),
+    path('microsoft/clarity/disconnect/', MicrosoftClarityDisconnectView.as_view(), name='clarity-disconnect'),
+    path('microsoft/clarity/projects/', MicrosoftClarityProjectsView.as_view(), name='clarity-projects'),
+    path('microsoft/clarity/associate/', MicrosoftClarityAssociatePropertyView.as_view(), name='clarity-associate'),
+    path('microsoft/clarity/project/', MicrosoftClarityProjectConnectionView.as_view(), name='clarity-project-connection'),
 ]
+
