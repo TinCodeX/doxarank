@@ -1,0 +1,225 @@
+
+============================== LINE 0 ==============================
+[3501]: raph/Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each distinguish:
+code exists
+----------------------------------------
+
+============================== LINE 171 ==============================
+[13810]: T`, `ti-ET`, `x-default`) generating HTML `<link rel="alternate" hreflang="..." />` tags, HTTP headers, and XML sitemap hreflang annotations.
+
+### 7. SERP Snippet Preview / Pixel-Length Checker
+- **Status:** 🔴 MISSING
+- **Evidence:** No pixel-length calculation algorithms (e.g. Arial 600px desktop title limit, 960px snippet limit) exist in frontend or backend.
+- **Missing / Remaining Work:** Implement an interactive Google SERP simulator component with exact pixel length calculation for desktop (600px max title, ~960px description) and mobile (
+----------------------------------------
+[37756]: XML syntax and URL health validator.
+     6. *hreflang Builder:* Multi-language tag generator supporting `am-ET`, `en-ET`, `om-ET`, `ti-ET`.
+     7. *SERP Snippet Preview / Pixel-Length Checker:* Visual SERP mockup with real-time 600px desktop / mobile pixel calculation.
+     8. *PageSpeed / Core Web Vitals Analyzer:* Service integrating Google PageSpeed Insights REST API.
+     9. *Single-Page Broken Link Checker:* Standalone single-page link validation API and UI table.
+     10. *Amharic Fidel Keyword Normalizer Tool UI:* Standalone API endpoi
+----------------------------------------
+[42278]: tor | 🔴 Missing |
+| 24 | SEO Tool 5: Sitemap Validator / Generator | 🔴 Missing |
+| 25 | SEO Tool 6: hreflang Builder | 🔴 Missing |
+| 26 | SEO Tool 7: SERP Snippet Preview / Pixel-Length Checker | 🔴 Missing |
+| 27 | SEO Tool 8: PageSpeed / Core Web Vitals Analyzer | 🔴 Missing |
+| 28 | SEO Tool 9: Single-Page Broken Link Checker | 🟡 Partial |
+| 29 | SEO Tool 10: Amharic Fidel Keyword Normalizer | 🟡 Partial |
+| 30 | Target Keyword Tracking CRUD Management | 🟢 Complete |
+| 31 | Keyword Language (`en`, `am`) & Country (`ET`) Settings | 🟢 Complete |
+
+----------------------------------------
+
+============================== LINE 769 ==============================
+[10747]:  5 runs in live DB tests |
+
+---
+
+## 12. Remaining Limitations
+
+- Tools 4 through 10 of the original SRS (Robots.txt generator, XML sitemap validator, SERP snippet simulator, Keyword density checker, Redirect checker, HTTP headers checker, Amharic slug generator) are not yet implemented.
+- The 3 tools operate inside the authenticated dashboard and are not exposed on the public marketing landing page (consistent with the SRS interpretation).
+
+---
+
+## 13. Senior Checkpoint 1 Readiness
+
+> **Verdict: READY FOR SENIOR CHECKPOINT 1**
+>
+> All criteria 
+----------------------------------------
+
+============================== LINE 788 ==============================
+[368]: Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each dist
+----------------------------------------
+
+============================== LINE 790 ==============================
+[351]: Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- G
+=== Sitemap validator ===
+n Graph/Twitter Card previewer
+3. Sche
+----------------------------------------
+[869]: Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+
+=== hreflang builder ===
+3. Sch
+----------------------------------------
+[1388]: == hreflang builder ===
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each dist
+----------------------------------------
+
+============================== LINE 875 ==============================
+[10824]: and stop before tool 7.
+
+---
+
+### 6. Commitments & Constraints
+- Must NOT touch Agentic AI platform milestones 5.1–6.7.
+- Must NOT proceed to tool 7 (SERP snippet preview) or any subsequent tools in this task.
+- Must preserve all existing working functionality and tests without weakening assertions.
+</summary>
+
+# Running Background Tasks
+The following background tasks were running at the time this checkpoint was created.
+Use the manage_task tool to interact with them (e.g. to kill them or check their status).
+
+{
+  "taskId": "3174b835-7c95-4abc-
+----------------------------------------
+
+============================== LINE 958 ==============================
+[10844]: t
+  - Keyword and ranking observation tracking
+* **Remaining original SRS standalone SEO tools (to be implemented in subsequent tasks)**:
+  - Tool 7: SERP Snippet Preview Tool
+  - Tool 8: HTTP Header & Redirect Checker
+  - Tool 9: Canonical URL Checker
+  - Tool 10: URL Slug / Structure Optimizer
+
+---
+
+### 13. Limitations & Known Issues
+* In accordance with SRS security instructions and SSRF prevention standards, XML sitemap validation and robots.txt testing operate strictly on input payloads in-memory. They do not initiate HTTP crawl requests t
+----------------------------------------

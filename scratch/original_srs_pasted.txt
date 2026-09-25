@@ -1,0 +1,231 @@
+<USER_REQUEST>
+We are doing a STRICT ORIGINAL SRS COMPLIANCE AUDIT for DoxaRank.
+
+IMPORTANT:
+- DO NOT modify any code.
+- DO NOT implement anything.
+- DO NOT refactor anything.
+- DO NOT change the UI.
+- DO NOT count my Agentic AI milestones 5.1–6.7 as satisfying original SRS requirements.
+- 5.1–6.7 are a separate extension I designed and my mentor approved.
+- The purpose of this task is ONLY to determine how much of the ORIGINAL DoxaRank SRS is actually implemented in the current repository.
+
+Use the ORIGINAL DoxaRank SRS below as the source of truth.
+
+[PASTE THE ORIGINAL SRS HERE]
+
+AUDIT THE CURRENT REPOSITORY IN DETAIL.
+
+Inspect:
+1. Backend Django/DRF structure
+2. Django models and migrations
+3. API endpoints
+4. authentication and authorization
+5. frontend routes/pages/components
+6. SEO tools
+7. project/workspace functionality
+8. rank tracking
+9. keyword handling
+10. Amharic/English support
+11. google.com.et tracking
+12. .et domain tracking
+13. GSC integration
+14. GA4 integration
+15. Microsoft Clarity integration
+16. Google Tag Manager integration
+17. Playwright crawler
+18. Celery/Redis jobs
+19. technical SEO auditing
+20. competitor SERP snapshots
+21. recommendation system
+22. pricing tiers
+23. feature gating
+24. subscription logic
+25. Doxa Payments
+26. white-label reports
+27. Neon/PostgreSQL configuration
+28. seo_ database/table naming requirements
+29. marketing site
+30. dashboard
+31. production/deployment configuration
+32. environment variables
+33. Docker/Dokploy configuration
+34. domain/subdomain configuration
+35. security and tenant isolation
+36. tests
+37. documentation
+
+For every ORIGINAL SRS requirement, classify it as exactly one of:
+
+🟢 COMPLETE
+The requirement is implemented and there is sufficient code/config/test evidence.
+
+🟡 PARTIAL
+Some of the requirement exists, but important pieces are missing, incomplete, mocked, placeholder, or not operational.
+
+🔴 MISSING
+There is no meaningful implementation.
+
+⚪ NOT VERIFIABLE
+The repository cannot prove the requirement because it depends on an external account, deployment, credential, domain, OAuth verification, etc.
+
+IMPORTANT:
+Do NOT mark something COMPLETE merely because:
+- a model exists
+- an API class exists
+- a UI placeholder exists
+- a service is mocked
+- a configuration variable exists
+- a test merely mocks the external system
+
+Distinguish carefully between:
+A. implemented in code
+B. integrated but not configured
+C. configured but not verified
+D. actually operational
+
+For each requirement provide evidence:
+- exact file/path
+- relevant class/function/component/model/API
+- what it actually does
+- tests proving it, if any
+
+Create the audit in this structure:
+
+# DoxaRank Original SRS Compliance Audit
+
+## 1. Executive Summary
+- Total requirements
+- Complete
+- Partial
+- Missing
+- Not verifiable
+- Overall implementation percentage based ONLY on the original SRS
+
+Do NOT include Agentic AI milestones in this percentage.
+
+## 2. Product / Architecture
+
+| Requirement | Status | Evidence | Missing / Remaining Work |
+|---|---|---|---|
+
+## 3. Marketing Website
+
+Same table format.
+
+## 4. Authentication & Accounts
+
+Same table format.
+
+## 5. 10 SEO Tools
+
+Audit each of the 10 tools individually:
+
+1. Meta tag generator
+2. Open Graph/Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each distinguish:
+code exists / credentials required / configured / verified / operational.
+
+## 8. Crawler & Technical SEO
+
+Audit Playwright, Celery, Redis, crawl jobs, audit checks, error handling, etc.
+
+## 9. Rank Tracking & SERP
+
+Audit:
+- Amharic keywords
+- English keywords
+- google.com.et
+- .et domains
+- competitor snapshots
+- ranking persistence
+- scheduling
+
+## 10. Pricing & Monetization
+
+Audit:
+Free
+Starter
+Agency
+
+Check actual backend enforcement, not just pricing-page text.
+
+## 11. Dashboard
+
+Audit actual functionality rather than visual placeholders.
+
+## 12. Production / Deployment
+
+Audit Dokploy, domains, environment configuration, Docker, workers, Redis, PostgreSQL, etc.
+
+## 13. Security
+
+Audit authentication, permissions, tenant isolation, secrets, API security, SSRF risks, etc.
+
+## 14. Final Gap List
+
+Give me ONLY the remaining ORIGINAL SRS work, ordered:
+
+P0 — Blocking / essential
+P1 — Required for SRS completeness
+P2 — Important but can follow
+P3 — Senior-team / post-internship responsibility
+
+For every gap say exactly what needs to be implemented.
+
+## 15. SRS Compliance Checklist
+
+End with a concise checklist:
+
+🟢 Complete
+🟡 Partial
+🔴 Missing
+⚪ External verification required
+
+Again:
+
+DO NOT COUNT ANYTHING FROM AGENTIC AI MILESTONES 5.1–6.7 TOWARD SRS COMPLIANCE.
+
+DO NOT MODIFY THE PROJECT.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T12:37:35+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\docs\async_agent_architecture.md (LANGUAGE_MARKDOWN)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\content_brief_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\admin.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\hooks\useAgentEvents.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

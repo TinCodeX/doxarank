@@ -1,0 +1,7348 @@
+Total matches: 20
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+We are doing a STRICT ORIGINAL SRS COMPLIANCE AUDIT for DoxaRank.
+
+IMPORTANT:
+- DO NOT modify any code.
+- DO NOT implement anything.
+- DO NOT refactor anything.
+- DO NOT change the UI.
+- DO NOT count my Agentic AI milestones 5.1–6.7 as satisfying original SRS requirements.
+- 5.1–6.7 are a separate extension I designed and my mentor approved.
+- The purpose of this task is ONLY to determine how much of the ORIGINAL DoxaRank SRS is actually implemented in the current repository.
+
+Use the ORIGINAL DoxaRank SRS below as the source of truth.
+
+[PASTE THE ORIGINAL SRS HERE]
+
+AUDIT THE CURRENT REPOSITORY IN DETAIL.
+
+Inspect:
+1. Backend Django/DRF structure
+2. Django models and migrations
+3. API endpoints
+4. authentication and authorization
+5. frontend routes/pages/components
+6. SEO tools
+7. project/workspace functionality
+8. rank tracking
+9. keyword handling
+10. Amharic/English support
+11. google.com.et tracking
+12. .et domain tracking
+13. GSC integration
+14. GA4 integration
+15. Microsoft Clarity integration
+16. Google Tag Manager integration
+17. Playwright crawler
+18. Celery/Redis jobs
+19. technical SEO auditing
+20. competitor SERP snapshots
+21. recommendation system
+22. pricing tiers
+23. feature gating
+24. subscription logic
+25. Doxa Payments
+26. white-label reports
+27. Neon/PostgreSQL configuration
+28. seo_ database/table naming requirements
+29. marketing site
+30. dashboard
+31. production/deployment configuration
+32. environment variables
+33. Docker/Dokploy configuration
+34. domain/subdomain configuration
+35. security and tenant isolation
+36. tests
+37. documentation
+
+For every ORIGINAL SRS requirement, classify it as exactly one of:
+
+🟢 COMPLETE
+The requirement is implemented and there is sufficient code/config/test evidence.
+
+🟡 PARTIAL
+Some of the requirement exists, but important pieces are missing, incomplete, mocked, placeholder, or not operational.
+
+🔴 MISSING
+There is no meaningful implementation.
+
+⚪ NOT VERIFIABLE
+The
+<truncated 2301 bytes>
+ backend enforcement, not just pricing-page text.
+
+## 11. Dashboard
+
+Audit actual functionality rather than visual placeholders.
+
+## 12. Production / Deployment
+
+Audit Dokploy, domains, environment configuration, Docker, workers, Redis, PostgreSQL, etc.
+
+## 13. Security
+
+Audit authentication, permissions, tenant isolation, secrets, API security, SSRF risks, etc.
+
+## 14. Final Gap List
+
+Give me ONLY the remaining ORIGINAL SRS work, ordered:
+
+P0 — Blocking / essential
+P1 — Required for SRS completeness
+P2 — Important but can follow
+P3 — Senior-team / post-internship responsibility
+
+For every gap say exactly what needs to be implemented.
+
+## 15. SRS Compliance Checklist
+
+End with a concise checklist:
+
+🟢 Complete
+🟡 Partial
+🔴 Missing
+⚪ External verification required
+
+Again:
+
+DO NOT COUNT ANYTHING FROM AGENTIC AI MILESTONES 5.1–6.7 TOWARD SRS COMPLIANCE.
+
+DO NOT MODIFY THE PROJECT.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T12:37:35+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\docs\async_agent_architecture.md (LANGUAGE_MARKDOWN)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\content_brief_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\admin.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\hooks\useAgentEvents.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript.jsonl | Line: 172
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Next Implementation Task
+## Original SRS: Subscription Tiers, Feature Gating & Usage Limits
+
+We are now continuing implementation of the ORIGINAL DoxaRank SRS.
+
+IMPORTANT CONTEXT:
+- Agentic AI milestones 5.1–6.7 are a separate extension and MUST NOT be modified.
+- Do NOT refactor or redesign the Agentic AI platform.
+- Do NOT redesign the UI yet.
+- Do NOT implement the SEO tools in this task.
+- This task is ONLY about the foundational subscription, plan, permission, and usage-limit system required by the original DoxaRank SRS.
+- Preserve all currently working functionality and tests.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Implement the foundational DoxaRank subscription and feature-gating system for:
+
+1. FREE
+2. STARTER
+3. AGENCY
+
+The system must enforce plan limits on the BACKEND.
+
+Do not rely on frontend-only hiding or disabling.
+
+The architecture must be reusable by all future SEO tools, rank tracking, crawler, integrations, reports, and other premium features.
+
+==================================================
+ORIGINAL SRS PLAN REQUIREMENTS
+==================================================
+
+FREE
+- ETB 0/month
+- 1 site
+- 3 tracked keywords
+- Basic SEO tools with daily limits
+
+STARTER
+- ETB 1,500/month
+- No daily limits on basic tools
+- Rank tracker
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Technical crawler
+- 3 sites
+- 50 keywords
+
+AGENCY
+- ETB 6,000/month
+- Everything in Starter
+- White-label PDF reports
+- Competitor snapshots
+- 20 sites
+- 500 keywords
+
+IMPORTANT:
+- Pricing may change later, so pricing values must not be hardcoded throughout the application.
+- Payment processing is NOT part of this task.
+- Doxa Payments will be implemented separately.
+- Do NOT fake payment/subscription activation.
+- We only need the subscription/domain model and enforcement foundation now.
+
+==================================================
+STEP 1 — INSP
+<truncated 7406 bytes>
+ user's project
+
+REGRESSION
+Run the existing backend test suite.
+
+==================================================
+STEP 13 — VERIFICATION
+==================================================
+
+Run:
+
+- Django system checks
+- migrations check
+- all focused subscription tests
+- complete backend regression suite
+- frontend build
+
+Verify that existing Agentic AI tests still pass.
+
+Do not modify Agentic AI code simply to make unrelated tests pass.
+
+==================================================
+FINAL REPORT
+==================================================
+
+At the end report:
+
+1. Files changed
+2. Models added
+3. Services added
+4. Permissions/entitlements added
+5. API behavior
+6. Admin support
+7. Dashboard changes
+8. Tests added
+9. Test results
+10. Regression results
+11. Any remaining issues
+
+Also provide a concise SRS status:
+
+Subscription tiers              COMPLETE/PARTIAL
+Subscription model              COMPLETE/PARTIAL
+Project/site limits              COMPLETE/PARTIAL
+Keyword limits                   COMPLETE/PARTIAL
+Feature gating                   COMPLETE/PARTIAL
+Daily tool usage foundation      COMPLETE/PARTIAL
+Dashboard plan/usage visibility  COMPLETE/PARTIAL
+
+IMPORTANT:
+Do NOT implement payments in this task.
+Do NOT implement the 10 SEO tools in this task.
+Do NOT implement GA4/Clarity/GTM in this task.
+Do NOT implement competitor tracking in this task.
+Do NOT implement Playwright in this task.
+Do NOT redesign the UI.
+Do NOT modify Agentic AI milestones 5.1–6.7.
+
+This is a focused foundational implementation task.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T12:57:26+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript.jsonl | Line: 527
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Next Implementation Task
+
+## Build the First 3 Core SEO Tools
+
+You are working in the existing DoxaRank repository.
+
+**Repository:** `C:\Users\bizra\Documents\doxarank`
+
+The original DoxaRank SRS defines 10 standalone SEO tools. The subscription/plan foundation has now been implemented and verified.
+
+### Current verified state
+
+The following are already implemented:
+
+* FREE / STARTER / AGENCY subscription plans
+* Project/site quotas
+* Keyword quotas
+* Feature entitlements
+* Daily free-tool usage limits
+* Subscription API
+* Dashboard plan/usage visibility
+* Django Admin subscription management
+* 25/25 subscription tests passing
+* 43/43 core regression tests passing
+* Existing live API test suites passing
+* Dashboard production build passing
+
+Do **not** modify or redesign the Agentic AI platform milestones 5.1–6.7.
+
+---
+
+# TASK
+
+Implement the **first 3 original DoxaRank SEO tools**:
+
+1. **Meta Tag Generator**
+2. **Schema.org / JSON-LD Generator**
+3. **Open Graph / Twitter Card Previewer**
+
+These are the first three tools from the original SRS implementation order.
+
+The goal is to create a proper reusable tool architecture that can later support the remaining SEO tools.
+
+---
+
+# 1. FIRST — INSPECT THE EXISTING REPOSITORY
+
+Before changing anything:
+
+* Inspect the existing Django SEO app.
+* Inspect existing models, serializers, views, URLs and tests.
+* Inspect the existing dashboard architecture and routing.
+* Inspect the existing subscription/entitlement implementation.
+* Inspect how authentication is currently handled.
+* Inspect existing API client conventions.
+* Inspect existing styling/components.
+
+Do not duplicate functionality that already exists.
+
+Do not redesign the dashboard.
+
+Do not replace the current architecture.
+
+---
+
+# 2. IMPORTANT SRS INTERPRETATION
+
+The SEO tools are **logged-in dashboard tools**.
+
+They are NOT required to be publicly available on the marketing website.
+
+Implement them inside the au
+<truncated 9420 bytes>
+* Implement white-label reports
+* Implement marketing-site SEO tools
+* Add arbitrary schema types beyond the five specified
+* Add unrelated dependencies unless necessary
+
+This task is specifically the **first three basic SEO tools**.
+
+---
+
+# 15. SRS SUCCESS CRITERIA
+
+At the end, verify these original SRS requirements:
+
+### Meta Tag Generator
+
+**COMPLETE**
+
+### Schema.org / JSON-LD Generator
+
+**COMPLETE**
+
+### Open Graph / Twitter Card Previewer
+
+**COMPLETE**
+
+### Basic SEO Tools feature entitlement
+
+Already implemented — verify integration rather than rebuilding it.
+
+### FREE daily usage foundation
+
+Already implemented — verify these tools correctly use it.
+
+---
+
+# 16. FINAL REPORT
+
+When finished, provide a concise implementation report containing:
+
+1. Files created
+2. Files modified
+3. Architecture used
+4. API endpoints added
+5. Dashboard routes/components added
+6. Validation behavior
+7. Subscription/usage integration
+8. Security considerations
+9. Test results
+10. Dashboard build result
+11. Django check result
+12. Updated SRS status for the three tools
+13. Any remaining limitations
+
+Also explicitly state whether the implementation is ready for **Senior Checkpoint 1**.
+
+Do not claim an SRS item is complete unless it is actually implemented and verified by tests or direct inspection.
+
+---
+
+## IMPORTANT
+
+Preserve all existing working functionality.
+
+Make the smallest clean architectural changes necessary.
+
+Do not blindly rewrite existing code.
+
+Inspect first → implement → test → regression test → report.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T13:30:38+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript.jsonl | Line: 770
+======================================================================
+<USER_REQUEST>
+DoxaRank — Next Implementation Task
+====================================
+
+TASK: Implement the next 3 core SEO tools from the ORIGINAL DoxaRank SRS.
+
+This is the next batch after Senior Checkpoint 1.
+The previously completed tools are:
+1. Meta Tag Generator
+2. Schema.org / JSON-LD Generator
+3. Open Graph / Twitter Card Previewer
+
+Now implement:
+
+4. Robots.txt Tester / Generator
+5. XML Sitemap Validator / Generator
+6. hreflang Builder
+
+IMPORTANT:
+- Treat the ORIGINAL DoxaRank SRS as the source of truth.
+- Do not replace or reinterpret the SRS tool list based on previous audit/report wording.
+- If the current repository/report contains a conflicting list of "remaining tools", inspect the original SRS and preserve its requirements.
+- Do not modify the Agentic AI roadmap (5.1–6.7).
+- Do not redesign existing completed tools.
+- Do not implement payments, GA4, Clarity, GTM, crawler, rank tracking, competitor tracking, or DataForSEO in this task.
+- Do not break existing tests or APIs.
+
+==================================================
+1. FIRST: INSPECT BEFORE CODING
+==================================================
+
+Before making changes:
+
+1. Inspect the existing SEO tools architecture:
+   backend/apps/seo/tools/
+2. Inspect:
+   - meta.py
+   - schema.py
+   - social.py
+   - services.py
+   - serializers.py
+   - views.py
+   - urls.py
+   - tests
+3. Inspect the subscription/entitlement system:
+   - PlanEntitlementService
+   - UsageLimitService
+   - BASIC_SEO_TOOLS
+4. Inspect the existing Dashboard SEO Tools UI:
+   - SEOToolsPanel.tsx
+5. Inspect the original DoxaRank SRS and confirm the exact requirements for:
+   - Robots.txt
+   - Sitemap
+   - hreflang
+6. Inspect existing tests before changing anything.
+
+Do not code until you understand how the first 3 tools were implemented.
+
+==================================================
+2. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Follow the same architecture and separati
+<truncated 6700 bytes>
+========================
+
+After implementation, explicitly report:
+
+Completed in this task:
+- Robots.txt
+- XML Sitemap
+- hreflang
+
+Already completed before this task:
+- Meta Tag Generator
+- Schema.org / JSON-LD Generator
+- Open Graph / Twitter Card Previewer
+- Subscription tiers
+- Feature entitlements
+- Usage limits
+
+Do not claim any other original SRS items are complete unless they are actually verified.
+
+==================================================
+13. FINAL VERIFICATION REPORT
+==================================================
+
+At the end, provide a concise implementation report containing:
+
+1. Files created
+2. Files modified
+3. API endpoints
+4. Frontend changes
+5. Validation rules
+6. Security considerations
+7. Subscription/quota integration
+8. Dedicated test results
+9. Full regression test results
+10. Django check result
+11. Dashboard build result
+12. Original SRS status
+13. Any limitations or known issues
+
+Also explicitly state:
+
+"Agentic AI milestones 5.1–6.7 were not modified."
+
+==================================================
+IMPORTANT STOP CONDITION
+==================================================
+
+Do NOT continue into the next SEO tools after these three.
+
+Stop after:
+
+4. Robots.txt
+5. XML Sitemap
+6. hreflang
+
+Then report the results and wait for the next task.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T14:00:37+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\tools\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\tools\tests.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript_full.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+We are doing a STRICT ORIGINAL SRS COMPLIANCE AUDIT for DoxaRank.
+
+IMPORTANT:
+- DO NOT modify any code.
+- DO NOT implement anything.
+- DO NOT refactor anything.
+- DO NOT change the UI.
+- DO NOT count my Agentic AI milestones 5.1–6.7 as satisfying original SRS requirements.
+- 5.1–6.7 are a separate extension I designed and my mentor approved.
+- The purpose of this task is ONLY to determine how much of the ORIGINAL DoxaRank SRS is actually implemented in the current repository.
+
+Use the ORIGINAL DoxaRank SRS below as the source of truth.
+
+[PASTE THE ORIGINAL SRS HERE]
+
+AUDIT THE CURRENT REPOSITORY IN DETAIL.
+
+Inspect:
+1. Backend Django/DRF structure
+2. Django models and migrations
+3. API endpoints
+4. authentication and authorization
+5. frontend routes/pages/components
+6. SEO tools
+7. project/workspace functionality
+8. rank tracking
+9. keyword handling
+10. Amharic/English support
+11. google.com.et tracking
+12. .et domain tracking
+13. GSC integration
+14. GA4 integration
+15. Microsoft Clarity integration
+16. Google Tag Manager integration
+17. Playwright crawler
+18. Celery/Redis jobs
+19. technical SEO auditing
+20. competitor SERP snapshots
+21. recommendation system
+22. pricing tiers
+23. feature gating
+24. subscription logic
+25. Doxa Payments
+26. white-label reports
+27. Neon/PostgreSQL configuration
+28. seo_ database/table naming requirements
+29. marketing site
+30. dashboard
+31. production/deployment configuration
+32. environment variables
+33. Docker/Dokploy configuration
+34. domain/subdomain configuration
+35. security and tenant isolation
+36. tests
+37. documentation
+
+For every ORIGINAL SRS requirement, classify it as exactly one of:
+
+🟢 COMPLETE
+The requirement is implemented and there is sufficient code/config/test evidence.
+
+🟡 PARTIAL
+Some of the requirement exists, but important pieces are missing, incomplete, mocked, placeholder, or not operational.
+
+🔴 MISSING
+There is no meaningful implementation.
+
+⚪ NOT VERIFIABLE
+The repository cannot prove the requirement because it depends on an external account, deployment, credential, domain, OAuth verification, etc.
+
+IMPORTANT:
+Do NOT mark something COMPLETE merely because:
+- a model exists
+- an API class exists
+- a UI placeholder exists
+- a service is mocked
+- a configuration variable exists
+- a test merely mocks the external system
+
+Distinguish carefully between:
+A. implemented in code
+B. integrated but not configured
+C. configured but not verified
+D. actually operational
+
+For each requirement provide evidence:
+- exact file/path
+- relevant class/function/component/model/API
+- what it actually does
+- tests proving it, if any
+
+Create the audit in this structure:
+
+# DoxaRank Original SRS Compliance Audit
+
+## 1. Executive Summary
+- Total requirements
+- Complete
+- Partial
+- Missing
+- Not verifiable
+- Overall implementation percentage based ONLY on the original SRS
+
+Do NOT include Agentic AI milestones in this percentage.
+
+## 2. Product / Architecture
+
+| Requirement | Status | Evidence | Missing / Remaining Work |
+|---|---|---|---|
+
+## 3. Marketing Website
+
+Same table format.
+
+## 4. Authentication & Accounts
+
+Same table format.
+
+## 5. 10 SEO Tools
+
+Audit each of the 10 tools individually:
+
+1. Meta tag generator
+2. Open Graph/Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each distinguish:
+code exists / credentials required / configured / verified / operational.
+
+## 8. Crawler & Technical SEO
+
+Audit Playwright, Celery, Redis, crawl jobs, audit checks, error handling, etc.
+
+## 9. Rank Tracking & SERP
+
+Audit:
+- Amharic keywords
+- English keywords
+- google.com.et
+- .et domains
+- competitor snapshots
+- ranking persistence
+- scheduling
+
+## 10. Pricing & Monetization
+
+Audit:
+Free
+Starter
+Agency
+
+Check actual backend enforcement, not just pricing-page text.
+
+## 11. Dashboard
+
+Audit actual functionality rather than visual placeholders.
+
+## 12. Production / Deployment
+
+Audit Dokploy, domains, environment configuration, Docker, workers, Redis, PostgreSQL, etc.
+
+## 13. Security
+
+Audit authentication, permissions, tenant isolation, secrets, API security, SSRF risks, etc.
+
+## 14. Final Gap List
+
+Give me ONLY the remaining ORIGINAL SRS work, ordered:
+
+P0 — Blocking / essential
+P1 — Required for SRS completeness
+P2 — Important but can follow
+P3 — Senior-team / post-internship responsibility
+
+For every gap say exactly what needs to be implemented.
+
+## 15. SRS Compliance Checklist
+
+End with a concise checklist:
+
+🟢 Complete
+🟡 Partial
+🔴 Missing
+⚪ External verification required
+
+Again:
+
+DO NOT COUNT ANYTHING FROM AGENTIC AI MILESTONES 5.1–6.7 TOWARD SRS COMPLIANCE.
+
+DO NOT MODIFY THE PROJECT.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T12:37:35+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\docs\async_agent_architecture.md (LANGUAGE_MARKDOWN)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\content_brief_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\admin.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\hooks\useAgentEvents.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript_full.jsonl | Line: 172
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Next Implementation Task
+## Original SRS: Subscription Tiers, Feature Gating & Usage Limits
+
+We are now continuing implementation of the ORIGINAL DoxaRank SRS.
+
+IMPORTANT CONTEXT:
+- Agentic AI milestones 5.1–6.7 are a separate extension and MUST NOT be modified.
+- Do NOT refactor or redesign the Agentic AI platform.
+- Do NOT redesign the UI yet.
+- Do NOT implement the SEO tools in this task.
+- This task is ONLY about the foundational subscription, plan, permission, and usage-limit system required by the original DoxaRank SRS.
+- Preserve all currently working functionality and tests.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Implement the foundational DoxaRank subscription and feature-gating system for:
+
+1. FREE
+2. STARTER
+3. AGENCY
+
+The system must enforce plan limits on the BACKEND.
+
+Do not rely on frontend-only hiding or disabling.
+
+The architecture must be reusable by all future SEO tools, rank tracking, crawler, integrations, reports, and other premium features.
+
+==================================================
+ORIGINAL SRS PLAN REQUIREMENTS
+==================================================
+
+FREE
+- ETB 0/month
+- 1 site
+- 3 tracked keywords
+- Basic SEO tools with daily limits
+
+STARTER
+- ETB 1,500/month
+- No daily limits on basic tools
+- Rank tracker
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Technical crawler
+- 3 sites
+- 50 keywords
+
+AGENCY
+- ETB 6,000/month
+- Everything in Starter
+- White-label PDF reports
+- Competitor snapshots
+- 20 sites
+- 500 keywords
+
+IMPORTANT:
+- Pricing may change later, so pricing values must not be hardcoded throughout the application.
+- Payment processing is NOT part of this task.
+- Doxa Payments will be implemented separately.
+- Do NOT fake payment/subscription activation.
+- We only need the subscription/domain model and enforcement foundation now.
+
+==================================================
+STEP 1 — INSPECT EXISTING CODE FIRST
+==================================================
+
+Before modifying anything, inspect:
+
+- backend/apps/users/
+- backend/apps/projects/
+- backend/apps/seo/
+- existing serializers
+- existing ViewSets
+- existing permissions
+- existing API tests
+- existing Agentic AI code
+- existing migrations
+- dashboard authentication/project context
+
+Determine the safest integration points.
+
+Do NOT duplicate existing functionality.
+
+==================================================
+STEP 2 — DESIGN THE PLAN MODEL
+==================================================
+
+Create a clean subscription/plan architecture.
+
+Recommended conceptual structure:
+
+Plan
+- code: FREE / STARTER / AGENCY
+- name
+- monthly_price
+- max_projects/sites
+- max_keywords
+- basic_tool_daily_limit
+- feature flags / entitlements
+- active
+
+Subscription
+- user
+- plan
+- status
+- started_at
+- expires_at / current_period_end
+- created_at
+- updated_at
+
+Use sensible Django choices/enums where appropriate.
+
+The architecture must allow future payment integration without redesigning the subscription system.
+
+Do NOT put all plan logic directly inside individual ViewSets.
+
+==================================================
+STEP 3 — CENTRALIZED ENTITLEMENT SYSTEM
+==================================================
+
+Create a centralized service/permission layer.
+
+For example:
+
+SubscriptionService
+PlanEntitlementService
+UsageLimitService
+
+The exact naming is up to the existing project architecture.
+
+It should support checks such as:
+
+- can_create_project(user)
+- can_add_keyword(project/user)
+- can_use_tool(user, tool_code)
+- can_use_feature(user, feature_code)
+- get_usage(user)
+- get_plan(user)
+- get_remaining_limit(user, resource)
+
+Do NOT scatter plan checks throughout the codebase.
+
+Future features should be able to call the same centralized entitlement system.
+
+==================================================
+STEP 4 — ENFORCE SITE/PROJECT LIMITS
+==================================================
+
+Backend must enforce:
+
+FREE:
+1 project/site
+
+STARTER:
+3 projects/sites
+
+AGENCY:
+20 projects/sites
+
+Attempting to exceed the limit must return a clear API error.
+
+Do not merely hide the button in the frontend.
+
+Add automated tests.
+
+==================================================
+STEP 5 — ENFORCE KEYWORD LIMITS
+==================================================
+
+Backend must enforce:
+
+FREE:
+3 tracked keywords
+
+STARTER:
+50 tracked keywords
+
+AGENCY:
+500 tracked keywords
+
+The limit must be checked when creating/importing keywords.
+
+Existing tenant isolation must remain intact.
+
+Do not allow users to bypass limits by:
+- direct API requests
+- changing project IDs
+- bulk creation
+- duplicate requests
+- alternate endpoints
+
+Add tests for each tier and boundary condition.
+
+==================================================
+STEP 6 — FEATURE ENTITLEMENTS
+==================================================
+
+Create a centralized feature registry/entitlement structure.
+
+At minimum prepare feature codes for:
+
+BASIC_SEO_TOOLS
+RANK_TRACKING
+GSC
+GA4
+CLARITY
+GTM
+TECHNICAL_CRAWLER
+COMPETITOR_SNAPSHOTS
+WHITE_LABEL_REPORTS
+
+Expected access:
+
+FREE:
+- Basic SEO tools
+- limited daily usage
+
+STARTER:
+- Basic SEO tools
+- Rank tracking
+- GSC
+- GA4
+- Clarity
+- GTM
+- Technical crawler
+
+AGENCY:
+- Everything in Starter
+- Competitor snapshots
+- White-label reports
+
+IMPORTANT:
+Do not implement the missing features themselves.
+
+Only implement the entitlement system that determines whether a user is allowed to access them.
+
+==================================================
+STEP 7 — DAILY TOOL USAGE LIMIT FOUNDATION
+==================================================
+
+FREE users need daily limits for basic SEO tools.
+
+Create a reusable usage mechanism.
+
+It should support something conceptually like:
+
+ToolUsage
+- user
+- tool_code
+- usage_date
+- count
+
+The exact model design is up to you.
+
+Requirements:
+
+- usage is isolated per user
+- usage resets by date
+- concurrent requests cannot bypass the limit
+- usage increments atomically
+- future tools can reuse the mechanism
+- paid plans should not be restricted by the FREE daily limit
+
+Do not build the actual SEO tools yet.
+
+==================================================
+STEP 8 — API RESPONSE BEHAVIOR
+==================================================
+
+When a user exceeds a limit, return a clear structured response.
+
+For example:
+
+{
+  "code": "PLAN_LIMIT_REACHED",
+  "resource": "keywords",
+  "current": 3,
+  "limit": 3,
+  "plan": "FREE",
+  "upgrade_required": true
+}
+
+Use the project's existing API error conventions if they already exist.
+
+Do not expose internal implementation details.
+
+==================================================
+STEP 9 — ADMIN SUPPORT
+==================================================
+
+Make plans/subscriptions manageable through Django Admin where appropriate.
+
+An administrator should be able to:
+
+- view plans
+- view subscriptions
+- inspect user plan
+- inspect usage
+- manually assign/change a plan for testing
+
+Do not build a payment interface.
+
+==================================================
+STEP 10 — DASHBOARD FOUNDATION
+==================================================
+
+Add only the minimal dashboard support needed to consume the new system.
+
+For example:
+
+- current plan
+- current usage
+- limits
+- remaining sites
+- remaining keywords
+
+Do NOT redesign the dashboard.
+
+Do NOT build a polished billing page.
+
+Do NOT implement upgrade/payment UI yet.
+
+The purpose is simply to prove the backend entitlement system works.
+
+==================================================
+STEP 11 — MIGRATIONS & BACKWARD COMPATIBILITY
+==================================================
+
+Create proper Django migrations.
+
+Existing users must not break.
+
+Existing projects and keywords must remain accessible.
+
+Choose a safe default plan for existing users:
+FREE unless the existing project already has a legitimate subscription state.
+
+Do not delete existing data.
+
+==================================================
+STEP 12 — TESTING
+==================================================
+
+Add focused tests covering:
+
+PLAN MODEL
+- FREE exists
+- STARTER exists
+- AGENCY exists
+
+SUBSCRIPTIONS
+- default user plan
+- plan assignment
+- subscription status
+
+PROJECT LIMITS
+- FREE: 1 allowed, 2nd rejected
+- STARTER: 3 allowed, 4th rejected
+- AGENCY: 20 allowed, 21st rejected
+
+KEYWORD LIMITS
+- FREE: 3 allowed, 4th rejected
+- STARTER: 50 allowed, 51st rejected
+- AGENCY: 500 allowed, 501st rejected
+
+FEATURE ACCESS
+- FREE cannot access rank tracking entitlement
+- STARTER can access rank tracking
+- STARTER cannot access agency-only competitor snapshots
+- AGENCY can access competitor snapshots
+- AGENCY can access white-label reports
+
+TOOL DAILY LIMIT
+- FREE usage increments
+- FREE limit blocks additional usage
+- new day resets usage
+- paid plans are not blocked by FREE daily limit
+- concurrent requests cannot bypass the limit
+
+TENANT SECURITY
+- one user cannot consume another user's quota
+- one user cannot modify another user's subscription
+- project limits cannot be bypassed through another user's project
+
+REGRESSION
+Run the existing backend test suite.
+
+==================================================
+STEP 13 — VERIFICATION
+==================================================
+
+Run:
+
+- Django system checks
+- migrations check
+- all focused subscription tests
+- complete backend regression suite
+- frontend build
+
+Verify that existing Agentic AI tests still pass.
+
+Do not modify Agentic AI code simply to make unrelated tests pass.
+
+==================================================
+FINAL REPORT
+==================================================
+
+At the end report:
+
+1. Files changed
+2. Models added
+3. Services added
+4. Permissions/entitlements added
+5. API behavior
+6. Admin support
+7. Dashboard changes
+8. Tests added
+9. Test results
+10. Regression results
+11. Any remaining issues
+
+Also provide a concise SRS status:
+
+Subscription tiers              COMPLETE/PARTIAL
+Subscription model              COMPLETE/PARTIAL
+Project/site limits              COMPLETE/PARTIAL
+Keyword limits                   COMPLETE/PARTIAL
+Feature gating                   COMPLETE/PARTIAL
+Daily tool usage foundation      COMPLETE/PARTIAL
+Dashboard plan/usage visibility  COMPLETE/PARTIAL
+
+IMPORTANT:
+Do NOT implement payments in this task.
+Do NOT implement the 10 SEO tools in this task.
+Do NOT implement GA4/Clarity/GTM in this task.
+Do NOT implement competitor tracking in this task.
+Do NOT implement Playwright in this task.
+Do NOT redesign the UI.
+Do NOT modify Agentic AI milestones 5.1–6.7.
+
+This is a focused foundational implementation task.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T12:57:26+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript_full.jsonl | Line: 527
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Next Implementation Task
+
+## Build the First 3 Core SEO Tools
+
+You are working in the existing DoxaRank repository.
+
+**Repository:** `C:\Users\bizra\Documents\doxarank`
+
+The original DoxaRank SRS defines 10 standalone SEO tools. The subscription/plan foundation has now been implemented and verified.
+
+### Current verified state
+
+The following are already implemented:
+
+* FREE / STARTER / AGENCY subscription plans
+* Project/site quotas
+* Keyword quotas
+* Feature entitlements
+* Daily free-tool usage limits
+* Subscription API
+* Dashboard plan/usage visibility
+* Django Admin subscription management
+* 25/25 subscription tests passing
+* 43/43 core regression tests passing
+* Existing live API test suites passing
+* Dashboard production build passing
+
+Do **not** modify or redesign the Agentic AI platform milestones 5.1–6.7.
+
+---
+
+# TASK
+
+Implement the **first 3 original DoxaRank SEO tools**:
+
+1. **Meta Tag Generator**
+2. **Schema.org / JSON-LD Generator**
+3. **Open Graph / Twitter Card Previewer**
+
+These are the first three tools from the original SRS implementation order.
+
+The goal is to create a proper reusable tool architecture that can later support the remaining SEO tools.
+
+---
+
+# 1. FIRST — INSPECT THE EXISTING REPOSITORY
+
+Before changing anything:
+
+* Inspect the existing Django SEO app.
+* Inspect existing models, serializers, views, URLs and tests.
+* Inspect the existing dashboard architecture and routing.
+* Inspect the existing subscription/entitlement implementation.
+* Inspect how authentication is currently handled.
+* Inspect existing API client conventions.
+* Inspect existing styling/components.
+
+Do not duplicate functionality that already exists.
+
+Do not redesign the dashboard.
+
+Do not replace the current architecture.
+
+---
+
+# 2. IMPORTANT SRS INTERPRETATION
+
+The SEO tools are **logged-in dashboard tools**.
+
+They are NOT required to be publicly available on the marketing website.
+
+Implement them inside the authenticated DoxaRank dashboard.
+
+The subscription system already provides:
+
+`BASIC_SEO_TOOLS`
+
+Use the existing entitlement system rather than creating a second plan/permission mechanism.
+
+The tools should therefore be available to plans that have `BASIC_SEO_TOOLS`.
+
+The existing daily tool usage mechanism should also be respected for FREE users.
+
+---
+
+# 3. CREATE A REUSABLE SEO TOOL ARCHITECTURE
+
+Do not implement each tool as an unrelated one-off.
+
+Create a clean structure that can support future tools.
+
+For example, use the existing SEO app or introduce a dedicated tools module/app if that better matches the current architecture.
+
+Possible conceptual structure:
+
+```text
+backend/apps/seo/
+    tools/
+        __init__.py
+        meta.py
+        schema.py
+        social.py
+        services.py
+```
+
+Use your judgment based on the existing repository.
+
+The important requirement is:
+
+**tool logic should be separated from HTTP/API presentation.**
+
+Avoid putting all business logic directly inside Django views.
+
+---
+
+# 4. TOOL 1 — META TAG GENERATOR
+
+Implement a dashboard tool that generates standard HTML meta tags.
+
+Inputs should include at least:
+
+* Page title
+* Meta description
+* Canonical URL
+* Robots directive
+
+Support sensible robots options such as:
+
+* index, follow
+* noindex, follow
+* index, nofollow
+* noindex, nofollow
+
+Generate valid HTML such as:
+
+```html
+<title>...</title>
+<meta name="description" content="...">
+<link rel="canonical" href="...">
+<meta name="robots" content="index, follow">
+```
+
+Requirements:
+
+* Proper input validation
+* HTML-safe escaping
+* Reasonable title/description length guidance
+* Clean generated output
+* Copy-to-clipboard support in the dashboard
+* Clear validation errors
+* No unnecessary database persistence unless the existing architecture genuinely benefits from it
+
+The generator should be deterministic.
+
+---
+
+# 5. TOOL 2 — SCHEMA.ORG / JSON-LD GENERATOR
+
+Implement a structured JSON-LD generator.
+
+The original SRS specifically requires support for:
+
+* `LocalBusiness`
+* `Article`
+* `Product`
+* `FAQ`
+* `BreadcrumbList`
+
+The UI should allow the user to select the schema type and enter the appropriate fields.
+
+Generate valid JSON-LD:
+
+```html
+<script type="application/ld+json">
+{
+  ...
+}
+</script>
+```
+
+Requirements:
+
+* Valid JSON output
+* Correct `@context`
+* Correct `@type`
+* Type-specific fields
+* Validation before generation
+* Proper escaping
+* Copy-to-clipboard
+* Human-readable formatted JSON
+* Do not allow arbitrary user-supplied schema types at this stage
+* Keep the supported schema types explicit
+
+### FAQ
+
+Support multiple question/answer pairs.
+
+Example conceptual structure:
+
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "...",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "..."
+      }
+    }
+  ]
+}
+```
+
+### BreadcrumbList
+
+Support multiple breadcrumb items and generate proper `ListItem` positions.
+
+---
+
+# 6. TOOL 3 — OPEN GRAPH / TWITTER CARD PREVIEWER
+
+Implement the Open Graph / Twitter Card preview tool.
+
+Inputs should include appropriate fields such as:
+
+### Open Graph
+
+* URL
+* Title
+* Description
+* Image URL
+* Site name
+* Type
+
+### Twitter/X Card
+
+* Card type
+* Title
+* Description
+* Image URL
+* Site/creator information where appropriate
+
+The UI should provide a visual preview resembling a social sharing card.
+
+At minimum support:
+
+* Open Graph preview
+* Twitter/X card preview
+
+The preview should update from the entered data.
+
+Include:
+
+* Validation
+* Character guidance
+* Image URL validation
+* Copy generated meta tags
+* Generated HTML output
+
+Example output:
+
+```html
+<meta property="og:title" content="...">
+<meta property="og:description" content="...">
+<meta property="og:image" content="...">
+<meta property="og:url" content="...">
+<meta property="og:type" content="website">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="...">
+<meta name="twitter:description" content="...">
+<meta name="twitter:image" content="...">
+```
+
+Do not implement actual screenshot rendering or external social-platform API calls unless the existing repository already has infrastructure for it.
+
+The first version should be a deterministic client-side preview.
+
+---
+
+# 7. API DESIGN
+
+Use the existing DoxaRank API conventions.
+
+Create clean endpoints for the tools if server-side generation/validation is appropriate.
+
+For example:
+
+```text
+POST /api/seo/tools/meta/
+POST /api/seo/tools/schema/
+POST /api/seo/tools/social-preview/
+```
+
+However, if a tool can safely and cleanly operate entirely client-side, do not create unnecessary backend endpoints.
+
+The architecture should make the decision explicit.
+
+All authenticated tool APIs must:
+
+* Require authentication
+* Respect tenant/user boundaries
+* Respect `BASIC_SEO_TOOLS`
+* Respect the existing FREE daily usage mechanism where applicable
+* Return structured validation errors
+
+Do not create a parallel subscription system.
+
+---
+
+# 8. USAGE LIMIT INTEGRATION
+
+Integrate with the existing:
+
+* `PlanEntitlementService`
+* `UsageLimitService`
+
+Do not duplicate their logic.
+
+Every actual tool execution should be counted appropriately for FREE users.
+
+Do not count:
+
+* simple page loads
+* typing into form fields
+* client-side preview updates that do not represent an actual tool execution, if the architecture permits avoiding that
+
+The implementation should prevent trivial frontend requests from bypassing the intended daily quota.
+
+---
+
+# 9. DASHBOARD UI
+
+Add a clean **SEO Tools** area to the existing dashboard.
+
+Do NOT redesign the entire dashboard.
+
+Add navigation/entry points for:
+
+```text
+SEO Tools
+├── Meta Tag Generator
+├── Schema Generator
+└── Open Graph / Twitter Preview
+```
+
+Each tool should have:
+
+### Input section
+
+User enters the required information.
+
+### Output section
+
+Show generated result.
+
+### Actions
+
+* Generate
+* Copy
+* Reset
+
+For the social preview tool:
+
+* Show visual preview
+* Show generated tags
+
+Keep the UI consistent with the existing dashboard components and styling.
+
+Do not introduce an entirely new design system.
+
+---
+
+# 10. VALIDATION
+
+Implement useful validation, but do not over-engineer it.
+
+Examples:
+
+### Meta
+
+* Title required
+* Description required
+* Canonical URL must be valid when supplied
+* Robots value must be from supported options
+
+### Schema
+
+* Required fields per schema type
+* URLs must be valid where applicable
+* FAQ must contain at least one question/answer
+* Breadcrumb positions must be valid
+
+### Social
+
+* URLs must be valid
+* Required title/description fields validated
+* Image URL validated
+* Card type restricted to supported values
+
+Return human-readable validation errors.
+
+---
+
+# 11. SECURITY
+
+Do not trust generated HTML or user input.
+
+Ensure:
+
+* HTML escaping where required
+* JSON serialization instead of string concatenation
+* No arbitrary executable HTML
+* No server-side fetching of arbitrary URLs merely to generate a preview
+* No SSRF vulnerability
+* No unsafe schema execution
+
+The social preview must not fetch arbitrary user-provided URLs from the backend.
+
+---
+
+# 12. TESTS
+
+Add focused automated tests.
+
+At minimum:
+
+### Meta tests
+
+* Valid generation
+* Required-field validation
+* Robots validation
+* HTML escaping
+* Canonical URL validation
+
+### Schema tests
+
+* LocalBusiness generation
+* Article generation
+* Product generation
+* FAQ generation
+* BreadcrumbList generation
+* Invalid input rejection
+* Valid JSON output
+* Correct `@context`
+* Correct `@type`
+
+### Social preview tests
+
+* Open Graph generation
+* Twitter card generation
+* URL validation
+* Required-field validation
+* Correct generated tags
+
+### Authorization
+
+* Unauthenticated user blocked
+* Authenticated user with BASIC_SEO_TOOLS allowed
+
+### Subscription / usage
+
+* FREE user can use basic tools
+* FREE daily limit is respected
+* Paid plans are not incorrectly blocked
+* Tenant isolation is preserved
+
+Do not weaken existing subscription tests to make the new tests pass.
+
+---
+
+# 13. REGRESSION TESTING
+
+After implementation run:
+
+```powershell
+cd C:\Users\bizra\Documents\doxarank\backend
+
+python manage.py check
+
+python manage.py test apps.users apps.projects apps.subscriptions apps.seo
+```
+
+Also run the existing live API tests:
+
+```powershell
+python test_auth_api.py
+python test_projects_api.py
+python test_seo_keywords_api.py
+python test_seo_rankings_api.py
+```
+
+Then build the dashboard:
+
+```powershell
+cd ..\dashboard
+npm run build
+```
+
+If there are existing broader test suites, run the relevant full regression suite as well.
+
+---
+
+# 14. DO NOT CHANGE THESE THINGS
+
+Do NOT:
+
+* Modify Agentic AI milestones 5.1–6.7
+* Redesign the dashboard
+* Implement payment processing
+* Implement GA4
+* Implement Microsoft Clarity
+* Implement GTM
+* Implement competitor tracking
+* Implement rank tracking
+* Implement Playwright crawling
+* Implement Google SERP scraping
+* Implement DataForSEO
+* Implement white-label reports
+* Implement marketing-site SEO tools
+* Add arbitrary schema types beyond the five specified
+* Add unrelated dependencies unless necessary
+
+This task is specifically the **first three basic SEO tools**.
+
+---
+
+# 15. SRS SUCCESS CRITERIA
+
+At the end, verify these original SRS requirements:
+
+### Meta Tag Generator
+
+**COMPLETE**
+
+### Schema.org / JSON-LD Generator
+
+**COMPLETE**
+
+### Open Graph / Twitter Card Previewer
+
+**COMPLETE**
+
+### Basic SEO Tools feature entitlement
+
+Already implemented — verify integration rather than rebuilding it.
+
+### FREE daily usage foundation
+
+Already implemented — verify these tools correctly use it.
+
+---
+
+# 16. FINAL REPORT
+
+When finished, provide a concise implementation report containing:
+
+1. Files created
+2. Files modified
+3. Architecture used
+4. API endpoints added
+5. Dashboard routes/components added
+6. Validation behavior
+7. Subscription/usage integration
+8. Security considerations
+9. Test results
+10. Dashboard build result
+11. Django check result
+12. Updated SRS status for the three tools
+13. Any remaining limitations
+
+Also explicitly state whether the implementation is ready for **Senior Checkpoint 1**.
+
+Do not claim an SRS item is complete unless it is actually implemented and verified by tests or direct inspection.
+
+---
+
+## IMPORTANT
+
+Preserve all existing working functionality.
+
+Make the smallest clean architectural changes necessary.
+
+Do not blindly rewrite existing code.
+
+Inspect first → implement → test → regression test → report.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T13:30:38+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 3174b835-7c95-4abc-a198-9029b4181665 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\3174b835-7c95-4abc-a198-9029b4181665\.system_generated\logs\transcript_full.jsonl | Line: 770
+======================================================================
+<USER_REQUEST>
+DoxaRank — Next Implementation Task
+====================================
+
+TASK: Implement the next 3 core SEO tools from the ORIGINAL DoxaRank SRS.
+
+This is the next batch after Senior Checkpoint 1.
+The previously completed tools are:
+1. Meta Tag Generator
+2. Schema.org / JSON-LD Generator
+3. Open Graph / Twitter Card Previewer
+
+Now implement:
+
+4. Robots.txt Tester / Generator
+5. XML Sitemap Validator / Generator
+6. hreflang Builder
+
+IMPORTANT:
+- Treat the ORIGINAL DoxaRank SRS as the source of truth.
+- Do not replace or reinterpret the SRS tool list based on previous audit/report wording.
+- If the current repository/report contains a conflicting list of "remaining tools", inspect the original SRS and preserve its requirements.
+- Do not modify the Agentic AI roadmap (5.1–6.7).
+- Do not redesign existing completed tools.
+- Do not implement payments, GA4, Clarity, GTM, crawler, rank tracking, competitor tracking, or DataForSEO in this task.
+- Do not break existing tests or APIs.
+
+==================================================
+1. FIRST: INSPECT BEFORE CODING
+==================================================
+
+Before making changes:
+
+1. Inspect the existing SEO tools architecture:
+   backend/apps/seo/tools/
+2. Inspect:
+   - meta.py
+   - schema.py
+   - social.py
+   - services.py
+   - serializers.py
+   - views.py
+   - urls.py
+   - tests
+3. Inspect the subscription/entitlement system:
+   - PlanEntitlementService
+   - UsageLimitService
+   - BASIC_SEO_TOOLS
+4. Inspect the existing Dashboard SEO Tools UI:
+   - SEOToolsPanel.tsx
+5. Inspect the original DoxaRank SRS and confirm the exact requirements for:
+   - Robots.txt
+   - Sitemap
+   - hreflang
+6. Inspect existing tests before changing anything.
+
+Do not code until you understand how the first 3 tools were implemented.
+
+==================================================
+2. ARCHITECTURE REQUIREMENTS
+==================================================
+
+Follow the same architecture and separation of concerns as the first 3 tools.
+
+Prefer:
+
+backend/apps/seo/tools/
+    robots.py
+    sitemap.py
+    hreflang.py
+
+and update shared:
+    services.py
+    serializers.py
+    views.py
+    urls.py
+    tests
+
+Keep deterministic SEO generation/validation logic separate from HTTP/API handling.
+
+Do NOT make external HTTP requests unless the original SRS explicitly requires them.
+
+For this batch, avoid SSRF risks by making generation/validation local and deterministic wherever possible.
+
+==================================================
+3. ROBOTS.TXT TOOL
+==================================================
+
+Implement a dashboard tool for generating/testing robots.txt.
+
+Support the requirements defined in the original SRS.
+
+The implementation should support at minimum:
+
+- User-agent rules
+- Allow
+- Disallow
+- Sitemap declaration
+- Multiple rule groups if required by the SRS
+- Deterministic robots.txt output
+- Validation of malformed/conflicting inputs where appropriate
+- Copyable generated output
+- Clear validation errors
+
+Example conceptual output:
+
+User-agent: *
+Disallow: /admin/
+Disallow: /private/
+Allow: /
+
+Sitemap: https://example.com/sitemap.xml
+
+Do not hard-code this example.
+
+==================================================
+4. XML SITEMAP TOOL
+==================================================
+
+Implement the sitemap generator/validator according to the original SRS.
+
+Support:
+
+- URL entries
+- Valid HTTP/HTTPS URLs
+- XML sitemap output
+- XML escaping
+- Optional metadata required by the SRS
+- Validation of malformed URLs/XML
+- Deterministic output
+- Copyable generated sitemap
+
+If the SRS requires sitemap validation, implement validation locally.
+
+Do not crawl arbitrary external websites.
+
+Do not introduce SSRF.
+
+If sitemap size/count limitations are relevant, enforce the documented SRS limits.
+
+==================================================
+5. HREFLANG BUILDER
+==================================================
+
+Implement the hreflang builder according to the original SRS.
+
+The SRS specifies:
+
+- English
+- Amharic
+- Afaan Oromo
+
+Support generation of valid hreflang annotations.
+
+Example conceptual structure:
+
+<link rel="alternate" hreflang="en" href="..." />
+<link rel="alternate" hreflang="am" href="..." />
+<link rel="alternate" hreflang="om" href="..." />
+
+Also consider x-default if it is explicitly supported/required by the SRS.
+
+Requirements:
+
+- Validate HTTP/HTTPS URLs
+- Validate supported language codes
+- Prevent malformed output
+- Generate deterministic HTML tags
+- Make the result easy to copy
+- Keep the implementation reusable
+
+Do not silently add unsupported language behavior unless justified by the SRS.
+
+==================================================
+6. SUBSCRIPTION + USAGE LIMITS
+==================================================
+
+These tools are dashboard tools.
+
+Reuse the existing subscription system.
+
+All 3 tools must use:
+
+- BASIC_SEO_TOOLS entitlement
+- existing PlanEntitlementService
+- existing UsageLimitService
+- existing FREE daily usage mechanism
+
+Do NOT create a second quota system.
+
+Do NOT duplicate subscription logic.
+
+Expected behavior:
+
+FREE:
+- BASIC_SEO_TOOLS allowed
+- existing daily basic-tool quota applies
+
+STARTER:
+- BASIC_SEO_TOOLS allowed
+- unlimited according to existing subscription implementation
+
+AGENCY:
+- BASIC_SEO_TOOLS allowed
+- unlimited according to existing subscription implementation
+
+Follow the exact existing implementation rather than creating new plan logic.
+
+==================================================
+7. API
+==================================================
+
+Follow the existing API conventions.
+
+Add appropriate endpoints, for example:
+
+POST /api/seo/tools/robots/
+POST /api/seo/tools/sitemap/
+POST /api/seo/tools/hreflang/
+
+Also update the SEO tool status endpoint if the existing architecture requires it.
+
+Use the existing authentication and error-response conventions.
+
+Do not introduce a new authentication mechanism.
+
+==================================================
+8. FRONTEND
+==================================================
+
+Extend the existing:
+
+SEOToolsPanel.tsx
+
+Do not create an unrelated SEO tools page unless the current architecture requires it.
+
+Add three tool sections/tabs/cards:
+
+- Robots.txt
+- XML Sitemap
+- hreflang
+
+UI should match the existing three tools.
+
+Each tool should provide:
+
+- Input controls
+- Validation feedback
+- Generate/Validate action
+- Output preview
+- Copy button
+- Usage/quota information where appropriate
+
+Keep the UI practical and not over-designed.
+
+==================================================
+9. SECURITY
+==================================================
+
+Security requirements:
+
+- Authentication required
+- Respect user/tenant boundaries
+- No arbitrary external URL fetching
+- No SSRF
+- Proper HTML/XML escaping
+- Proper input validation
+- No unsafe string interpolation
+- No secrets exposed
+- Reuse existing permission/subscription mechanisms
+
+==================================================
+10. TESTS
+==================================================
+
+Add dedicated tests for all three tools.
+
+Test at minimum:
+
+ROBOTS:
+- valid generation
+- multiple directives
+- sitemap directive
+- invalid input
+- deterministic output
+- entitlement
+- quota behavior
+
+SITEMAP:
+- valid sitemap generation
+- URL validation
+- XML escaping
+- malformed input
+- deterministic output
+- entitlement
+- quota behavior
+
+HREFLANG:
+- English/Amharic/Oromo generation
+- URL validation
+- invalid language input
+- deterministic output
+- entitlement
+- quota behavior
+
+Also test API behavior.
+
+Run:
+
+python manage.py check
+
+Dedicated SEO tool tests
+
+Full regression tests:
+
+apps.users
+apps.projects
+apps.subscriptions
+apps.seo.tools
+
+Run the live API tests if they already exist.
+
+Build the dashboard:
+
+npm run build
+
+==================================================
+11. REGRESSION SAFETY
+==================================================
+
+The following MUST continue passing:
+
+- Existing authentication
+- Existing project APIs
+- Existing keyword APIs
+- Existing ranking APIs
+- Subscription tests
+- First 3 SEO tools
+- Existing dashboard build
+- Agentic AI milestones 5.1–6.7
+
+Do not modify Agentic AI code just to make this task work.
+
+If an existing test fails because of your changes, investigate and fix the root cause.
+
+Do not weaken or delete tests.
+
+==================================================
+12. SRS STATUS
+==================================================
+
+After implementation, explicitly report:
+
+Completed in this task:
+- Robots.txt
+- XML Sitemap
+- hreflang
+
+Already completed before this task:
+- Meta Tag Generator
+- Schema.org / JSON-LD Generator
+- Open Graph / Twitter Card Previewer
+- Subscription tiers
+- Feature entitlements
+- Usage limits
+
+Do not claim any other original SRS items are complete unless they are actually verified.
+
+==================================================
+13. FINAL VERIFICATION REPORT
+==================================================
+
+At the end, provide a concise implementation report containing:
+
+1. Files created
+2. Files modified
+3. API endpoints
+4. Frontend changes
+5. Validation rules
+6. Security considerations
+7. Subscription/quota integration
+8. Dedicated test results
+9. Full regression test results
+10. Django check result
+11. Dashboard build result
+12. Original SRS status
+13. Any limitations or known issues
+
+Also explicitly state:
+
+"Agentic AI milestones 5.1–6.7 were not modified."
+
+==================================================
+IMPORTANT STOP CONDITION
+==================================================
+
+Do NOT continue into the next SEO tools after these three.
+
+Stop after:
+
+4. Robots.txt
+5. XML Sitemap
+6. hreflang
+
+Then report the results and wait for the next task.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T14:00:37+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\tools\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\tools\tests.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 47b40d6a-02e9-4789-aee3-acddc1cf17e3 | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\47b40d6a-02e9-4789-aee3-acddc1cf17e3\.system_generated\logs\transcript_full.jsonl | Line: 1662
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Next Task: Milestone 4, Phase 4.2.3.2
+
+## Live SEO Intelligence: GSC + Website Audit Correlation
+
+Continue development from the current repository state.
+
+### IMPORTANT
+
+Do NOT redesign or rewrite existing architecture.
+
+First inspect the existing implementation, especially:
+
+* `backend/apps/seo/services/agent_orchestrator.py`
+* `backend/apps/seo/services/ai_providers.py`
+* `backend/apps/seo/services/tool_registry.py`
+* `backend/apps/seo/services/google_search_console.py`
+* `backend/apps/seo/services/seo_audit_engine.py`
+* `backend/apps/seo/services/live_site_crawler.py`
+* `backend/apps/seo/tasks.py`
+* `backend/apps/seo/models.py`
+* `backend/apps/seo/tests.py`
+* `docs/agent_event_architecture.md`
+
+Also inspect the existing ReAct/tool-calling flow and understand how `AgentRun`, `AgentStep`, `AgentToolCall`, `SiteAudit`, `AuditIssue`, and GSC connections currently work.
+
+---
+
+# Goal
+
+Build the next layer of **actual agentic SEO intelligence**.
+
+The agent should no longer simply:
+
+`crawl website → report issues`
+
+or:
+
+`query GSC → report metrics`
+
+Instead, it should be able to reason across both sources:
+
+```text
+Google Search Console
+        +
+Live Website Audit
+        ↓
+Agent correlates evidence
+        ↓
+Identifies likely SEO problem
+        ↓
+Prioritizes opportunities
+        ↓
+Explains reasoning
+        ↓
+Optionally proposes an action
+        ↓
+Human approval before any mutation
+```
+
+This is an intelligence/reasoning phase, NOT a generic dashboard feature.
+
+---
+
+# 1. Add an SEO Intelligence / Correlation Service
+
+Create something similar to:
+
+`backend/apps/seo/services/seo_intelligence.py`
+
+The service should accept structured data from:
+
+* GSC Search Analytics
+* SiteAudit summary
+* AuditIssue findings
+* optionally crawl/page data when available
+
+It should produce structured intelligence rather than raw LLM text.
+
+For example:
+
+```text
+SEOInsight
+    insight_type
+    severity
+    confidence
+    title
+    explanation
+    evidence
+    affected_pages
+    recommended_action
+```
+
+Use deterministic correlation where possible.
+
+---
+
+# 2. Implement Useful Correlation Rules
+
+Start with practical rules such as:
+
+### A. High-impression / low-CTR opportunity
+
+If a query/page has:
+
+* high impressions
+* relatively low CTR
+* meaningful average position
+
+and the corresponding page has:
+
+* missing/weak title
+* weak meta description
+* title mismatch
+* missing H1
+
+then generate an SEO opportunity.
+
+Example reasoning:
+
+```text
+"Page receives significant impressions but has low CTR.
+The page also has a missing/weak title.
+This may indicate a SERP snippet optimization opportunity."
+```
+
+---
+
+### B. Ranking + technical issue correlation
+
+If GSC shows declining/weak performance for a page and the audit identifies:
+
+* broken internal links
+* missing canonical
+* canonical mismatch
+* missing H1
+* crawl errors
+* redirect chains
+
+create a correlated insight.
+
+---
+
+### C. High-performing page with technical warnings
+
+If a page receives strong clicks/impressions but has technical SEO issues:
+
+```text
+High traffic page
+        +
+technical SEO warnings
+        ↓
+High-priority maintenance opportunity
+```
+
+The agent should recognize that fixing a high-value page may have greater business impact than fixing a low-traffic page.
+
+---
+
+### D. Query/page opportunity detection
+
+Correlate:
+
+```text
+query
+→ landing page
+→ clicks
+→ impressions
+→ CTR
+→ position
+→ audit issues
+```
+
+and identify pages where SEO improvements are likely to provide value.
+
+---
+
+# 3. Add an Agent Tool
+
+Extend `ToolRegistry` with a new read-only intelligence tool:
+
+```text
+analyze_seo_opportunities
+```
+
+The tool should:
+
+* require authenticated project context
+* enforce tenant isolation
+* use existing GSC integration
+* use existing audit data
+* avoid exposing OAuth credentials
+* return compact structured intelligence
+* remain read-only
+* require no human approval
+
+Example output:
+
+```json
+{
+  "status": "success",
+  "opportunities": [
+    {
+      "type": "LOW_CTR_HIGH_IMPRESSIONS",
+      "severity": "high",
+      "confidence": 0.87,
+      "title": "Improve title/meta for /pricing",
+      "evidence": {
+        "impressions": 12450,
+        "clicks": 310,
+        "ctr": 0.0249,
+        "position": 8.4,
+        "audit_issues": [
+          "LONG_TITLE",
+          "MISSING_META_DESCRIPTION"
+        ]
+      },
+      "recommended_action": "Review and optimize the page title and meta description."
+    }
+  ]
+}
+```
+
+Do not return unnecessarily large datasets to the LLM.
+
+Token efficiency matters.
+
+---
+
+# 4. Integrate It Into the ReAct Reasoning Loop
+
+Update the existing agent reasoning instructions so the agent can decide when to use:
+
+```text
+gsc_search_analytics
+        ↓
+trigger_site_audit
+        ↓
+get_site_audit_summary
+        ↓
+get_audit_issues
+        ↓
+analyze_seo_opportunities
+        ↓
+reason
+        ↓
+finish
+```
+
+Do NOT force this entire sequence on every request.
+
+The agent should decide based on the user's goal and available evidence.
+
+The important learning objective is:
+
+**tool selection + multi-step reasoning + evidence correlation.**
+
+---
+
+# 5. Preserve Human-in-the-Loop Boundaries
+
+This phase must remain read-only.
+
+The intelligence layer may recommend:
+
+```text
+"Update title"
+"Fix canonical"
+"Improve meta description"
+"Investigate declining query"
+```
+
+but it must NOT automatically modify website content.
+
+Any future mutation must continue through:
+
+```text
+Agent decision
+      ↓
+Action proposal
+      ↓
+Human approval
+      ↓
+Mutation tool
+      ↓
+Execution
+      ↓
+Verification
+```
+
+Do not bypass the existing approval architecture.
+
+---
+
+# 6. Add Agent Events
+
+Use the existing real-time event architecture.
+
+Emit useful events when intelligence analysis occurs, for example:
+
+```text
+seo_intelligence_started
+seo_evidence_collected
+seo_opportunity_detected
+seo_intelligence_completed
+```
+
+Do not create a second event system.
+
+Reuse the existing:
+
+```text
+AgentEvent
+AgentEventConsumer
+Redis event publisher
+WebSocket
+sequence_number
+event_id
+```
+
+architecture.
+
+Events should contain safe metadata only.
+
+Never expose OAuth tokens or sensitive credentials.
+
+---
+
+# 7. Improve Agent Reasoning Quality
+
+Update the relevant system prompt/reasoning instructions so the agent understands:
+
+### Evidence hierarchy
+
+Prefer:
+
+1. GSC measured performance
+2. Live audit findings
+3. Crawl evidence
+4. deterministic correlation
+5. LLM interpretation
+
+The LLM should not invent metrics.
+
+It should explicitly distinguish:
+
+```text
+Observed fact
+vs
+Inference
+vs
+Recommendation
+```
+
+Example:
+
+```text
+Observed:
+CTR is 2.4% with 12,450 impressions.
+
+Observed:
+The page has a missing meta description.
+
+Inference:
+The page may have an opportunity to improve SERP click-through.
+
+Recommendation:
+Review and optimize the title and meta description.
+```
+
+This is important for trustworthy agent behavior.
+
+---
+
+# 8. Tests
+
+Add comprehensive tests.
+
+At minimum cover:
+
+* high-impression/low-CTR detection
+* technical issue correlation
+* high-value page prioritization
+* ranking/technical correlation
+* no GSC connection
+* no audit available
+* empty datasets
+* malformed GSC data
+* tenant isolation
+* tool registry registration
+* tool execution
+* token/credential leakage prevention
+* event emission
+* ReAct integration compatibility
+
+Do not weaken or remove existing tests.
+
+---
+
+# 9. Verification
+
+Run:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check
+python manage.py test
+cd dashboard
+npm run build
+git diff --check
+```
+
+All existing tests must continue passing.
+
+Report exact test counts.
+
+---
+
+# 10. Documentation
+
+Update:
+
+`docs/agent_event_architecture.md`
+
+and create/update an appropriate intelligence architecture document explaining:
+
+```text
+GSC
+ ↓
+Audit
+ ↓
+Evidence normalization
+ ↓
+Correlation engine
+ ↓
+SEO opportunities
+ ↓
+Agent reasoning
+ ↓
+Recommendation
+ ↓
+Human approval (future mutation)
+```
+
+Clearly document which parts are:
+
+* deterministic
+* agentic
+* read-only
+* approval-gated
+
+---
+
+# Architectural Principle
+
+The purpose of this phase is NOT to make the project "more AI" by adding random LLM calls.
+
+The purpose is to make the agent capable of:
+
+**Observe → Gather evidence → Correlate → Reason → Prioritize → Recommend**
+
+while maintaining:
+
+* tool governance
+* tenant isolation
+* human-in-the-loop safety
+* real-time observability
+* deterministic evidence
+* token efficiency
+
+Keep the implementation production-oriented and consistent with the existing architecture.
+
+Before coding, inspect the repository and existing implementation carefully. Reuse existing services, models, tools, event infrastructure, and reasoning loop wherever possible.
+
+At the end, provide a concise implementation report with:
+
+1. files created
+2. files modified
+3. architecture implemented
+4. new tools
+5. reasoning changes
+6. tests
+7. exact verification results
+8. recommended next phase
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-08-31T14:39:41+03:00.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\action_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\tasks.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\seo_intelligence.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\test_seo_keywords_api.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\types\keyword.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 4fe4cac1-30e7-4c25-9c8f-6e7750c441a7 | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\4fe4cac1-30e7-4c25-9c8f-6e7750c441a7\.system_generated\logs\transcript.jsonl | Line: 758
+======================================================================
+<USER_REQUEST>
+We are doing a STRICT ORIGINAL SRS COMPLIANCE AUDIT for DoxaRank.
+
+IMPORTANT:
+- DO NOT modify any code.
+- DO NOT implement anything.
+- DO NOT refactor anything.
+- DO NOT change the UI.
+- DO NOT count my Agentic AI milestones 5.1–6.7 as satisfying original SRS requirements.
+- 5.1–6.7 are a separate extension I designed and my mentor approved.
+- The purpose of this task is ONLY to determine how much of the ORIGINAL DoxaRank SRS is actually implemented in the current repository.
+
+Use the ORIGINAL DoxaRank SRS below as the source of truth.
+
+[PASTE THE ORIGINAL SRS HERE]
+
+AUDIT THE CURRENT REPOSITORY IN DETAIL.
+
+Inspect:
+1. Backend Django/DRF structure
+2. Django models and migrations
+3. API endpoints
+4. authentication and authorization
+5. frontend routes/pages/components
+6. SEO tools
+7. project/workspace functionality
+8. rank tracking
+9. keyword handling
+10. Amharic/English support
+11. google.com.et tracking
+12. .et domain tracking
+13. GSC integration
+14. GA4 integration
+15. Microsoft Clarity integration
+16. Google Tag Manager integration
+17. Playwright crawler
+18. Celery/Redis jobs
+19. technical SEO auditing
+20. competitor SERP snapshots
+21. recommendation system
+22. pricing tiers
+23. feature gating
+24. subscription logic
+25. Doxa Payments
+26. white-label reports
+27. Neon/PostgreSQL configuration
+28. seo_ database/table naming requirements
+29. marketing site
+30. dashboard
+31. production/deployment configuration
+32. environment variables
+33. Docker/Dokploy configuration
+34. domain/subdomain configuration
+35. security and tenant isolation
+36. tests
+37. documentation
+
+For every ORIGINAL SRS requirement, classify it as exactly one of:
+
+🟢 COMPLETE
+The requirement is implemented and there is sufficient code/config/test evidence.
+
+🟡 PARTIAL
+Some of the requirement exists, but important pieces are missing, incomplete, mocked, placeholder, or not operational.
+
+🔴 MISSING
+There is no meaningful implementation.
+
+⚪ NOT VERIFIABLE
+The
+<truncated 1938 bytes>
+. Crawler & Technical SEO
+
+Audit Playwright, Celery, Redis, crawl jobs, audit checks, error handling, etc.
+
+## 9. Rank Tracking & SERP
+
+Audit:
+- Amharic keywords
+- English keywords
+- google.com.et
+- .et domains
+- competitor snapshots
+- ranking persistence
+- scheduling
+
+## 10. Pricing & Monetization
+
+Audit:
+Free
+Starter
+Agency
+
+Check actual backend enforcement, not just pricing-page text.
+
+## 11. Dashboard
+
+Audit actual functionality rather than visual placeholders.
+
+## 12. Production / Deployment
+
+Audit Dokploy, domains, environment configuration, Docker, workers, Redis, PostgreSQL, etc.
+
+## 13. Security
+
+Audit authentication, permissions, tenant isolation, secrets, API security, SSRF risks, etc.
+
+## 14. Final Gap List
+
+Give me ONLY the remaining ORIGINAL SRS work, ordered:
+
+P0 — Blocking / essential
+P1 — Required for SRS completeness
+P2 — Important but can follow
+P3 — Senior-team / post-internship responsibility
+
+For every gap say exactly what needs to be implemented.
+
+## 15. SRS Compliance Checklist
+
+End with a concise checklist:
+
+🟢 Complete
+🟡 Partial
+🔴 Missing
+⚪ External verification required
+
+Again:
+
+DO NOT COUNT ANYTHING FROM AGENTIC AI MILESTONES 5.1–6.7 TOWARD SRS COMPLIANCE.
+
+DO NOT MODIFY THE PROJECT.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-19T08:30:00+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\pages\Dashboard.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\models.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\serializers.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\views.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 4fe4cac1-30e7-4c25-9c8f-6e7750c441a7 | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\4fe4cac1-30e7-4c25-9c8f-6e7750c441a7\.system_generated\logs\transcript_full.jsonl | Line: 758
+======================================================================
+<USER_REQUEST>
+We are doing a STRICT ORIGINAL SRS COMPLIANCE AUDIT for DoxaRank.
+
+IMPORTANT:
+- DO NOT modify any code.
+- DO NOT implement anything.
+- DO NOT refactor anything.
+- DO NOT change the UI.
+- DO NOT count my Agentic AI milestones 5.1–6.7 as satisfying original SRS requirements.
+- 5.1–6.7 are a separate extension I designed and my mentor approved.
+- The purpose of this task is ONLY to determine how much of the ORIGINAL DoxaRank SRS is actually implemented in the current repository.
+
+Use the ORIGINAL DoxaRank SRS below as the source of truth.
+
+[PASTE THE ORIGINAL SRS HERE]
+
+AUDIT THE CURRENT REPOSITORY IN DETAIL.
+
+Inspect:
+1. Backend Django/DRF structure
+2. Django models and migrations
+3. API endpoints
+4. authentication and authorization
+5. frontend routes/pages/components
+6. SEO tools
+7. project/workspace functionality
+8. rank tracking
+9. keyword handling
+10. Amharic/English support
+11. google.com.et tracking
+12. .et domain tracking
+13. GSC integration
+14. GA4 integration
+15. Microsoft Clarity integration
+16. Google Tag Manager integration
+17. Playwright crawler
+18. Celery/Redis jobs
+19. technical SEO auditing
+20. competitor SERP snapshots
+21. recommendation system
+22. pricing tiers
+23. feature gating
+24. subscription logic
+25. Doxa Payments
+26. white-label reports
+27. Neon/PostgreSQL configuration
+28. seo_ database/table naming requirements
+29. marketing site
+30. dashboard
+31. production/deployment configuration
+32. environment variables
+33. Docker/Dokploy configuration
+34. domain/subdomain configuration
+35. security and tenant isolation
+36. tests
+37. documentation
+
+For every ORIGINAL SRS requirement, classify it as exactly one of:
+
+🟢 COMPLETE
+The requirement is implemented and there is sufficient code/config/test evidence.
+
+🟡 PARTIAL
+Some of the requirement exists, but important pieces are missing, incomplete, mocked, placeholder, or not operational.
+
+🔴 MISSING
+There is no meaningful implementation.
+
+⚪ NOT VERIFIABLE
+The repository cannot prove the requirement because it depends on an external account, deployment, credential, domain, OAuth verification, etc.
+
+IMPORTANT:
+Do NOT mark something COMPLETE merely because:
+- a model exists
+- an API class exists
+- a UI placeholder exists
+- a service is mocked
+- a configuration variable exists
+- a test merely mocks the external system
+
+Distinguish carefully between:
+A. implemented in code
+B. integrated but not configured
+C. configured but not verified
+D. actually operational
+
+For each requirement provide evidence:
+- exact file/path
+- relevant class/function/component/model/API
+- what it actually does
+- tests proving it, if any
+
+Create the audit in this structure:
+
+# DoxaRank Original SRS Compliance Audit
+
+## 1. Executive Summary
+- Total requirements
+- Complete
+- Partial
+- Missing
+- Not verifiable
+- Overall implementation percentage based ONLY on the original SRS
+
+Do NOT include Agentic AI milestones in this percentage.
+
+## 2. Product / Architecture
+
+| Requirement | Status | Evidence | Missing / Remaining Work |
+|---|---|---|---|
+
+## 3. Marketing Website
+
+Same table format.
+
+## 4. Authentication & Accounts
+
+Same table format.
+
+## 5. 10 SEO Tools
+
+Audit each of the 10 tools individually:
+
+1. Meta tag generator
+2. Open Graph/Twitter Card previewer
+3. Schema.org/JSON-LD generator
+4. Robots.txt tester/generator
+5. Sitemap validator/generator
+6. hreflang builder
+7. SERP snippet preview/pixel-length checker
+8. PageSpeed/Core Web Vitals
+9. Single-page broken link checker
+10. Amharic Fidel keyword normalizer
+
+Do NOT group them together.
+
+## 6. SEO Tracking & Analytics
+
+Audit every SRS requirement individually.
+
+## 7. Integrations
+
+Audit:
+- Google OAuth
+- GSC
+- GA4
+- Microsoft Clarity
+- GTM
+- Doxa Payments
+
+For each distinguish:
+code exists / credentials required / configured / verified / operational.
+
+## 8. Crawler & Technical SEO
+
+Audit Playwright, Celery, Redis, crawl jobs, audit checks, error handling, etc.
+
+## 9. Rank Tracking & SERP
+
+Audit:
+- Amharic keywords
+- English keywords
+- google.com.et
+- .et domains
+- competitor snapshots
+- ranking persistence
+- scheduling
+
+## 10. Pricing & Monetization
+
+Audit:
+Free
+Starter
+Agency
+
+Check actual backend enforcement, not just pricing-page text.
+
+## 11. Dashboard
+
+Audit actual functionality rather than visual placeholders.
+
+## 12. Production / Deployment
+
+Audit Dokploy, domains, environment configuration, Docker, workers, Redis, PostgreSQL, etc.
+
+## 13. Security
+
+Audit authentication, permissions, tenant isolation, secrets, API security, SSRF risks, etc.
+
+## 14. Final Gap List
+
+Give me ONLY the remaining ORIGINAL SRS work, ordered:
+
+P0 — Blocking / essential
+P1 — Required for SRS completeness
+P2 — Important but can follow
+P3 — Senior-team / post-internship responsibility
+
+For every gap say exactly what needs to be implemented.
+
+## 15. SRS Compliance Checklist
+
+End with a concise checklist:
+
+🟢 Complete
+🟡 Partial
+🔴 Missing
+⚪ External verification required
+
+Again:
+
+DO NOT COUNT ANYTHING FROM AGENTIC AI MILESTONES 5.1–6.7 TOWARD SRS COMPLIANCE.
+
+DO NOT MODIFY THE PROJECT.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-19T08:30:00+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\urls.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\pages\Dashboard.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\models.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\serializers.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\views.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: 86454a70-80e7-4dc3-a25d-2757666934cf | KW: broken link | File: C:\Users\bizra\.gemini\antigravity-ide\brain\86454a70-80e7-4dc3-a25d-2757666934cf\.system_generated\logs\transcript_full.jsonl | Line: 906
+======================================================================
+<USER_REQUEST>
+# Milestone 6.6 — Long-Term SEO Strategy
+
+## Core Question
+
+> Can DoxaRank maintain and execute a long-term SEO strategy for a project over weeks and months, using historical performance, goals, priorities, outcomes, and changing SEO conditions while preserving the existing agent architecture and safety boundaries?
+
+---
+
+# 1. STRICT SCOPE
+
+Implement **ONLY Milestone 6.6**.
+
+Build directly on:
+
+* Milestones 5.1–5.7
+* 6.1 Continuous Agent Operations
+* 6.2 Event-Driven Agents
+* 6.3 Autonomous SEO Monitoring
+* 6.4 Autonomous Remediation
+* 6.5 Multi-System Agent Integration
+
+Do NOT implement:
+
+* 6.7 Production Agent Platform
+* infrastructure/platform scaling redesign
+* distributed agent architecture
+* new agent orchestration framework
+* unrestricted autonomous behavior
+* unrelated dashboard redesign
+
+Do NOT commit or push.
+
+The implementation must be fully verified before any commit/push.
+
+---
+
+# 2. WHAT 6.6 IS
+
+Previous milestones operate mostly around individual problems:
+
+```text
+SEO Problem
+    ↓
+Investigate
+    ↓
+Reason
+    ↓
+Plan
+    ↓
+Remediate
+    ↓
+Verify
+    ↓
+Learn
+```
+
+6.6 adds a long-term strategic layer:
+
+```text
+                         SEO PROJECT
+                              ↓
+                     Strategic Objectives
+                              ↓
+                    Long-Term SEO Strategy
+                              ↓
+                    Strategic Priorities
+                              ↓
+                  Strategic Initiatives
+                              ↓
+                     Milestones / Tasks
+                              ↓
+                Existing Agent Orchestration
+                              ↓
+          Research → Reasoning → Action → Verification
+                              ↓
+                           Outcomes
+                              ↓
+                    Strategy Evaluation
+                              ↓
+                    Strategy Adjustment
+                              ↓
+                         Next Cycle
+```
+
+The system should understand not only:
+
+> "What SEO problem exists right now?"
+
+but also:
+
+> "What should this project be trying to accomplish over the next several weeks or months?"
+
+---
+
+# 3. IMPORTANT ARCHITECTURAL DISTINCTION
+
+Do NOT replace the existing Supervisor.
+
+Do NOT turn the Supervisor into a long-term strategy engine.
+
+Use a dedicated strategic layer.
+
+Conceptually:
+
+```text
+Strategic Layer
+       ↓
+Strategy
+       ↓
+Initiatives
+       ↓
+Current Objectives
+       ↓
+Task Planner / DAG
+       ↓
+Supervisor
+       ↓
+Agents
+```
+
+Responsibilities:
+
+### Strategy Layer
+
+Answers:
+
+> What should we work toward over time?
+
+### Task Planner
+
+Answers:
+
+> What concrete work is required right now?
+
+### Supervisor
+
+Answers:
+
+> Which agent should execute the next task?
+
+### Agent
+
+Answers:
+
+> How do I perform my assigned task?
+
+Keep these boundaries explicit.
+
+---
+
+# 4. STRATEGIC OBJECTIVES
+
+Introduce persistent strategic objectives if the existing models do not already support them.
+
+Examples:
+
+```text
+Increase organic traffic
+Increase visibility for Amharic keywords
+Improve ranking for priority commercial keywords
+Increase `.et` search visibility
+Improve technical SEO health
+Increase indexed pages
+Improve conversion-driving organic traffic
+```
+
+An objective should contain structured information such as:
+
+```text
+StrategicObjective
+------------------
+project
+name
+description
+metric
+baseline
+target
+target_direction
+target_value
+start_date
+target_date
+priority
+status
+created_at
+updated_at
+```
+
+Possible status:
+
+```text
+DRAFT
+ACTIVE
+AT_RISK
+ACHIEVED
+PAUSED
+CANCELLED
+EXPIRED
+```
+
+Do not over-engineer this.
+
+---
+
+# 5. STRATEGIC INITIATIVES
+
+Objectives should be supported by initiatives.
+
+Example:
+
+```text
+Objective:
+Increase organic visibility
+
+        ↓
+
+Initiative 1:
+Improve technical SEO
+
+Initiative 2:
+Build Amharic content coverage
+
+Initiative 3:
+Improve priority commercial keywords
+```
+
+An initiative should represent a meaningful body of work rather than a single task.
+
+Conceptually:
+
+```text
+StrategicInitiative
+-------------------
+objective
+name
+description
+priority
+status
+start_date
+target_date
+progress
+risk_level
+owner
+```
+
+Possible status:
+
+```text
+PLANNED
+ACTIVE
+AT_RISK
+COMPLETED
+PAUSED
+CANCELLED
+```
+
+---
+
+# 6. STRATEGIC PRIORITIES
+
+The system must support explicit priority.
+
+Example:
+
+```text
+Priority 1:
+Fix technical indexing problems
+
+Priority 2:
+Improve high-value Amharic keywords
+
+Priority 3:
+Expand content coverage
+
+Priority 4:
+Competitor analysis
+```
+
+Do not simply sort by arbitrary database order.
+
+Priority should be structured and explainable.
+
+---
+
+# 7. STRATEGIC HORIZONS
+
+Support multiple planning horizons.
+
+At minimum:
+
+```text
+SHORT_TERM
+MEDIUM_TERM
+LONG_TERM
+```
+
+Suggested conceptual meaning:
+
+### Short-term
+
+Days to a few weeks.
+
+Examples:
+
+* fix indexing problem
+* resolve broken pages
+* correct metadata
+
+### Medium-term
+
+Several weeks to a few months.
+
+Examples:
+
+* improve content cluster
+* improve keyword coverage
+* technical SEO initiative
+
+### Long-term
+
+Several months.
+
+Examples:
+
+* establish authority in an industry
+* dominate target keyword groups
+* expand Amharic SEO visibility
+
+Do not hardcode arbitrary calendar durations into the architecture unless necessary.
+
+---
+
+# 8. STRATEGY GENERATION
+
+The system should be able to generate a proposed strategy from:
+
+* project information
+* current SEO state
+* historical ranking data
+* audit results
+* GSC data where available
+* keyword performance
+* previous remediation outcomes
+* existing objectives
+* existing initiatives
+* SharedWorkingMemory
+* AgentLearningService
+* historical strategy outcomes
+
+But strategy generation must remain explainable.
+
+Every strategic recommendation should identify:
+
+```text
+evidence
+reason
+expected outcome
+confidence
+assumptions
+risks
+```
+
+Do not allow the LLM to invent unsupported metrics.
+
+---
+
+# 9. STRATEGY IS NOT FACT
+
+Preserve the epistemic model.
+
+For example:
+
+```text
+OBSERVED_FACT
+    Organic clicks decreased 18%.
+
+INFERENCE
+    Decline may be associated with reduced visibility.
+
+HYPOTHESIS
+    Technical indexing issues may be contributing.
+
+RECOMMENDATION
+    Prioritize technical indexing initiative.
+
+STRATEGIC_DECISION
+    Project strategy will prioritize indexing recovery.
+
+EXPECTED_OUTCOME
+    Organic visibility improves over the next evaluation period.
+```
+
+Do not collapse these into a single "AI conclusion."
+
+---
+
+# 10. STRATEGIC EVIDENCE
+
+Strategies must preserve evidence provenance.
+
+Each important strategic decision should reference:
+
+* GSC evidence
+* ranking evidence
+* audit evidence
+* monitoring events
+* remediation outcomes
+* verification results
+* previous strategy performance
+
+Reuse existing SharedWorkingMemory provenance mechanisms.
+
+Do not create an independent memory system.
+
+---
+
+# 11. STRATEGIC PLAN
+
+A strategy should be represented as a persistent plan.
+
+Conceptually:
+
+```text
+SEO Strategy
+    │
+    ├── Objective A
+    │      ├── Initiative A1
+    │      ├── Initiative A2
+    │      └── Initiative A3
+    │
+    ├── Objective B
+    │      ├── Initiative B1
+    │      └── Initiative B2
+    │
+    └── Objective C
+           └── Initiative C1
+```
+
+The strategy must have:
+
+* version
+* status
+* effective period
+* objectives
+* initiatives
+* rationale
+* evidence
+* assumptions
+* risks
+* expected outcomes
+
+---
+
+# 12. STRATEGY VERSIONING
+
+Do NOT overwrite historical strategy decisions.
+
+Support strategy versions.
+
+Example:
+
+```text
+Strategy v1
+    ↓
+Initial priorities
+
+Strategy v2
+    ↓
+Adjusted after 30 days
+
+Strategy v3
+    ↓
+Adjusted after new ranking evidence
+```
+
+Historical versions should remain auditable.
+
+A strategy change should record:
+
+```text
+what changed
+why it changed
+evidence
+previous state
+new state
+agent/system responsible
+timestamp
+```
+
+---
+
+# 13. STRATEGY REVIEW CYCLE
+
+Introduce a bounded strategy review mechanism.
+
+Example:
+
+```text
+Strategy Active
+      ↓
+Periodic Review
+      ↓
+Collect Outcomes
+      ↓
+Evaluate Objectives
+      ↓
+Evaluate Initiatives
+      ↓
+Identify Risks
+      ↓
+Keep / Adjust / Pause / Complete
+      ↓
+New Strategy Version
+```
+
+Do not make the review infinite.
+
+Use explicit review cycles.
+
+---
+
+# 14. CONTINUOUS OPERATION INTEGRATION
+
+Reuse 6.1.
+
+A strategy review can be triggered by the existing continuous operation mechanism.
+
+Example:
+
+```text
+Continuous Operation
+        ↓
+Strategy Review Due
+        ↓
+Strategy Evaluation
+        ↓
+Strategy Adjustment Proposal
+```
+
+Do NOT create another scheduler.
+
+---
+
+# 15. EVENT-DRIVEN INTEGRATION
+
+Reuse 6.2.
+
+Important SEO events may trigger strategic reassessment.
+
+Examples:
+
+```text
+Major ranking decline
+        ↓
+SEOEvent
+        ↓
+Existing orchestration
+        ↓
+Strategy risk evaluation
+```
+
+or:
+
+```text
+Major recovery
+        ↓
+SEOEvent
+        ↓
+Strategy outcome evaluation
+```
+
+Do not bypass SEOEvent ingestion.
+
+---
+
+# 16. AUTONOMOUS MONITORING INTEGRATION
+
+Reuse 6.3.
+
+Monitoring should provide strategic signals such as:
+
+```text
+ranking trend
+visibility trend
+technical health trend
+keyword coverage trend
+recovery trend
+```
+
+Do not duplicate monitoring logic.
+
+---
+
+# 17. REMEDIATION INTEGRATION
+
+Reuse 6.4.
+
+A strategy should produce recommendations/initiatives that eventually become normal tasks and actions.
+
+Example:
+
+```text
+Strategy:
+Improve indexing
+
+        ↓
+
+Initiative:
+Fix indexing blockers
+
+        ↓
+
+Task Plan
+
+        ↓
+
+Investigation
+
+        ↓
+
+Remediation Proposal
+
+        ↓
+
+Existing 6.4 authorization
+
+        ↓
+
+Execution
+
+        ↓
+
+Verification
+```
+
+6.6 must NOT create a shortcut around 6.4 safety.
+
+---
+
+# 18. MULTI-SYSTEM INTEGRATION
+
+Reuse 6.5.
+
+A strategic initiative may require multiple external systems.
+
+Example:
+
+```text
+Initiative:
+Improve technical SEO
+
+        ↓
+
+CMS changes
++
+Git changes
++
+Deployment webhook
++
+Verification
+```
+
+Use existing external adapters.
+
+Do not create new external execution mechanisms.
+
+---
+
+# 19. AGENT LEARNING INTEGRATION
+
+Reuse 5.6.
+
+Historical agent performance may inform strategic planning, but learning remains a bounded signal.
+
+For example:
+
+```text
+Previous initiative:
+Technical SEO fixes
+
+Outcome:
+Strong improvement
+
+        ↓
+
+Historical evidence
+        ↓
+
+Future strategy confidence increases
+```
+
+Do not turn this into unrestricted self-modifying behavior.
+
+---
+
+# 20. ADVANCED REASONING INTEGRATION
+
+Reuse 5.7 when strategic uncertainty is high.
+
+Example:
+
+```text
+Traffic decline
+      ↓
+Competing strategic explanations
+      ↓
+Hypothesis A: ranking decline
+Hypothesis B: seasonality
+Hypothesis C: technical issue
+      ↓
+Evidence comparison
+      ↓
+Consensus / escalation
+      ↓
+Strategy decision
+```
+
+A strategy should not change merely because one agent says it should.
+
+---
+
+# 21. STRATEGIC RISK
+
+Each objective and initiative should support risk assessment.
+
+Example:
+
+```text
+Risk:
+Organic traffic target may not be achievable.
+
+Evidence:
+Traffic trend below required trajectory.
+
+Severity:
+HIGH
+
+Mitigation:
+Increase content and technical SEO work.
+
+Status:
+AT_RISK
+```
+
+Risk must be evidence-backed.
+
+Do not generate fake numerical probabilities.
+
+---
+
+# 22. PROGRESS MEASUREMENT
+
+Strategy progress should be calculated from actual data.
+
+Examples:
+
+```text
+Baseline:
+100 clicks/day
+
+Current:
+130 clicks/day
+
+Target:
+150 clicks/day
+```
+
+Progress can be derived as:
+
+```text
+(130 - 100) / (150 - 100)
+= 60%
+```
+
+For metrics where lower is better, respect `target_direction`.
+
+Examples:
+
+```text
+ranking position
+crawl errors
+broken links
+page load time
+```
+
+Do not assume every metric should increase.
+
+---
+
+# 23. TREND ANALYSIS
+
+Use deterministic trend analysis.
+
+Possible signals:
+
+* improving
+* stable
+* declining
+* insufficient_data
+
+Where appropriate:
+
+```text
+TREND_IMPROVING
+TREND_STABLE
+TREND_DECLINING
+TREND_UNKNOWN
+```
+
+Do NOT implement machine-learning forecasting in 6.6.
+
+No predictive model is required.
+
+---
+
+# 24. STRATEGIC HEALTH
+
+Provide a derived strategy health state.
+
+For example:
+
+```text
+ON_TRACK
+AT_RISK
+OFF_TRACK
+NO_DATA
+```
+
+This must be derived from:
+
+* objective progress
+* initiative progress
+* recent outcomes
+* evidence freshness
+* target dates
+
+It must NOT be hardcoded.
+
+---
+
+# 25. STRATEGY ADAPTATION
+
+The system should be able to propose:
+
+```text
+KEEP
+ADJUST
+PAUSE
+COMPLETE
+REPLACE
+```
+
+But strategy changes must be governed.
+
+For significant strategic changes:
+
+```text
+Proposed Strategy Change
+        ↓
+Evidence
+        ↓
+Reasoning
+        ↓
+Risk
+        ↓
+Authorization
+        ↓
+New Strategy Version
+```
+
+Do not silently change strategic objectives.
+
+---
+
+# 26. HUMAN OVERSIGHT
+
+Human approval remains required where appropriate.
+
+At minimum:
+
+* changing major strategic objectives
+* cancelling important initiatives
+* changing high-impact priorities
+* approving high-risk strategic actions
+
+A strategy proposal is NOT automatically a strategy decision.
+
+Represent:
+
+```text
+PROPOSED
+    ↓
+REVIEW
+    ↓
+APPROVED / REJECTED
+```
+
+Use existing HITL mechanisms where possible.
+
+Do not build a second approval framework.
+
+---
+
+# 27. TENANT ISOLATION
+
+Strategy data is strictly project-scoped.
+
+Project A must never see:
+
+* objectives from Project B
+* strategy versions from Project B
+* initiative history from Project B
+* strategy evidence from Project B
+* strategy performance from Project B
+
+Test both API and service-level isolation.
+
+---
+
+# 28. IDEMPOTENCY
+
+Strategy review must be idempotent.
+
+If the same review is triggered twice:
+
+```text
+Review #1
+Review #2 duplicate
+```
+
+must not create duplicate strategy versions or duplicate initiatives.
+
+Use deterministic review fingerprints.
+
+Protect against:
+
+* Celery retry
+* worker restart
+* duplicate events
+* overlapping continuous operations
+* concurrent strategy reviews
+
+---
+
+# 29. CONCURRENCY
+
+Only one strategic review should modify a project strategy at a time.
+
+Use appropriate DB locking.
+
+Example:
+
+```text
+Project strategy review
+        ↓
+row lock
+        ↓
+evaluate
+        ↓
+create version
+        ↓
+release lock
+```
+
+Do not allow concurrent reviews to create conflicting strategy versions.
+
+---
+
+# 30. STRATEGIC MEMORY
+
+Reuse SharedWorkingMemory.
+
+A strategic review should be able to read:
+
+* recent evidence
+* previous decisions
+* previous strategy versions
+* remediation outcomes
+* verification results
+* historical strategic performance
+
+But keep context bounded.
+
+Use existing memory compaction/budgeting mechanisms.
+
+Do not dump unlimited historical data into agent context.
+
+---
+
+# 31. TELEMETRY
+
+Add strategy-specific events such as:
+
+```text
+seo.strategy.review.started
+seo.strategy.review.completed
+seo.strategy.review.failed
+
+seo.strategy.objective.created
+seo.strategy.objective.updated
+
+seo.strategy.initiative.created
+seo.strategy.initiative.updated
+
+seo.strategy.risk.detected
+seo.strategy.adjustment.proposed
+seo.strategy.adjustment.approved
+seo.strategy.adjustment.rejected
+
+seo.strategy.version.created
+seo.strategy.outcome.recorded
+```
+
+Never include credentials or sensitive external-system data.
+
+---
+
+# 32. EVALUATION METRICS
+
+Add runtime-derived strategy metrics where useful:
+
+* active objectives
+* achieved objectives
+* at-risk objectives
+* objective progress
+* initiative completion rate
+* strategy adjustment rate
+* strategy review success rate
+* strategy version count
+* evidence-supported decisions
+* strategy outcome success rate
+* stale strategy rate
+* average time to objective
+
+Metrics must come from actual DB/runtime state.
+
+No hardcoded values.
+
+---
+
+# 33. API
+
+Provide project-scoped read APIs.
+
+Possible endpoints:
+
+```text
+GET /api/seo/ai/strategy/
+GET /api/seo/ai/strategy/<id>/
+GET /api/seo/ai/strategy/<id>/objectives/
+GET /api/seo/ai/strategy/<id>/initiatives/
+GET /api/seo/ai/strategy/<id>/versions/
+GET /api/seo/ai/strategy/<id>/reviews/
+GET /api/seo/ai/strategy/<id>/metrics/
+```
+
+If write endpoints are necessary, protect them with existing authorization/HITL boundaries.
+
+Never expose cross-tenant information.
+
+---
+
+# 34. DASHBOARD
+
+Add a minimal strategic view.
+
+Show:
+
+```text
+SEO Strategy
+────────────────────────
+
+Overall Health: ON TRACK
+
+Objectives
+├── Organic Visibility       62%
+├── Technical Health         84%
+└── Amharic Keyword Growth   41%
+
+Active Initiatives
+├── Fix indexing blockers
+├── Improve priority keywords
+└── Expand content coverage
+
+Risks
+├── Keyword visibility declining
+└── Objective target date approaching
+
+Recent Strategy Decisions
+├── Initiative adjusted
+└── Technical SEO prioritized
+```
+
+Also allow the user to inspect:
+
+* evidence
+* rationale
+* current strategy version
+* previous versions
+* initiative progress
+
+Do not redesign the entire dashboard.
+
+---
+
+# 35. TESTS
+
+Create:
+
+```text
+LongTermSEOStrategyTests
+```
+
+At minimum test:
+
+1. objective creation
+2. objective lifecycle
+3. initiative creation
+4. initiative lifecycle
+5. priority handling
+6. strategy creation
+7. strategy versioning
+8. historical versions preserved
+9. evidence provenance
+10. progress calculation
+11. target direction
+12. trend detection
+13. strategy health calculation
+14. risk detection
+15. strategy review
+16. review idempotency
+17. concurrent review protection
+18. strategy adjustment proposal
+19. strategy approval
+20. strategy rejection
+21. HITL boundary
+22. SharedWorkingMemory integration
+23. AgentLearningService integration
+24. advanced reasoning integration
+25. TaskPlanner/DAG integration
+26. ContinuousOperation integration
+27. SEOEvent integration
+28. Monitoring integration
+29. Remediation integration
+30. Multi-system integration
+31. tenant isolation
+32. failure isolation
+33. telemetry
+34. runtime evaluation
+35. stale evidence handling
+36. no-data handling
+37. objective achievement
+38. objective at-risk state
+39. strategy cancellation
+40. duplicate event protection
+41. Celery retry protection
+42. full historical strategy preservation
+
+Tests must verify actual behavior.
+
+---
+
+# 36. RUNTIME AUDIT
+
+Create:
+
+```text
+backend/audit_milestone_6_6.py
+```
+
+The audit must prove at least:
+
+### A
+
+Strategic objective persistence
+
+### B
+
+Initiative persistence
+
+### C
+
+Strategy creation
+
+### D
+
+Strategy versioning
+
+### E
+
+Evidence provenance
+
+### F
+
+Progress calculation
+
+### G
+
+Trend detection
+
+### H
+
+Strategy health
+
+### I
+
+Risk detection
+
+### J
+
+Strategy review
+
+### K
+
+Strategy adjustment
+
+### L
+
+HITL protection
+
+### M
+
+SharedWorkingMemory integration
+
+### N
+
+AgentLearning integration
+
+### O
+
+Advanced reasoning integration
+
+### P
+
+TaskPlanner integration
+
+### Q
+
+ContinuousOperation integration
+
+### R
+
+SEOEvent integration
+
+### S
+
+Monitoring integration
+
+### T
+
+Remediation integration
+
+### U
+
+Multi-system integration
+
+### V
+
+Idempotency
+
+### W
+
+Concurrent review protection
+
+### X
+
+Tenant isolation
+
+### Y
+
+Failure isolation
+
+### Z
+
+Telemetry
+
+### AA
+
+Runtime-derived evaluation
+
+### AB
+
+Historical strategy preservation
+
+### AC
+
+End-to-end long-term strategy lifecycle
+
+Use deterministic test data where external services are unavailable.
+
+Do not fake results.
+
+---
+
+# 37. END-TO-END SCENARIO
+
+The runtime audit must include a realistic DoxaRank scenario.
+
+Example:
+
+```text
+Project:
+Ethiopian e-commerce website
+
+Goal:
+Increase organic visibility for priority Amharic keywords.
+
+        ↓
+
+Create Objective
+
+        ↓
+
+Collect historical ranking/GSC/audit evidence
+
+        ↓
+
+Create Strategy v1
+
+        ↓
+
+Initiatives:
+1. Fix indexing issues
+2. Improve Amharic keyword coverage
+3. Improve priority landing pages
+
+        ↓
+
+Task Planner creates work
+
+        ↓
+
+Existing agents investigate
+
+        ↓
+
+Reasoning evaluates competing explanations
+
+        ↓
+
+Approved remediation occurs
+
+        ↓
+
+6.5 external systems execute where required
+
+        ↓
+
+Verification
+
+        ↓
+
+Monitoring observes outcome
+
+        ↓
+
+Strategy review
+
+        ↓
+
+Objective progress updated
+
+        ↓
+
+Strategy v2 proposed if evidence requires change
+```
+
+Prove the pipeline using actual persisted state.
+
+---
+
+# 38. IMPORTANT SAFETY RULE
+
+Long-term strategy must NOT become:
+
+> "The AI can decide anything about the customer's website."
+
+Instead:
+
+```text
+Strategy
+    ↓
+Recommendation
+    ↓
+Evidence
+    ↓
+Risk
+    ↓
+Authorization
+    ↓
+Existing Task / Action Governance
+```
+
+The strategy layer decides priorities, not permissions.
+
+ToolRegistry decides executable capabilities.
+
+HITL decides human authorization where required.
+
+6.4 controls remediation authorization.
+
+6.5 controls external-system access.
+
+---
+
+# 39. NO MACHINE-LEARNING FORECASTING
+
+Do not implement:
+
+* predictive ranking models
+* neural forecasting
+* reinforcement learning
+* autonomous strategy evolution
+* unrestricted self-modification
+
+6.6 is about **long-horizon strategic state and evidence-based adaptation**, not ML forecasting.
+
+---
+
+# 40. SECURITY REVIEW
+
+Before final verification inspect for:
+
+* cross-tenant strategy leakage
+* unauthorized strategy changes
+* strategy evidence injection
+* event payload manipulation
+* memory poisoning
+* credential leakage
+* bypassing HITL
+* bypassing ToolRegistry
+* duplicate strategy versions
+* concurrent strategy corruption
+* unbounded historical context
+* fake metrics
+* unsupported strategic claims
+
+Repair only genuine 6.6 issues.
+
+---
+
+# 41. FINAL VERIFICATION
+
+Run:
+
+```powershell
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py migrate --check
+```
+
+Run dedicated tests:
+
+```powershell
+python manage.py test apps.seo.tests.LongTermSEOStrategyTests --keepdb -v 2
+```
+
+Run full regression:
+
+```text
+5.1
+5.2
+5.3
+5.4
+5.5
+5.6
+5.7
+6.1
+6.2
+6.3
+6.4
+6.5
+6.6
+```
+
+Run:
+
+```powershell
+python audit_milestone_6_6.py
+```
+
+Then:
+
+```powershell
+npm run build
+git diff --check
+git status
+```
+
+---
+
+# 42. FINAL REPORT
+
+Create:
+
+```text
+walkthrough.md
+```
+
+with:
+
+## Milestone 6.6 — Long-Term SEO Strategy Verification Report
+
+### 1. Implementation Summary
+
+### 2. Strategy Architecture
+
+### 3. Objective / Initiative Model
+
+### 4. Strategy Versioning
+
+### 5. Strategy Review Mechanism
+
+### 6. Dedicated Tests
+
+### 7. Full Regression
+
+### 8. Runtime Audit A–AC
+
+Use:
+
+| Proof | Dimension              | Status    | Runtime Evidence |
+| ----- | ---------------------- | --------- | ---------------- |
+| A     | Objective persistence  | PASS/FAIL | ...              |
+| B     | Initiative persistence | PASS/FAIL | ...              |
+| ...   | ...                    | ...       | ...              |
+| AC    | End-to-end lifecycle   | PASS/FAIL | ...              |
+
+### 9. Evidence & Provenance
+
+### 10. HITL / Authorization
+
+### 11. Tenant Isolation
+
+### 12. Idempotency / Concurrency
+
+### 13. Existing Milestone Integration
+
+### 14. Telemetry / Evaluation
+
+### 15. Dashboard
+
+### 16. Limitations
+
+### 17. Scope Confirmation
+
+Explicitly state:
+
+```text
+6.6 implemented
+6.7 NOT STARTED
+No commits
+No pushes
+```
+
+### 18. Completion Verdict
+
+Only report:
+
+```text
+FUNCTIONALLY COMPLETE
+```
+
+if the implementation and runtime proofs actually pass.
+
+Otherwise report:
+
+```text
+PARTIALLY FUNCTIONAL
+```
+
+with the exact failures.
+
+---
+
+# 43. ABSOLUTE STOP CONDITIONS
+
+Stop and report if:
+
+* strategy changes bypass authorization
+* strategy changes bypass HITL
+* ToolRegistry can be bypassed
+* tenant isolation fails
+* duplicate strategy versions can be created
+* concurrent reviews corrupt strategy state
+* unsupported evidence is treated as fact
+* metrics are hardcoded
+* historical versions can be silently overwritten
+* tests fail
+* runtime proofs fail
+* migrations fail
+* frontend build fails
+
+Do NOT hide failures.
+
+Do NOT start 6.7.
+
+Do NOT commit or push.
+
+---
+
+# FINAL GOAL
+
+At the end of 6.6, DoxaRank should evolve from:
+
+```text
+Reactive Agent System
+```
+
+into:
+
+```text
+Long-Horizon Agentic SEO System
+```
+
+with:
+
+```text
+                    SEO PROJECT
+                         ↓
+                Strategic Objectives
+                         ↓
+                Long-Term Strategy
+                         ↓
+                 Strategic Initiatives
+                         ↓
+                  Strategy Review
+                         ↓
+              Current Priorities
+                         ↓
+                   Task Planner
+                         ↓
+                    Supervisor
+                         ↓
+        ┌─────────────────────────────┐
+        │ Research / Investigation    │
+        │ Strategy / Action / Verify  │
+        │ Reasoning / Learning        │
+        └─────────────────────────────┘
+                         ↓
+              Remediation / External
+                   Integrations
+                         ↓
+                     Outcome
+                         ↓
+                    Monitoring
+                         ↓
+                Strategy Evaluation
+                         ↓
+              Strategy v2 / v3 / ...
+```
+
+The core principle is:
+
+> **DoxaRank should not merely solve today's SEO problems; it should maintain an evidence-backed strategy for improving the project's SEO over time.**
+
+Implement ONLY 6.6, verify it rigorously, and stop before 6.7.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-18T19:42:47+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: c9e29f97-65c1-464b-bd89-9b9766eb42fe | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\c9e29f97-65c1-464b-bd89-9b9766eb42fe\.system_generated\logs\transcript.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+DoxaRank — Original SRS SEO Tools Batch 3
+==========================================
+
+TASK:
+Implement the remaining standalone SEO tools from the ORIGINAL DoxaRank SRS:
+
+7. SERP Snippet Preview / Pixel-Length Checker
+8. PageSpeed / Core Web Vitals Analyzer
+9. Single-Page Broken Link Checker
+10. Amharic Fidel Keyword Normalizer
+
+This is the next batch after completion of SEO Tools 1–6.
+
+==================================================
+IMPORTANT — SOURCE OF TRUTH
+==================================================
+
+The ORIGINAL DoxaRank SRS is the ONLY source of truth for this task.
+
+Before coding:
+
+1. Locate and inspect the original SRS.
+2. Find the exact requirements for Tools 7–10.
+3. Record the exact requirements internally before implementation.
+4. Compare them with the current repository.
+5. Inspect the existing SEO tools architecture and follow its established patterns.
+
+DO NOT:
+- invent additional product requirements
+- replace SRS terminology with assumptions
+- implement unrelated SEO features
+- redesign existing tools
+- modify Agentic AI milestones 5.1–6.7
+- modify subscription architecture unless required for integration
+- implement payments
+- implement GSC/GA4/Clarity/GTM
+- implement rank tracking
+- implement competitor tracking
+- implement the Playwright crawler
+- modify the marketing site
+
+If the current repository/report conflicts with the original SRS, prefer the ORIGINAL SRS and clearly report the discrepancy.
+
+==================================================
+CURRENT COMPLETED STATE
+==================================================
+
+Already completed and must remain working:
+
+SEO Tools:
+1. Meta Tag Generator
+2. Schema.org / JSON-LD Generator
+3. Open Graph / Twitter Card Previewer
+4. Robots.txt Tester / Generator
+5. XML Sitemap Validator / Generator
+6. hreflang Builder
+
+Subscription:
+- FREE
+- STARTER
+- AGENCY
+- feature entitlements
+- project/site limits
+- keyword limits
+- daily basic SEO tool usage
+
+Agenti
+<truncated 9086 bytes>
+======================================
+
+Provide a concise report containing:
+
+1. Original SRS requirements used
+2. Files created
+3. Files modified
+4. API endpoints
+5. Frontend changes
+6. External integrations, if any
+7. Security measures
+8. Subscription/quota integration
+9. Dedicated test results
+10. Full regression results
+11. Django check
+12. Live API results
+13. Dashboard build
+14. Updated ORIGINAL SRS completion percentage
+15. Remaining ORIGINAL SRS requirements
+16. Known limitations
+
+Explicitly state:
+
+"Agentic AI milestones 5.1–6.7 were not modified."
+
+==================================================
+STOP CONDITION
+==================================================
+
+Implement ONLY Tools 7–10.
+
+Do not continue into:
+- GSC
+- GA4
+- Clarity
+- GTM
+- crawler
+- rank tracking
+- competitor tracking
+- payments
+- production deployment
+- additional Agentic AI work
+
+Stop after Tools 7–10 and provide the final verification report.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-25T08:57:12+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\dashboard\src\types\keyword.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\pages\GoogleOAuthCallback.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\backend\config\asgi.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\components\SEOActionsPanel.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\client.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: c9e29f97-65c1-464b-bd89-9b9766eb42fe | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\c9e29f97-65c1-464b-bd89-9b9766eb42fe\.system_generated\logs\transcript.jsonl | Line: 37
+======================================================================
+<USER_REQUEST>
+Continue the investigation ONLY. Do NOT modify application code yet.
+
+We need to establish the exact original SRS requirements for the remaining standalone SEO tools.
+
+The original SRS is the source of truth. Do not infer requirements from general SEO knowledge, and do not silently replace the original requirements with the newer phase/gap-analysis terminology.
+
+Investigate the repository thoroughly and determine the authoritative SRS requirements for:
+
+7. SERP Snippet Preview / Pixel-Length Checker
+8. PageSpeed / Core Web Vitals
+9. Single-Page Broken Link Checker
+10. Amharic Fidel Keyword Normalizer
+
+You have already searched for SRS, Amharic, SERP, and PageSpeed and inspected:
+- phase_4_9_gap_analysis.md
+- README.md
+- recent git history
+- commits containing SERP/PageSpeed references
+
+Now continue by:
+
+1. Search git history, deleted files, old commits, docs, and repository files for the ORIGINAL definitions of these four tools.
+2. Use git history if the original SRS is no longer present in the current working tree.
+3. Identify the commit/file where the original SRS requirements came from.
+4. If multiple versions exist, DO NOT reconcile them yourself. Show the differences and identify which one is demonstrably the original SRS.
+5. Pay special attention to:
+   - exact tool names
+   - required inputs
+   - required outputs
+   - validation rules
+   - external APIs/integrations
+   - limits
+   - security requirements
+   - subscription/plan requirements
+   - frontend expectations
+   - any wording that distinguishes these tools from later agentic functionality.
+
+Then produce an INVESTIGATION REPORT ONLY.
+
+Use this format:
+
+## Authoritative SRS Source
+- File/commit:
+- Why this is the original source:
+- Evidence from git/history:
+
+## Tool 7 — SERP Snippet Preview / Pixel-Length Checker
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 8 — PageSpeed / Core Web Vitals
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 9 — Single-Page Broken Link Checker
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 10 — Amharic Fidel Keyword Normalizer
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Conflicts / Ambiguities
+List any differences between:
+- original SRS
+- phase_4_9_gap_analysis.md
+- README
+- later implementation/history
+
+Do NOT decide which conflicting requirement should be implemented unless the repository evidence clearly establishes the original SRS.
+
+## Implementation Boundary
+Explicitly state:
+- what we KNOW must be implemented
+- what is NOT specified by the original SRS
+- what must NOT be invented
+
+## Agentic AI Boundary
+Confirm that Agentic AI milestones 5.1–6.7 are separate from the original SRS and must not be modified as part of Tools 7–10.
+
+IMPORTANT:
+- Do not edit files.
+- Do not create code.
+- Do not change tests.
+- Do not change the frontend.
+- Do not change git.
+- Do not implement anything until I review this investigation report.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-25T09:03:42+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\client.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\googleOAuth.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\encryption.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\google_search_console.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\types\agentEvent.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: c9e29f97-65c1-464b-bd89-9b9766eb42fe | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\c9e29f97-65c1-464b-bd89-9b9766eb42fe\.system_generated\logs\transcript_full.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+DoxaRank — Original SRS SEO Tools Batch 3
+==========================================
+
+TASK:
+Implement the remaining standalone SEO tools from the ORIGINAL DoxaRank SRS:
+
+7. SERP Snippet Preview / Pixel-Length Checker
+8. PageSpeed / Core Web Vitals Analyzer
+9. Single-Page Broken Link Checker
+10. Amharic Fidel Keyword Normalizer
+
+This is the next batch after completion of SEO Tools 1–6.
+
+==================================================
+IMPORTANT — SOURCE OF TRUTH
+==================================================
+
+The ORIGINAL DoxaRank SRS is the ONLY source of truth for this task.
+
+Before coding:
+
+1. Locate and inspect the original SRS.
+2. Find the exact requirements for Tools 7–10.
+3. Record the exact requirements internally before implementation.
+4. Compare them with the current repository.
+5. Inspect the existing SEO tools architecture and follow its established patterns.
+
+DO NOT:
+- invent additional product requirements
+- replace SRS terminology with assumptions
+- implement unrelated SEO features
+- redesign existing tools
+- modify Agentic AI milestones 5.1–6.7
+- modify subscription architecture unless required for integration
+- implement payments
+- implement GSC/GA4/Clarity/GTM
+- implement rank tracking
+- implement competitor tracking
+- implement the Playwright crawler
+- modify the marketing site
+
+If the current repository/report conflicts with the original SRS, prefer the ORIGINAL SRS and clearly report the discrepancy.
+
+==================================================
+CURRENT COMPLETED STATE
+==================================================
+
+Already completed and must remain working:
+
+SEO Tools:
+1. Meta Tag Generator
+2. Schema.org / JSON-LD Generator
+3. Open Graph / Twitter Card Previewer
+4. Robots.txt Tester / Generator
+5. XML Sitemap Validator / Generator
+6. hreflang Builder
+
+Subscription:
+- FREE
+- STARTER
+- AGENCY
+- feature entitlements
+- project/site limits
+- keyword limits
+- daily basic SEO tool usage
+
+Agentic AI:
+- milestones 5.1–6.7
+
+DO NOT modify the Agentic AI implementation.
+
+==================================================
+1. SERP SNIPPET PREVIEW / PIXEL-LENGTH CHECKER
+==================================================
+
+Implement exactly what the ORIGINAL SRS specifies.
+
+The tool should provide the required SERP title/description preview and length/pixel guidance defined by the SRS.
+
+Follow the existing SEO tool architecture:
+
+backend/apps/seo/tools/
+
+Create a dedicated domain module, for example:
+
+serp_snippet.py
+
+Keep deterministic calculation/generation logic separate from API handling.
+
+Requirements:
+
+- Match the exact SRS fields and behavior.
+- Validate input according to the SRS.
+- Provide deterministic preview output.
+- Provide the required character/pixel-length analysis.
+- Clearly indicate warnings/limits according to the SRS.
+- Do not perform external Google requests.
+- Do not implement live SERP scraping here.
+
+==================================================
+2. PAGESPEED / CORE WEB VITALS ANALYZER
+==================================================
+
+Implement exactly the functionality specified by the ORIGINAL SRS.
+
+IMPORTANT:
+
+This tool is different from the deterministic tools because the SRS may require Google PageSpeed Insights.
+
+Before implementing:
+
+- inspect the original SRS carefully
+- inspect whether the repository already contains any PageSpeed integration
+- determine the exact API/integration requirements from the SRS
+
+If the SRS requires Google PageSpeed Insights:
+
+- use the existing project architecture/conventions for external integrations
+- keep API credentials server-side
+- never expose secrets to the frontend
+- validate URLs before sending them
+- implement safe timeout/error handling
+- do not create a fake/mock PageSpeed result and claim it is real
+- clearly handle API unavailable/error states
+
+If an API key or external configuration is required but unavailable in the current environment:
+
+- implement the correct integration structure
+- make configuration environment-based
+- add tests using mocks
+- do not hard-code credentials
+- clearly report that live verification requires the configured credential
+
+Expose only the metrics/features actually required by the SRS.
+
+==================================================
+3. SINGLE-PAGE BROKEN LINK CHECKER
+==================================================
+
+Implement exactly the original SRS requirement.
+
+IMPORTANT SECURITY REQUIREMENT:
+
+This feature may require outbound HTTP requests, so treat it as an SSRF-sensitive feature.
+
+Before coding:
+
+- inspect existing security patterns
+- determine whether the SRS requires checking one page only
+- do not turn this into a site-wide crawler
+
+The tool should:
+
+- accept the required URL/input
+- fetch/check only what the SRS specifies
+- identify broken links according to the SRS
+- provide useful status information
+- handle redirects/timeouts/errors correctly
+- prevent SSRF against private/internal/local addresses
+- validate schemes
+- enforce reasonable timeouts
+- prevent arbitrary protocol access
+- avoid downloading unnecessarily large resources
+- limit the scope strictly to a single page
+
+Do NOT implement a general crawler.
+
+Do NOT connect this feature to the future Playwright crawler task.
+
+==================================================
+4. AMHARIC FIDEL KEYWORD NORMALIZER
+==================================================
+
+Implement the Amharic Fidel keyword normalizer exactly according to the ORIGINAL SRS.
+
+Create a dedicated domain module, for example:
+
+amharic.py
+
+Requirements:
+
+- Follow the exact normalization behavior specified by the SRS.
+- Keep normalization deterministic.
+- Preserve meaningful Amharic text.
+- Handle supported Fidel normalization cases explicitly.
+- Validate input.
+- Return normalized output.
+- Make the normalization logic reusable by future keyword-related functionality.
+
+Do not invent linguistic transformations beyond the SRS.
+
+Add tests using representative Amharic Fidel inputs.
+
+==================================================
+5. BACKEND ARCHITECTURE
+==================================================
+
+Follow the existing architecture used by Tools 1–6.
+
+Reuse:
+
+- existing SEO tool services
+- existing serializers pattern
+- existing views pattern
+- existing URL structure
+- existing authentication
+- existing entitlement checks
+- existing UsageLimitService
+
+Do NOT create another quota system.
+
+Expected endpoint pattern:
+
+POST /api/seo/tools/serp-snippet/
+POST /api/seo/tools/pagespeed/
+POST /api/seo/tools/broken-links/
+POST /api/seo/tools/amharic-normalizer/
+
+Use the project's existing naming conventions if the current codebase uses a different established pattern.
+
+Update:
+
+- status endpoint
+- supported tool registry
+- quota reporting
+
+only as necessary.
+
+==================================================
+6. SUBSCRIPTION / QUOTA
+==================================================
+
+All four tools are basic SEO tools unless the ORIGINAL SRS explicitly specifies otherwise.
+
+Reuse:
+
+PlanEntitlementService
+UsageLimitService
+BASIC_SEO_TOOLS
+
+Do NOT create duplicate entitlement or quota logic.
+
+Maintain:
+
+FREE:
+- existing daily limit
+
+STARTER:
+- existing unlimited behavior
+
+AGENCY:
+- existing unlimited behavior
+
+The existing Tools 1–6 behavior must not regress.
+
+==================================================
+7. FRONTEND
+==================================================
+
+Extend:
+
+dashboard/src/components/SEOToolsPanel.tsx
+
+Add four new tools:
+
+7. SERP Snippet
+8. PageSpeed
+9. Broken Links
+10. Amharic Normalizer
+
+Match the existing dashboard design.
+
+For each tool:
+
+- appropriate inputs
+- validation
+- loading state where applicable
+- error state
+- result/output area
+- copy functionality where applicable
+- quota visibility where appropriate
+
+For external API/network tools, provide clear states for:
+
+- loading
+- success
+- validation failure
+- external service failure
+- timeout
+
+Do not make the UI unnecessarily complex.
+
+==================================================
+8. SECURITY
+==================================================
+
+Pay special attention to Tools 8 and 9.
+
+PageSpeed:
+- server-side API credentials
+- URL validation
+- timeout handling
+- safe error responses
+- no credential exposure
+
+Broken Link Checker:
+- SSRF protection
+- block localhost
+- block loopback
+- block private IP ranges
+- block link-local addresses
+- block unsupported schemes
+- restrict request scope
+- reasonable timeout
+- response-size limits
+- redirect validation
+- do not follow redirects into blocked/private destinations
+
+Do not weaken security simply to make tests pass.
+
+==================================================
+9. TESTING
+==================================================
+
+Add dedicated tests for all four tools.
+
+Minimum coverage:
+
+SERP SNIPPET:
+- valid preview
+- title length
+- description length
+- pixel/length calculation
+- warning thresholds
+- invalid input
+- deterministic result
+
+PAGESPEED:
+- valid request
+- successful mocked PageSpeed response
+- API error
+- timeout
+- invalid URL
+- missing configuration
+- authentication
+- entitlement/quota
+
+BROKEN LINKS:
+- valid page
+- broken link detection
+- redirect handling
+- timeout
+- invalid URL
+- SSRF/private-address rejection
+- unsupported scheme rejection
+- response limits
+- authentication
+- entitlement/quota
+
+AMHARIC NORMALIZER:
+- representative Fidel inputs
+- normalization rules from SRS
+- invalid/empty input
+- deterministic output
+- Unicode handling
+- authentication
+- entitlement/quota
+
+Also test API endpoints.
+
+==================================================
+10. REGRESSION
+==================================================
+
+After implementation run:
+
+python manage.py check
+
+Dedicated SEO tool tests
+
+Full regression:
+
+python manage.py test apps.users apps.projects apps.subscriptions apps.seo.tools
+
+Run existing live API suites where applicable:
+
+python test_auth_api.py
+python test_projects_api.py
+python test_seo_keywords_api.py
+python test_seo_rankings_api.py
+python test_seo_tools_api.py
+
+Run:
+
+npm run build
+
+Existing Tools 1–6 MUST continue to pass.
+
+Do not delete or weaken existing tests.
+
+==================================================
+11. SRS AUDIT
+==================================================
+
+At the end, explicitly report the ORIGINAL SRS status.
+
+Show:
+
+Before this task:
+- Tools 1–6 complete
+
+This task:
+- Tool 7 status
+- Tool 8 status
+- Tool 9 status
+- Tool 10 status
+
+Do not claim an SRS requirement complete unless it was actually implemented and verified.
+
+Also identify any requirements that are only partially implemented because an external dependency/configuration is unavailable.
+
+==================================================
+12. FINAL REPORT
+==================================================
+
+Provide a concise report containing:
+
+1. Original SRS requirements used
+2. Files created
+3. Files modified
+4. API endpoints
+5. Frontend changes
+6. External integrations, if any
+7. Security measures
+8. Subscription/quota integration
+9. Dedicated test results
+10. Full regression results
+11. Django check
+12. Live API results
+13. Dashboard build
+14. Updated ORIGINAL SRS completion percentage
+15. Remaining ORIGINAL SRS requirements
+16. Known limitations
+
+Explicitly state:
+
+"Agentic AI milestones 5.1–6.7 were not modified."
+
+==================================================
+STOP CONDITION
+==================================================
+
+Implement ONLY Tools 7–10.
+
+Do not continue into:
+- GSC
+- GA4
+- Clarity
+- GTM
+- crawler
+- rank tracking
+- competitor tracking
+- payments
+- production deployment
+- additional Agentic AI work
+
+Stop after Tools 7–10 and provide the final verification report.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-25T08:57:12+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\dashboard\src\types\keyword.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\pages\GoogleOAuthCallback.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\backend\config\asgi.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\components\SEOActionsPanel.tsx (LANGUAGE_TSX)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\client.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: c9e29f97-65c1-464b-bd89-9b9766eb42fe | KW: serp snippet | File: C:\Users\bizra\.gemini\antigravity-ide\brain\c9e29f97-65c1-464b-bd89-9b9766eb42fe\.system_generated\logs\transcript_full.jsonl | Line: 37
+======================================================================
+<USER_REQUEST>
+Continue the investigation ONLY. Do NOT modify application code yet.
+
+We need to establish the exact original SRS requirements for the remaining standalone SEO tools.
+
+The original SRS is the source of truth. Do not infer requirements from general SEO knowledge, and do not silently replace the original requirements with the newer phase/gap-analysis terminology.
+
+Investigate the repository thoroughly and determine the authoritative SRS requirements for:
+
+7. SERP Snippet Preview / Pixel-Length Checker
+8. PageSpeed / Core Web Vitals
+9. Single-Page Broken Link Checker
+10. Amharic Fidel Keyword Normalizer
+
+You have already searched for SRS, Amharic, SERP, and PageSpeed and inspected:
+- phase_4_9_gap_analysis.md
+- README.md
+- recent git history
+- commits containing SERP/PageSpeed references
+
+Now continue by:
+
+1. Search git history, deleted files, old commits, docs, and repository files for the ORIGINAL definitions of these four tools.
+2. Use git history if the original SRS is no longer present in the current working tree.
+3. Identify the commit/file where the original SRS requirements came from.
+4. If multiple versions exist, DO NOT reconcile them yourself. Show the differences and identify which one is demonstrably the original SRS.
+5. Pay special attention to:
+   - exact tool names
+   - required inputs
+   - required outputs
+   - validation rules
+   - external APIs/integrations
+   - limits
+   - security requirements
+   - subscription/plan requirements
+   - frontend expectations
+   - any wording that distinguishes these tools from later agentic functionality.
+
+Then produce an INVESTIGATION REPORT ONLY.
+
+Use this format:
+
+## Authoritative SRS Source
+- File/commit:
+- Why this is the original source:
+- Evidence from git/history:
+
+## Tool 7 — SERP Snippet Preview / Pixel-Length Checker
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 8 — PageSpeed / Core Web Vitals
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 9 — Single-Page Broken Link Checker
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Tool 10 — Amharic Fidel Keyword Normalizer
+| Requirement | Exact SRS requirement | Source |
+|---|---|---|
+
+## Conflicts / Ambiguities
+List any differences between:
+- original SRS
+- phase_4_9_gap_analysis.md
+- README
+- later implementation/history
+
+Do NOT decide which conflicting requirement should be implemented unless the repository evidence clearly establishes the original SRS.
+
+## Implementation Boundary
+Explicitly state:
+- what we KNOW must be implemented
+- what is NOT specified by the original SRS
+- what must NOT be invented
+
+## Agentic AI Boundary
+Confirm that Agentic AI milestones 5.1–6.7 are separate from the original SRS and must not be modified as part of Tools 7–10.
+
+IMPORTANT:
+- Do not edit files.
+- Do not create code.
+- Do not change tests.
+- Do not change the frontend.
+- Do not change git.
+- Do not implement anything until I review this investigation report.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-25T09:03:42+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\external_adapters\cms_adapter.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\client.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\googleOAuth.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\encryption.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\google_search_console.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\types\agentEvent.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: ce03b87b-585d-4def-80ef-7042202eb831 | KW: original doxarank srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\ce03b87b-585d-4def-80ef-7042202eb831\.system_generated\logs\transcript.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Milestone 5.1
+
+## Advanced Multi-Agent Collaboration & Structured Agent Handoffs
+
+You are continuing the DoxaRank project after the completed Phase 4.9.
+
+IMPORTANT:
+Do NOT start Milestone 5.2 or any other Milestone 5 work.
+Do NOT redesign existing architecture.
+Do NOT rebuild functionality that already exists.
+Do NOT remove or weaken existing safety controls.
+Do NOT introduce autonomous mutation without human approval.
+
+The goal of this task is to evolve the existing Phase 4.7 specialized-agent orchestration into a stronger **structured multi-agent collaboration architecture**.
+
+---
+
+## 1. READ THE EXISTING SYSTEM FIRST
+
+Before writing code, inspect:
+
+* Original DoxaRank SRS
+* existing Milestone/Phase documentation
+* `docs/phase_4_9_gap_analysis.md`
+* `docs/phase_4_9_e2e_workflows.md`
+* `docs/phase_4_9_agent_reliability.md`
+* `docs/phase_4_9_evaluation.md`
+* existing supervisor/orchestrator
+* `base_agent.py`
+* `seo_supervisor.py`
+* all specialized agents
+* `agent_orchestrator.py`
+* `tool_registry.py`
+* AgentRun / AgentStep related models
+* MCP integration
+* action planning
+* human approval
+* verification
+* outcome learning
+* adaptive strategy
+* agent evaluation
+
+Understand the current architecture before making changes.
+
+---
+
+# 2. CURRENT ARCHITECTURE TO PRESERVE
+
+The existing architecture already contains:
+
+* Supervisor
+* Research Agent
+* Investigation Agent
+* Strategy Agent
+* Action Agent
+* Verification Agent
+* Tool Registry
+* ReAct execution
+* Human approval gate
+* Action planning
+* Action execution
+* Technical verification
+* Outcome measurement
+* Adaptive strategy
+* MCP interoperability
+* reliability controls
+* tenant isolation
+* evaluation
+
+Preserve all of these.
+
+The new work should EXTEND the architecture rather than replace it.
+
+---
+
+# 3. IMPLEMENT STRUCTURED AGENT HANDOFFS
+
+Introduce a structured handoff/context object between agents.
+
+The handoff should contain only the information required by th
+<truncated 6834 bytes>
+ncludes collaboration metrics
+* tests pass
+* existing regression tests remain green
+* Django checks pass
+* migrations are clean
+* frontend builds successfully
+* documentation exists
+
+---
+
+# 18. IMPORTANT STOP CONDITION
+
+After completing Milestone 5.1:
+
+STOP.
+
+Do NOT implement:
+
+* advanced memory
+* vector memory
+* long-running autonomous agents
+* autonomous mutation
+* complex agent debate
+* self-modifying agents
+* agent marketplace
+* open agent federation
+* distributed MCP infrastructure
+* Milestone 5.2
+
+Those belong to later phases.
+
+At the end, provide a concise implementation report containing:
+
+1. files created/modified
+2. architecture changes
+3. structured handoff design
+4. collaboration flow
+5. safety/security changes
+6. evaluation changes
+7. focused test count/result
+8. full regression test result
+9. Django check result
+10. migration check result
+11. frontend build result
+12. git diff check result
+13. documentation created
+14. anything intentionally deferred
+
+Do not claim completion unless the verification commands actually pass.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-04T12:17:46+03:00.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\tool_registry.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\action_executors.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\seoContentBriefs.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\export_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\docs\phase_4_9_gap_analysis.md (LANGUAGE_MARKDOWN)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: ce03b87b-585d-4def-80ef-7042202eb831 | KW: original doxarank srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\ce03b87b-585d-4def-80ef-7042202eb831\.system_generated\logs\transcript_full.jsonl | Line: 0
+======================================================================
+<USER_REQUEST>
+# DoxaRank — Milestone 5.1
+
+## Advanced Multi-Agent Collaboration & Structured Agent Handoffs
+
+You are continuing the DoxaRank project after the completed Phase 4.9.
+
+IMPORTANT:
+Do NOT start Milestone 5.2 or any other Milestone 5 work.
+Do NOT redesign existing architecture.
+Do NOT rebuild functionality that already exists.
+Do NOT remove or weaken existing safety controls.
+Do NOT introduce autonomous mutation without human approval.
+
+The goal of this task is to evolve the existing Phase 4.7 specialized-agent orchestration into a stronger **structured multi-agent collaboration architecture**.
+
+---
+
+## 1. READ THE EXISTING SYSTEM FIRST
+
+Before writing code, inspect:
+
+* Original DoxaRank SRS
+* existing Milestone/Phase documentation
+* `docs/phase_4_9_gap_analysis.md`
+* `docs/phase_4_9_e2e_workflows.md`
+* `docs/phase_4_9_agent_reliability.md`
+* `docs/phase_4_9_evaluation.md`
+* existing supervisor/orchestrator
+* `base_agent.py`
+* `seo_supervisor.py`
+* all specialized agents
+* `agent_orchestrator.py`
+* `tool_registry.py`
+* AgentRun / AgentStep related models
+* MCP integration
+* action planning
+* human approval
+* verification
+* outcome learning
+* adaptive strategy
+* agent evaluation
+
+Understand the current architecture before making changes.
+
+---
+
+# 2. CURRENT ARCHITECTURE TO PRESERVE
+
+The existing architecture already contains:
+
+* Supervisor
+* Research Agent
+* Investigation Agent
+* Strategy Agent
+* Action Agent
+* Verification Agent
+* Tool Registry
+* ReAct execution
+* Human approval gate
+* Action planning
+* Action execution
+* Technical verification
+* Outcome measurement
+* Adaptive strategy
+* MCP interoperability
+* reliability controls
+* tenant isolation
+* evaluation
+
+Preserve all of these.
+
+The new work should EXTEND the architecture rather than replace it.
+
+---
+
+# 3. IMPLEMENT STRUCTURED AGENT HANDOFFS
+
+Introduce a structured handoff/context object between agents.
+
+The handoff should contain only the information required by the receiving agent.
+
+Suggested conceptual structure:
+
+AgentHandoffContext
+
+* project_id
+* task_id / run_id
+* source_agent
+* target_agent
+* user_goal
+* task_type
+* relevant evidence
+* findings
+* assumptions
+* uncertainties
+* recommended next step
+* previous_agent_steps
+* allowed_tools
+* risk information
+* approval state
+* correlation_id
+* timestamp
+
+Do NOT blindly copy the entire previous agent context.
+
+The receiving agent must receive a controlled context package.
+
+---
+
+# 4. EVIDENCE-PRESERVING HANDOFFS
+
+Agents must distinguish between:
+
+### Observed Facts
+
+Directly obtained from tools/data.
+
+### Inferences
+
+Conclusions derived from evidence.
+
+### Recommendations
+
+Suggested actions.
+
+### Uncertainty
+
+Things the agent cannot confidently establish.
+
+A downstream agent must not accidentally treat an inference as an observed fact.
+
+Example:
+
+Research Agent:
+
+Observed:
+"CTR decreased from 5.1% to 2.8%."
+
+Inference:
+"The title may be poorly aligned with search intent."
+
+Uncertainty:
+"No direct user-intent data is available."
+
+The Investigation Agent must preserve these distinctions.
+
+---
+
+# 5. AGENT RESPONSIBILITY BOUNDARIES
+
+Strengthen specialized-agent boundaries.
+
+Research Agent:
+
+* evidence gathering
+* read-only
+* no mutations
+
+Investigation Agent:
+
+* root-cause investigation
+* evidence synthesis
+* read-only
+
+Strategy Agent:
+
+* strategy generation
+* prioritization
+* no direct mutations
+
+Action Agent:
+
+* action planning
+* risk classification
+* must preserve human approval requirements
+
+Verification Agent:
+
+* technical verification
+* outcome measurement
+* no unauthorized mutations
+
+Supervisor:
+
+* routing
+* coordination
+* handoff management
+* failure isolation
+
+Do not allow agents to silently perform responsibilities belonging to another specialized agent.
+
+---
+
+# 6. COLLABORATION STATE
+
+Introduce a lightweight collaboration state that allows the supervisor to understand:
+
+* current agent
+* completed agents
+* pending agents
+* failed agents
+* handoff history
+* current evidence
+* unresolved questions
+* final result
+
+Do not create a complicated workflow engine.
+
+Keep it deterministic and easy to inspect.
+
+---
+
+# 7. HANDOFF VALIDATION
+
+Before accepting a handoff, validate:
+
+* source agent is recognized
+* target agent is recognized
+* tenant/project context is valid
+* required fields exist
+* evidence has provenance
+* tool permissions are valid
+* correlation/run ID is preserved
+* approval state cannot be escalated by an agent
+* action permissions cannot be increased through handoff data
+
+Reject malformed or unsafe handoffs safely.
+
+---
+
+# 8. FAILURE ISOLATION
+
+If one specialized agent fails:
+
+* do not crash the entire orchestration automatically
+* record the failure
+* preserve completed evidence
+* allow the supervisor to decide whether recovery or degradation is possible
+
+Example:
+
+Research succeeds
+→ Investigation succeeds
+→ Strategy fails
+
+The system should preserve the Research + Investigation result rather than losing the entire run.
+
+Do NOT invent a sophisticated recovery system yet.
+Advanced recovery belongs to a later phase.
+
+---
+
+# 9. HUMAN APPROVAL MUST REMAIN A HARD BOUNDARY
+
+This is mandatory.
+
+No handoff may:
+
+* automatically approve an action
+* modify `requires_human_approval`
+* bypass action risk classification
+* execute a mutation because another agent requested it
+
+The flow must remain:
+
+Agent
+→ Action Plan
+→ Risk Classification
+→ Human Approval
+→ Execution
+
+---
+
+# 10. OBSERVABILITY
+
+Extend existing lifecycle events where appropriate.
+
+Capture:
+
+* handoff started
+* handoff completed
+* handoff rejected
+* agent collaboration started
+* agent collaboration completed
+* collaboration failure
+
+Do not log:
+
+* API keys
+* OAuth tokens
+* passwords
+* bearer tokens
+* secrets
+* sensitive credentials
+
+Reuse existing secret-redaction mechanisms.
+
+---
+
+# 11. AGENT EVALUATION INTEGRATION
+
+Extend the existing evaluation layer so an agent run can expose observable collaboration metrics such as:
+
+* number of agents involved
+* number of handoffs
+* successful handoffs
+* rejected handoffs
+* failed agents
+* collaboration completion
+* unnecessary/redundant handoffs
+
+Do NOT evaluate hidden chain-of-thought.
+
+Do NOT build a large evaluation platform.
+
+---
+
+# 12. TESTING
+
+Create focused tests for:
+
+1. valid Research → Investigation handoff
+2. valid Investigation → Strategy handoff
+3. Strategy → Action Planning handoff
+4. Action → Verification handoff
+5. malformed handoff rejection
+6. invalid tenant/project handoff rejection
+7. invalid tool permission handoff rejection
+8. approval-state escalation attempt rejection
+9. failed-agent isolation
+10. evidence provenance preservation
+11. handoff lifecycle events
+12. evaluation metrics
+13. complete multi-agent collaboration workflow
+
+Use existing test conventions.
+
+Do not break existing tests.
+
+---
+
+# 13. DOCUMENTATION
+
+Create:
+
+`docs/phase_5_1_multi_agent_collaboration.md`
+
+Document:
+
+* why structured collaboration is needed
+* current multi-agent architecture
+* agent responsibilities
+* handoff structure
+* evidence preservation
+* collaboration state
+* validation rules
+* failure isolation
+* human approval boundary
+* evaluation metrics
+* example end-to-end collaboration flow
+
+Include a simple architecture diagram.
+
+---
+
+# 14. FRONTEND
+
+Only add minimal UI if the existing architecture makes it straightforward.
+
+If appropriate, expose:
+
+* participating agents
+* handoff sequence
+* current agent
+* collaboration status
+* failures
+
+Do NOT build a large new dashboard.
+
+---
+
+# 15. SECURITY REQUIREMENTS
+
+Verify:
+
+* tenant isolation
+* project ownership
+* agent permissions
+* tool allowlists
+* approval integrity
+* MCP permissions
+* secret redaction
+
+Never trust agent-generated metadata as an authorization source.
+
+Authorization must remain enforced by the backend.
+
+---
+
+# 16. VERIFICATION
+
+Run:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test
+git diff --check
+```
+
+Also run the dashboard build:
+
+```bash
+npm run build
+```
+
+Run focused Milestone 5.1 tests separately and report their exact count.
+
+---
+
+# 17. DEFINITION OF DONE
+
+Milestone 5.1 is complete only if:
+
+* structured agent handoffs exist
+* handoff context is controlled
+* evidence provenance is preserved
+* specialized-agent boundaries are enforced
+* collaboration state exists
+* malformed/unsafe handoffs are rejected
+* failure isolation works
+* human approval remains a hard boundary
+* lifecycle events are captured
+* evaluation includes collaboration metrics
+* tests pass
+* existing regression tests remain green
+* Django checks pass
+* migrations are clean
+* frontend builds successfully
+* documentation exists
+
+---
+
+# 18. IMPORTANT STOP CONDITION
+
+After completing Milestone 5.1:
+
+STOP.
+
+Do NOT implement:
+
+* advanced memory
+* vector memory
+* long-running autonomous agents
+* autonomous mutation
+* complex agent debate
+* self-modifying agents
+* agent marketplace
+* open agent federation
+* distributed MCP infrastructure
+* Milestone 5.2
+
+Those belong to later phases.
+
+At the end, provide a concise implementation report containing:
+
+1. files created/modified
+2. architecture changes
+3. structured handoff design
+4. collaboration flow
+5. safety/security changes
+6. evaluation changes
+7. focused test count/result
+8. full regression test result
+9. Django check result
+10. migration check result
+11. frontend build result
+12. git diff check result
+13. documentation created
+14. anything intentionally deferred
+
+Do not claim completion unless the verification commands actually pass.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-04T12:17:46+03:00.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\tool_registry.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\action_executors.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\dashboard\src\api\seoContentBriefs.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\export_service.py (LANGUAGE_PYTHON)
+- c:\Users\bizra\Documents\doxarank\docs\phase_4_9_gap_analysis.md (LANGUAGE_MARKDOWN)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
+
+======================================================================
+CONV: f6787b48-4216-4b2b-85f0-3ce8df19c18c | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\f6787b48-4216-4b2b-85f0-3ce8df19c18c\.system_generated\logs\transcript.jsonl | Line: 876
+======================================================================
+<USER_REQUEST>
+# Phase 4.9 — Production Integration Completion, E2E Validation & Agent Reliability
+
+## Objective
+
+Implement **Phase 4.9 of DoxaRank**.
+
+This phase is NOT about adding another major Agentic AI capability.
+
+The purpose is to:
+
+1. Reconcile the current implementation against the **original DoxaRank SRS**.
+2. Close the highest-value remaining SRS/product gaps.
+3. Validate the complete Agentic SEO lifecycle end-to-end.
+4. Harden the existing agent architecture for realistic failures.
+5. Strengthen production security and reliability.
+6. Introduce a foundational Agent Evaluation layer.
+7. Prepare DoxaRank for Milestone 5 — Advanced Agentic Intelligence.
+
+The project must remain an **Ethiopia-first SEO SaaS enhanced by Agentic AI**, not become an AI-only research project.
+
+---
+
+# IMPORTANT — READ BEFORE CODING
+
+## 1. Inspect the existing system first
+
+Before modifying code:
+
+* Inspect the complete repository structure.
+* Inspect the original DoxaRank SRS available in the project/context.
+* Inspect Milestones 1–4 and all completed Phase 4.x implementations.
+* Inspect:
+
+  * `ToolRegistry`
+  * ReAct runtime
+  * AgentRun / AgentStep / AgentToolCall
+  * specialized agents
+  * SEO Supervisor
+  * MCP integration
+  * SEO action governance
+  * action planner
+  * action verifier
+  * outcome measurement
+  * adaptive strategy
+  * Celery tasks
+  * Redis usage
+  * WebSocket/event architecture
+  * external integrations
+  * existing tests
+  * frontend agent UI
+* Identify what is actually implemented rather than assuming the previous plans are accurate.
+
+DO NOT immediately start coding.
+
+First create:
+
+`docs/phase_4_9_gap_analysis.md`
+
+containing:
+
+| Area          | Original SRS Requirement | Current Implementation | Status                   | Gap | Priority        |
+| ------------- | ------------------------ | ---------------------- | ------------------------ | --- | --------------- |
+| Core SEO      | ...                      | ...                   
+<truncated 14015 bytes>
+ful architectural changes.
+
+## 4. E2E Workflow
+
+Show the final execution flow.
+
+## 5. Reliability Improvements
+
+List failure modes now handled.
+
+## 6. Security Improvements
+
+List the important security boundaries verified.
+
+## 7. Agent Evaluation
+
+Explain what is now measurable.
+
+## 8. Tests
+
+Report exact counts:
+
+```text
+Focused tests: X/X
+Full regression: X/X
+E2E tests: X/X
+MCP tests: X/X
+Security tests: X/X
+```
+
+## 9. Verification
+
+```text
+Django check: PASS/FAIL
+Migration check: PASS/FAIL
+Frontend build: PASS/FAIL
+Git diff check: PASS/FAIL
+```
+
+## 10. Deferred Work
+
+Clearly list what should move to **Milestone 5** rather than implementing it now.
+
+## 11. Recommendation for Milestone 5
+
+Based on the actual completed system, recommend the next Agentic AI phase rather than inventing one before inspecting the implementation.
+
+---
+
+## Critical Rule
+
+**Do not over-engineer Phase 4.9.**
+
+This phase is the bridge between:
+
+```text
+Milestone 4
+Advanced Agentic SEO Lifecycle
+```
+
+and:
+
+```text
+Milestone 5
+Advanced Autonomous Agent Intelligence
+```
+
+Finish the product gaps.
+
+Prove the complete lifecycle.
+
+Make the current system reliable.
+
+Make agent behavior measurable.
+
+Then stop.
+
+Do not start Milestone 5 implementation during Phase 4.9.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-02T13:19:16+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\gsc_intelligence.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\gsc_intelligence.py (LANGUAGE_PYTHON)
+Running terminal commands:
+- python manage.py runserver (in c:\Users\bizra\Documents\doxarank\backend, running for 42m45s)
+- python manage.py runserver (in c:\Users\bizra\Documents\doxarank\backend, running for 41m22s)
+- npm run dev (in c:\Users\bizra\Documents\doxarank\dashboard, running for 40m27s)
+</ADDITIONAL_METADATA>
+
+======================================================================
+CONV: f6787b48-4216-4b2b-85f0-3ce8df19c18c | KW: original srs | File: C:\Users\bizra\.gemini\antigravity-ide\brain\f6787b48-4216-4b2b-85f0-3ce8df19c18c\.system_generated\logs\transcript_full.jsonl | Line: 876
+======================================================================
+<USER_REQUEST>
+# Phase 4.9 — Production Integration Completion, E2E Validation & Agent Reliability
+
+## Objective
+
+Implement **Phase 4.9 of DoxaRank**.
+
+This phase is NOT about adding another major Agentic AI capability.
+
+The purpose is to:
+
+1. Reconcile the current implementation against the **original DoxaRank SRS**.
+2. Close the highest-value remaining SRS/product gaps.
+3. Validate the complete Agentic SEO lifecycle end-to-end.
+4. Harden the existing agent architecture for realistic failures.
+5. Strengthen production security and reliability.
+6. Introduce a foundational Agent Evaluation layer.
+7. Prepare DoxaRank for Milestone 5 — Advanced Agentic Intelligence.
+
+The project must remain an **Ethiopia-first SEO SaaS enhanced by Agentic AI**, not become an AI-only research project.
+
+---
+
+# IMPORTANT — READ BEFORE CODING
+
+## 1. Inspect the existing system first
+
+Before modifying code:
+
+* Inspect the complete repository structure.
+* Inspect the original DoxaRank SRS available in the project/context.
+* Inspect Milestones 1–4 and all completed Phase 4.x implementations.
+* Inspect:
+
+  * `ToolRegistry`
+  * ReAct runtime
+  * AgentRun / AgentStep / AgentToolCall
+  * specialized agents
+  * SEO Supervisor
+  * MCP integration
+  * SEO action governance
+  * action planner
+  * action verifier
+  * outcome measurement
+  * adaptive strategy
+  * Celery tasks
+  * Redis usage
+  * WebSocket/event architecture
+  * external integrations
+  * existing tests
+  * frontend agent UI
+* Identify what is actually implemented rather than assuming the previous plans are accurate.
+
+DO NOT immediately start coding.
+
+First create:
+
+`docs/phase_4_9_gap_analysis.md`
+
+containing:
+
+| Area          | Original SRS Requirement | Current Implementation | Status                   | Gap | Priority        |
+| ------------- | ------------------------ | ---------------------- | ------------------------ | --- | --------------- |
+| Core SEO      | ...                      | ...                    | Complete/Partial/Missing | ... | High/Medium/Low |
+| Analytics     | ...                      | ...                    | ...                      | ... | ...             |
+| Rank tracking | ...                      | ...                    | ...                      | ... | ...             |
+| Crawler       | ...                      | ...                    | ...                      | ... | ...             |
+| CMS           | ...                      | ...                    | ...                      | ... | ...             |
+| Reporting     | ...                      | ...                    | ...                      | ... | ...             |
+| Billing       | ...                      | ...                    | ...                      | ... | ...             |
+| Agentic AI    | ...                      | ...                    | ...                      | ... | ...             |
+| MCP           | ...                      | ...                    | ...                      | ... | ...             |
+
+Do not implement speculative features before this audit.
+
+---
+
+# 2. Preserve the current architecture
+
+The following are architectural invariants.
+
+### Tool architecture
+
+`ToolRegistry` remains the central execution gateway.
+
+Do NOT replace it.
+
+### ReAct
+
+Do NOT rewrite the existing ReAct runtime.
+
+Phase 4.9 should improve reliability around it rather than replace it.
+
+### MCP
+
+MCP remains the interoperability layer.
+
+Do NOT turn every internal tool into MCP.
+
+Do NOT bypass:
+
+* ToolRegistry
+* permissions
+* tenant isolation
+* validation
+* telemetry
+* Human-in-the-Loop approval
+
+### Human approval
+
+All existing mutation governance remains intact.
+
+Never introduce an autonomous mutation path that bypasses human approval.
+
+### Specialized agents
+
+Preserve:
+
+* Research Agent
+* Investigation Agent
+* Strategy Agent
+* Action Agent
+* Verification Agent
+* Supervisor
+
+Do not merge them back into one giant agent.
+
+---
+
+# Phase 4.9 Structure
+
+Implement Phase 4.9 in the following sequence:
+
+## 4.9.1 — SRS Gap Analysis & Priority Closure
+
+## 4.9.2 — Full Agentic E2E Workflow
+
+## 4.9.3 — Agent Reliability & Failure Recovery
+
+## 4.9.4 — Production Security & Integration Hardening
+
+## 4.9.5 — Agent Evaluation Foundation
+
+## 4.9.6 — Production Readiness Verification
+
+Do not move to the next section until the previous section has been verified.
+
+---
+
+# 4.9.1 — SRS Gap Analysis & Priority Closure
+
+After creating the gap analysis, classify remaining requirements into:
+
+### P0 — Required for core product
+
+Must be implemented in Phase 4.9 if missing.
+
+### P1 — Important product capability
+
+Implement if reasonably scoped.
+
+### P2 — Future product capability
+
+Document and defer.
+
+### P3 — Outside current milestone
+
+Explicitly defer.
+
+Prioritize the original SRS over speculative AI features.
+
+Potential areas to verify against the SRS include:
+
+* multi-project workspace
+* SEO keyword management
+* Amharic/Fidel normalization
+* ranking history
+* Google Search Console
+* GA4
+* Microsoft Clarity
+* GTM
+* live `google.com.et` ranking
+* on-page crawler
+* technical SEO issues
+* competitor snapshots
+* recommendations
+* content generation
+* WordPress/CMS integration
+* white-label reports
+* subscription/tier enforcement
+* Doxa Payments
+* DataForSEO integration
+* production security
+
+Only implement items that are actually missing or materially incomplete.
+
+Do NOT rebuild existing functionality.
+
+---
+
+# 4.9.2 — Full Agentic E2E Workflow
+
+Create a complete end-to-end workflow test demonstrating the existing architecture.
+
+The target lifecycle is:
+
+```text
+User Goal
+   ↓
+SEO Supervisor
+   ↓
+Research Agent
+   ↓
+Evidence Collection
+   ↓
+Investigation Agent
+   ↓
+Root Cause Analysis
+   ↓
+Strategy Agent
+   ↓
+SEO Action Plan
+   ↓
+Risk Classification
+   ↓
+Human Approval
+   ↓
+Action Agent
+   ↓
+External Connector / Tool
+   ↓
+Execution Result
+   ↓
+Verification Agent
+   ↓
+Technical + SEO Verification
+   ↓
+Outcome Measurement
+   ↓
+Historical Learning
+   ↓
+Adaptive Strategy
+```
+
+Build this as a realistic integration test using controlled mocks/test fixtures where external services are unavailable.
+
+The E2E workflow must demonstrate:
+
+* agent routing
+* tool selection
+* ToolRegistry execution
+* MCP tool usage where appropriate
+* evidence accumulation
+* investigation
+* strategy
+* planning
+* approval gating
+* execution
+* verification
+* measurement
+* learning
+
+The workflow must NOT bypass individual governance layers simply to make the test pass.
+
+Create a dedicated test suite such as:
+
+`SEOAgentEndToEndWorkflowTests`
+
+Cover at minimum:
+
+1. Successful autonomous investigation.
+2. Action requiring human approval.
+3. Human rejection.
+4. Approved action execution.
+5. Execution failure.
+6. Verification failure.
+7. Successful outcome measurement.
+8. Learning/adaptive strategy update.
+9. MCP tool failure during investigation.
+10. External integration failure.
+
+---
+
+# 4.9.3 — Agent Reliability & Failure Recovery
+
+Audit the current agent runtime and implement missing reliability controls.
+
+Handle at minimum:
+
+### LLM failure
+
+* timeout
+* malformed response
+* unavailable provider
+* invalid tool call
+
+### Tool failure
+
+* timeout
+* malformed result
+* unexpected exception
+* unavailable tool
+
+### MCP failure
+
+* server unavailable
+* tool unavailable
+* malformed schema
+* malformed result
+* authorization failure
+* timeout
+
+### External API failure
+
+Examples:
+
+* GSC
+* SERP
+* CMS
+* crawler
+* analytics provider
+
+### Agent behavior failure
+
+Handle:
+
+* repeated tool calls
+* excessive iterations
+* invalid tool arguments
+* impossible plans
+* contradictory observations
+* empty evidence
+* failed verification
+
+Introduce bounded controls where missing:
+
+* max agent iterations
+* execution timeouts
+* retry policies
+* exponential backoff where appropriate
+* failure classification
+* safe termination
+* partial-result handling
+* idempotency for executable actions
+* correlation IDs
+* structured error results
+
+Do NOT silently retry dangerous mutations.
+
+---
+
+# 4.9.4 — Production Security & Integration Hardening
+
+Perform a security review of the complete Agentic AI execution path.
+
+Verify:
+
+```text
+User
+ ↓
+Project ownership
+ ↓
+Agent authorization
+ ↓
+Tool authorization
+ ↓
+MCP authorization
+ ↓
+External credential access
+ ↓
+Execution
+```
+
+Audit:
+
+### Tenant isolation
+
+Ensure one user/project cannot access another project's:
+
+* rankings
+* GSC data
+* audit results
+* actions
+* outcomes
+* agent runs
+* memories
+* MCP configuration
+
+### Credentials
+
+Audit storage and handling of:
+
+* OAuth tokens
+* CMS credentials
+* API keys
+* MCP credentials
+
+Secrets must never appear in:
+
+* agent prompts
+* tool results
+* logs
+* WebSocket events
+* error messages
+* frontend responses
+
+### Tool security
+
+Validate:
+
+* input schemas
+* output schemas
+* authorization
+* project ownership
+* allowed tools
+* dangerous parameters
+
+### MCP security
+
+Preserve:
+
+* server allowlists
+* tool allowlists
+* read-only enforcement
+* agent authorization
+* tenant isolation
+* timeout boundaries
+* output validation
+
+### External services
+
+Verify:
+
+* timeout handling
+* rate limits
+* retry behavior
+* failure isolation
+* credential boundaries
+
+Do not add arbitrary remote MCP servers during this phase.
+
+---
+
+# 4.9.5 — Agent Evaluation Foundation
+
+Introduce a small but extensible Agent Evaluation layer.
+
+Do NOT build a huge evaluation platform.
+
+The purpose is to establish the foundation for Milestone 5.
+
+Create a structure capable of evaluating an AgentRun using dimensions such as:
+
+```text
+Task Success
+Tool Selection
+Evidence Quality
+Reasoning Progress
+Safety Compliance
+Action Correctness
+Verification Success
+Outcome Quality
+Efficiency
+```
+
+A possible model/service structure is:
+
+`SEOAgentEvaluationService`
+
+and, if appropriate after inspecting the architecture:
+
+`AgentEvaluation`
+
+Store enough information to evaluate an agent trajectory without storing secrets.
+
+At minimum calculate:
+
+* success/failure
+* number of steps
+* number of tool calls
+* failed tool calls
+* execution duration
+* approval required
+* approval result
+* action execution result
+* verification result
+* outcome result
+
+Do not attempt to automatically judge hidden chain-of-thought.
+
+Evaluate observable behavior, tool trajectories, evidence, outputs, safety and outcomes.
+
+Add a tool or API only if it naturally fits the existing architecture.
+
+---
+
+# 4.9.6 — Production Readiness Verification
+
+After implementation, perform a complete regression pass.
+
+Run:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check
+python manage.py test
+git diff --check
+```
+
+For the dashboard:
+
+```bash
+npm run build
+```
+
+Also run the relevant focused test suites for:
+
+* action governance
+* action planning
+* verification
+* outcomes
+* adaptive strategy
+* orchestration
+* MCP
+* E2E agent workflows
+* evaluation
+* security/tenant isolation
+
+No existing test suite should regress.
+
+---
+
+# Frontend Requirements
+
+Only add frontend functionality where it is necessary to expose Phase 4.9 functionality.
+
+Possible additions:
+
+### Agent reliability status
+
+Show:
+
+* running
+* completed
+* failed
+* partially completed
+* waiting for approval
+
+### E2E agent timeline
+
+Display the existing lifecycle:
+
+```text
+Research
+→ Investigation
+→ Strategy
+→ Plan
+→ Approval
+→ Execution
+→ Verification
+→ Outcome
+```
+
+### Evaluation summary
+
+If appropriate, show:
+
+* task status
+* number of steps
+* tool calls
+* execution status
+* verification status
+* outcome status
+
+Keep this consistent with the existing dashboard design.
+
+Do NOT build a large analytics dashboard for agent evaluation in Phase 4.9.
+
+---
+
+# Documentation
+
+Update/create:
+
+`docs/phase_4_9_gap_analysis.md`
+
+`docs/phase_4_9_e2e_workflows.md`
+
+`docs/phase_4_9_agent_reliability.md`
+
+`docs/phase_4_9_evaluation.md`
+
+Also update existing architecture documentation where necessary.
+
+Documentation must clearly distinguish:
+
+### Product layer
+
+DoxaRank SEO functionality.
+
+### Agent layer
+
+Reasoning and task execution.
+
+### Tool layer
+
+Capabilities available to agents.
+
+### MCP layer
+
+External capability interoperability.
+
+### Governance layer
+
+Permissions and Human-in-the-Loop.
+
+### Evaluation layer
+
+Measurement of agent behavior and outcomes.
+
+---
+
+# What NOT to implement in Phase 4.9
+
+Do NOT implement these unless the SRS-gap audit proves one is a required existing product feature:
+
+* full autonomous mutation without approval
+* unrestricted remote MCP servers
+* agent marketplace
+* agent-to-agent open federation
+* advanced vector memory
+* autonomous long-running background agents
+* complex multi-agent debate
+* self-modifying agents
+* fully autonomous publishing
+* arbitrary external account access
+* distributed MCP infrastructure
+* new model-provider architecture
+* massive observability platform
+
+These belong to future Milestone 5/6 work.
+
+---
+
+# Learning Objective
+
+Phase 4.9 should teach and demonstrate the difference between:
+
+```text
+SRS Feature
+    ↓
+Software Capability
+    ↓
+Tool
+    ↓
+Agent Reasoning
+    ↓
+Agent Orchestration
+    ↓
+Governance
+    ↓
+External Interoperability
+    ↓
+Reliability
+    ↓
+Evaluation
+```
+
+The goal is not simply to add more code.
+
+The goal is to make the current Agentic SEO system **reliable, measurable and production-oriented**.
+
+---
+
+# Definition of Done
+
+Phase 4.9 is complete only when:
+
+### SRS
+
+* [ ] Original SRS has been audited against the actual repository.
+* [ ] Remaining requirements are classified P0/P1/P2/P3.
+* [ ] High-priority missing product capabilities are implemented or explicitly documented.
+
+### Agent
+
+* [ ] Complete E2E agent workflow works.
+* [ ] Supervisor routing works.
+* [ ] Specialized agents work together.
+* [ ] ToolRegistry remains central.
+* [ ] ReAct remains intact.
+* [ ] Human approval remains mandatory for mutations.
+
+### MCP
+
+* [ ] Existing MCP integration remains functional.
+* [ ] MCP failures are handled safely.
+* [ ] MCP cannot bypass authorization.
+* [ ] MCP cannot bypass tenant isolation.
+
+### Reliability
+
+* [ ] LLM failures handled.
+* [ ] Tool failures handled.
+* [ ] MCP failures handled.
+* [ ] External API failures handled.
+* [ ] Agent loops bounded.
+* [ ] Dangerous operations are not automatically retried.
+* [ ] Partial failures are represented clearly.
+
+### Security
+
+* [ ] Tenant isolation verified.
+* [ ] Secrets protected.
+* [ ] Tool authorization verified.
+* [ ] MCP authorization verified.
+* [ ] External credentials protected.
+* [ ] Sensitive data excluded from logs/events/responses.
+
+### Evaluation
+
+* [ ] Agent evaluation foundation exists.
+* [ ] Agent runs can be evaluated using observable behavior.
+* [ ] Success/failure and trajectory metrics are recorded.
+* [ ] Evaluation does not depend on exposing hidden chain-of-thought.
+
+### Verification
+
+* [ ] `python manage.py check` passes.
+* [ ] `python manage.py makemigrations --check` passes.
+* [ ] Full backend tests pass.
+* [ ] E2E tests pass.
+* [ ] MCP tests pass.
+* [ ] Security/tenant tests pass.
+* [ ] Dashboard build passes.
+* [ ] `git diff --check` passes.
+
+---
+
+# FINAL REPORT
+
+At completion, provide a concise report containing:
+
+## 1. SRS Gap Summary
+
+| Area | Before | After |
+| ---- | ------ | ----- |
+
+## 2. Files Created/Modified
+
+List every important file.
+
+## 3. Architecture Changes
+
+Explain only meaningful architectural changes.
+
+## 4. E2E Workflow
+
+Show the final execution flow.
+
+## 5. Reliability Improvements
+
+List failure modes now handled.
+
+## 6. Security Improvements
+
+List the important security boundaries verified.
+
+## 7. Agent Evaluation
+
+Explain what is now measurable.
+
+## 8. Tests
+
+Report exact counts:
+
+```text
+Focused tests: X/X
+Full regression: X/X
+E2E tests: X/X
+MCP tests: X/X
+Security tests: X/X
+```
+
+## 9. Verification
+
+```text
+Django check: PASS/FAIL
+Migration check: PASS/FAIL
+Frontend build: PASS/FAIL
+Git diff check: PASS/FAIL
+```
+
+## 10. Deferred Work
+
+Clearly list what should move to **Milestone 5** rather than implementing it now.
+
+## 11. Recommendation for Milestone 5
+
+Based on the actual completed system, recommend the next Agentic AI phase rather than inventing one before inspecting the implementation.
+
+---
+
+## Critical Rule
+
+**Do not over-engineer Phase 4.9.**
+
+This phase is the bridge between:
+
+```text
+Milestone 4
+Advanced Agentic SEO Lifecycle
+```
+
+and:
+
+```text
+Milestone 5
+Advanced Autonomous Agent Intelligence
+```
+
+Finish the product gaps.
+
+Prove the complete lifecycle.
+
+Make the current system reliable.
+
+Make agent behavior measurable.
+
+Then stop.
+
+Do not start Milestone 5 implementation during Phase 4.9.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-02T13:19:16+03:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\gsc_intelligence.py (LANGUAGE_PYTHON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\bizra\Documents\doxarank\backend\apps\seo\services\gsc_intelligence.py (LANGUAGE_PYTHON)
+Running terminal commands:
+- python manage.py runserver (in c:\Users\bizra\Documents\doxarank\backend, running for 42m45s)
+- python manage.py runserver (in c:\Users\bizra\Documents\doxarank\backend, running for 41m22s)
+- npm run dev (in c:\Users\bizra\Documents\doxarank\dashboard, running for 40m27s)
+</ADDITIONAL_METADATA>

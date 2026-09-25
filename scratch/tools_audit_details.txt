@@ -1,0 +1,51 @@
+
+============================== ### 7. SERP Snippet ==============================
+### 7. SERP Snippet Preview / Pixel-Length Checker
+- **Status:** 🔴 MISSING
+- **Evidence:** No pixel-length calculation algorithms (e.g. Arial 600px desktop title limit, 960px snippet limit) exist in frontend or backend.
+- **Missing / Remaining Work:** Implement an interactive Google SERP simulator component with exact pixel length calculation for desktop (600px max title, ~960px description) and mobile (simulating Google mobile search cards) with real-time truncation warning indicators.
+
+### 8. PageSpeed / Core Web Vitals Analyzer
+- **Status:** 🔴 MISSING
+- **Evidence:** No Google PageSpeed Insights API client, Lighthouse runner, or Core Web Vitals (LCP, FID/INP, CLS) metric ingestion exists in backend or frontend.
+- **Missing / Remaining Work:** Integrate Google PageSpeed Insights REST API (`https://www.googleapis.com/pagespeedonline/v5/runPagespeed`) to fetch mobile/desktop performance, accessibility, best practices, SEO scores, and CrUX field data.
+
+### 9. Single-Page Broken Link Checker
+- **Status:** 🟡 PARTIAL
+- **Evidence:** [backend/apps/seo/services/live_site_crawler.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/services/live_site_crawler.py#L540-L600) extracts all links from HTML and records 404 / 500 status codes as `AuditIssue` items during full site audits. However, there is no standalone single-page link checker API or interactive UI tool.
+- **Missing / Remaining Work:** Create a lightweight single-URL endpoint (`POST /api/seo/tools/broken-links/`)
+
+============================== ### 8. PageSpeed ==============================
+### 8. PageSpeed / Core Web Vitals Analyzer
+- **Status:** 🔴 MISSING
+- **Evidence:** No Google PageSpeed Insights API client, Lighthouse runner, or Core Web Vitals (LCP, FID/INP, CLS) metric ingestion exists in backend or frontend.
+- **Missing / Remaining Work:** Integrate Google PageSpeed Insights REST API (`https://www.googleapis.com/pagespeedonline/v5/runPagespeed`) to fetch mobile/desktop performance, accessibility, best practices, SEO scores, and CrUX field data.
+
+### 9. Single-Page Broken Link Checker
+- **Status:** 🟡 PARTIAL
+- **Evidence:** [backend/apps/seo/services/live_site_crawler.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/services/live_site_crawler.py#L540-L600) extracts all links from HTML and records 404 / 500 status codes as `AuditIssue` items during full site audits. However, there is no standalone single-page link checker API or interactive UI tool.
+- **Missing / Remaining Work:** Create a lightweight single-URL endpoint (`POST /api/seo/tools/broken-links/`) that scans a single target webpage, tests all internal/external links concurrently, and returns broken links, anchor text, and HTTP status codes in an interactive table.
+
+### 10. Amharic Fidel Keyword Normalizer
+- **Status:** 🟡 PARTIAL
+- **Evidence:** 
+  - Backend service: [backend/apps/seo/services/amharic_normalizer.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/services/amharic_normalizer.py#L68-L103) (`normalize_amharic_query`, `are_keywords_equivalent`, `GEEZ_HOMOPHO
+NOT FOUND: ### 9. Single-page
+
+============================== ### 10. Amharic ==============================
+### 10. Amharic Fidel Keyword Normalizer
+- **Status:** 🟡 PARTIAL
+- **Evidence:** 
+  - Backend service: [backend/apps/seo/services/amharic_normalizer.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/services/amharic_normalizer.py#L68-L103) (`normalize_amharic_query`, `are_keywords_equivalent`, `GEEZ_HOMOPHONE_MAP` covering Ha, Se, A, Tse homophones across 1st-7th orders, plus Ethiopic punctuation collapsing).
+  - Model integration: [backend/apps/seo/models.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/models.py#L88-L94) exposes `Keyword.normalized_keyword`.
+  - Tests: [backend/apps/seo/tests.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/tests.py#L11416-L11450) validates with 22 dedicated test assertions.
+  - **Gap:** No standalone public API endpoint (`POST /api/seo/tools/amharic-normalizer/`) and no dedicated interactive UI tool for users to paste Amharic text and inspect normalized forms.
+- **Missing / Remaining Work:** Add a dedicated public API endpoint and an interactive frontend widget demonstrating Amharic Fidel homophone normalization with before/after diffs.
+
+---
+
+## 6. SEO Tracking & Analytics
+
+| Requirement | Status | Evidence | Missing / Remaining Work |
+| :--- | :--- | :--- | :--- |
+| **Track Target Keywords** | 🟢 COMPLETE | [backend/apps/seo/models.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/models.py#L26-L86), [backend/apps/seo/views.py](file:///c:/Users/bizra/Documents/doxarank/backend/apps/seo/
