@@ -135,3 +135,65 @@ class HreflangInputSerializer(serializers.Serializer):
         max_length=1000,
         error_messages={'invalid': 'x-default must be a valid HTTP or HTTPS URL.'}
     )
+
+
+class SerpSnippetInputSerializer(serializers.Serializer):
+    title = serializers.CharField(
+        required=True,
+        max_length=500,
+        trim_whitespace=True,
+        error_messages={'required': 'Page title is required.', 'blank': 'Page title cannot be blank.'}
+    )
+    description = serializers.CharField(
+        required=True,
+        max_length=2000,
+        trim_whitespace=True,
+        error_messages={'required': 'Meta description is required.', 'blank': 'Meta description cannot be blank.'}
+    )
+    url = serializers.URLField(
+        required=True,
+        max_length=1000,
+        error_messages={'required': 'Page URL is required.', 'invalid': 'Page URL must be a valid HTTP or HTTPS URL.'}
+    )
+    device = serializers.ChoiceField(
+        choices=['desktop', 'mobile'],
+        default='desktop',
+        error_messages={'invalid_choice': "Device must be either 'desktop' or 'mobile'."}
+    )
+
+
+class PageSpeedInputSerializer(serializers.Serializer):
+    url = serializers.URLField(
+        required=True,
+        max_length=1000,
+        error_messages={'required': 'Target webpage URL is required.', 'invalid': 'Target URL must be a valid HTTP or HTTPS URL.'}
+    )
+    strategy = serializers.ChoiceField(
+        choices=['mobile', 'desktop'],
+        default='mobile',
+        error_messages={'invalid_choice': "Strategy must be either 'mobile' or 'desktop'."}
+    )
+
+
+class BrokenLinksInputSerializer(serializers.Serializer):
+    url = serializers.URLField(
+        required=True,
+        max_length=1000,
+        error_messages={'required': 'Target webpage URL is required.', 'invalid': 'Target URL must be a valid HTTP or HTTPS URL.'}
+    )
+
+
+class AmharicNormalizerInputSerializer(serializers.Serializer):
+    text = serializers.CharField(
+        required=True,
+        max_length=2000,
+        trim_whitespace=True,
+        error_messages={'required': 'Input text/keyword is required.', 'blank': 'Input text/keyword cannot be blank.'}
+    )
+    comparison_text = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=2000,
+        trim_whitespace=True
+    )
+

@@ -7,10 +7,24 @@ import {
   type RobotsToolResult,
   type SitemapToolResult,
   type HreflangResult,
+  type SerpSnippetResult,
+  type PageSpeedResult,
+  type BrokenLinksResult,
+  type AmharicNormalizerResult,
   type SEOToolsQuotaStatus,
 } from '../api/seoTools';
 
-type ToolTab = 'meta' | 'schema' | 'social' | 'robots' | 'sitemap' | 'hreflang';
+type ToolTab =
+  | 'meta'
+  | 'schema'
+  | 'social'
+  | 'robots'
+  | 'sitemap'
+  | 'hreflang'
+  | 'serp'
+  | 'pagespeed'
+  | 'broken_links'
+  | 'amharic';
 
 export const SEOToolsPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ToolTab>('meta');
@@ -135,6 +149,44 @@ export const SEOToolsPanel: React.FC = () => {
   const [hreflangResult, setHreflangResult] = useState<HreflangResult | null>(null);
   const [hreflangLoading, setHreflangLoading] = useState(false);
   const [hreflangError, setHreflangError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 7. SERP Snippet Preview State
+  // =========================================================================
+  const [serpTitle, setSerpTitle] = useState('DoxaRank — Ethiopia-First Autonomous SEO Platform');
+  const [serpDesc, setSerpDesc] = useState('Track keyword rankings on google.com.et, analyze Amharic Fidel queries, audit technical SEO health, and deploy AI-driven content optimization.');
+  const [serpUrl, setSerpUrl] = useState('https://doxarank.com/ethiopia-seo');
+  const [serpDevice, setSerpDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [serpResult, setSerpResult] = useState<SerpSnippetResult | null>(null);
+  const [serpLoading, setSerpLoading] = useState(false);
+  const [serpError, setSerpError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 8. PageSpeed / Core Web Vitals State
+  // =========================================================================
+  const [psUrl, setPsUrl] = useState('https://example.com');
+  const [psStrategy, setPsStrategy] = useState<'mobile' | 'desktop'>('mobile');
+  const [psResult, setPsResult] = useState<PageSpeedResult | null>(null);
+  const [psLoading, setPsLoading] = useState(false);
+  const [psError, setPsError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 9. Single-Page Broken Link Checker State
+  // =========================================================================
+  const [blUrl, setBlUrl] = useState('');
+  const [blFilter, setBlFilter] = useState<'all' | 'broken'>('all');
+  const [blResult, setBlResult] = useState<BrokenLinksResult | null>(null);
+  const [blLoading, setBlLoading] = useState(false);
+  const [blError, setBlError] = useState<string | null>(null);
+
+  // =========================================================================
+  // 10. Amharic Fidel Keyword Normalizer State
+  // =========================================================================
+  const [amharicText, setAmharicText] = useState('ዐዲስ አበባ ውስጥ የሕክምና ሐኪም');
+  const [amharicComparison, setAmharicComparison] = useState('አዲስ አበባ ውስጥ የህክምና ሀኪም');
+  const [amharicResult, setAmharicResult] = useState<AmharicNormalizerResult | null>(null);
+  const [amharicLoading, setAmharicLoading] = useState(false);
+  const [amharicError, setAmharicError] = useState<string | null>(null);
 
   // =========================================================================
   // Quota Status Management
@@ -409,6 +461,101 @@ export const SEOToolsPanel: React.FC = () => {
     setHreflangError(null);
   };
 
+  // --- SERP SNIPPET HANDLERS ---
+  const handleAnalyzeSerp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSerpLoading(true);
+    setSerpError(null);
+    try {
+      const res = await seoToolsApi.analyzeSerpSnippet({
+        title: serpTitle,
+        description: serpDesc,
+        url: serpUrl,
+        device: serpDevice,
+      });
+      setSerpResult(res);
+      refreshQuota();
+    } catch (err: any) {
+      setSerpError(err?.data?.detail || err?.data?.error || err?.data?.title?.[0] || 'Failed to analyze SERP snippet.');
+    } finally {
+      setSerpLoading(false);
+    }
+  };
+
+  const handleResetSerp = () => {
+    setSerpResult(null);
+    setSerpError(null);
+  };
+
+  // --- PAGESPEED HANDLERS ---
+  const handleAnalyzePageSpeed = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setPsLoading(true);
+    setPsError(null);
+    try {
+      const res = await seoToolsApi.analyzePageSpeed({
+        url: psUrl,
+        strategy: psStrategy,
+      });
+      setPsResult(res);
+      refreshQuota();
+    } catch (err: any) {
+      setPsError(err?.data?.error || err?.data?.detail || 'PageSpeed analysis failed. Ensure target URL is public and valid.');
+    } finally {
+      setPsLoading(false);
+    }
+  };
+
+  const handleResetPageSpeed = () => {
+    setPsResult(null);
+    setPsError(null);
+  };
+
+  // --- BROKEN LINKS HANDLERS ---
+  const handleCheckBrokenLinks = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setBlLoading(true);
+    setBlError(null);
+    try {
+      const res = await seoToolsApi.checkBrokenLinks({ url: blUrl });
+      setBlResult(res);
+      refreshQuota();
+    } catch (err: any) {
+      setBlError(err?.data?.error || err?.data?.detail || 'Failed to scan page for broken links. Target must be a public HTML webpage.');
+    } finally {
+      setBlLoading(false);
+    }
+  };
+
+  const handleResetBrokenLinks = () => {
+    setBlResult(null);
+    setBlError(null);
+  };
+
+  // --- AMHARIC NORMALIZER HANDLERS ---
+  const handleNormalizeAmharic = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAmharicLoading(true);
+    setAmharicError(null);
+    try {
+      const res = await seoToolsApi.normalizeAmharic({
+        text: amharicText,
+        comparison_text: amharicComparison || undefined,
+      });
+      setAmharicResult(res);
+      refreshQuota();
+    } catch (err: any) {
+      setAmharicError(err?.data?.error || err?.data?.detail || 'Failed to normalize Amharic text.');
+    } finally {
+      setAmharicLoading(false);
+    }
+  };
+
+  const handleResetAmharic = () => {
+    setAmharicResult(null);
+    setAmharicError(null);
+  };
+
   return (
     <section id="seo-tools-section" style={sectionCardStyle}>
       {/* Section Header */}
@@ -422,7 +569,7 @@ export const SEOToolsPanel: React.FC = () => {
             <span style={toolBadgeStyle}>BASIC SEO TOOLS</span>
           </div>
           <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-            Original DoxaRank standalone utility tools for meta tags, Schema markup, social previews, robots, sitemaps, and Ethiopian hreflang localization.
+            Original DoxaRank standalone utility tools for meta tags, Schema markup, social previews, robots, sitemaps, hreflang, SERP preview, PageSpeed, broken links, and Amharic Fidel.
           </p>
         </div>
 
@@ -432,7 +579,7 @@ export const SEOToolsPanel: React.FC = () => {
             <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
               Daily Tool Usage ({quotaStatus.plan_code})
             </span>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '4px', fontSize: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', fontSize: '11px', flexWrap: 'wrap' }}>
               <span>Meta: <strong>{quotaStatus.tools.meta_tag_generator?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
               <span style={{ color: '#cbd5e1' }}>|</span>
               <span>Schema: <strong>{quotaStatus.tools.schema_generator?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
@@ -444,6 +591,14 @@ export const SEOToolsPanel: React.FC = () => {
               <span>Sitemap: <strong>{quotaStatus.tools.xml_sitemap_tool?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
               <span style={{ color: '#cbd5e1' }}>|</span>
               <span>hreflang: <strong>{quotaStatus.tools.hreflang_builder?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>SERP: <strong>{quotaStatus.tools.serp_snippet_checker?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>PageSpeed: <strong>{quotaStatus.tools.pagespeed_analyzer?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>Broken: <strong>{quotaStatus.tools.broken_link_checker?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span>Amharic: <strong>{quotaStatus.tools.amharic_normalizer?.used_today ?? 0}</strong>{quotaStatus.daily_limit !== 'unlimited' && `/${quotaStatus.daily_limit}`}</span>
             </div>
           </div>
         )}
@@ -522,6 +677,54 @@ export const SEOToolsPanel: React.FC = () => {
           }}
         >
           🌐 hreflang Builder
+        </button>
+        <button
+          id="seo-tool-tab-serp"
+          onClick={() => setActiveTab('serp')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'serp' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'serp' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'serp' ? 700 : 500,
+          }}
+        >
+          🔍 SERP Snippet
+        </button>
+        <button
+          id="seo-tool-tab-pagespeed"
+          onClick={() => setActiveTab('pagespeed')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'pagespeed' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'pagespeed' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'pagespeed' ? 700 : 500,
+          }}
+        >
+          ⚡ PageSpeed & CWV
+        </button>
+        <button
+          id="seo-tool-tab-broken-links"
+          onClick={() => setActiveTab('broken_links')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'broken_links' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'broken_links' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'broken_links' ? 700 : 500,
+          }}
+        >
+          🔗 Broken Links
+        </button>
+        <button
+          id="seo-tool-tab-amharic"
+          onClick={() => setActiveTab('amharic')}
+          style={{
+            ...tabButtonStyle,
+            borderBottom: activeTab === 'amharic' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'amharic' ? '#1d4ed8' : '#64748b',
+            fontWeight: activeTab === 'amharic' ? 700 : 500,
+          }}
+        >
+          🇪🇹 Amharic Fidel
         </button>
       </div>
 
@@ -1664,6 +1867,765 @@ export const SEOToolsPanel: React.FC = () => {
                 <div style={placeholderBoxStyle}>
                   <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
                     Add English, Amharic, and Afaan Oromo variants to generate reciprocal hreflang annotations.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 7: SERP SNIPPET PREVIEW & PIXEL-LENGTH CHECKER */}
+      {/* ============================================================== */}
+      {activeTab === 'serp' && (
+        <div style={{ marginTop: '20px' }}>
+          {serpError && <div style={errorBannerStyle}>{serpError}</div>}
+          <div style={grid2ColStyle}>
+            <form onSubmit={handleAnalyzeSerp} style={formCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  SERP Snippet Inputs
+                </h4>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSerpDevice('desktop')}
+                    style={{
+                      ...presetBtnStyle,
+                      backgroundColor: serpDevice === 'desktop' ? '#2563eb' : '#f1f5f9',
+                      color: serpDevice === 'desktop' ? '#ffffff' : '#475569',
+                    }}
+                  >
+                    🖥️ Desktop
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSerpDevice('mobile')}
+                    style={{
+                      ...presetBtnStyle,
+                      backgroundColor: serpDevice === 'mobile' ? '#2563eb' : '#f1f5f9',
+                      color: serpDevice === 'mobile' ? '#ffffff' : '#475569',
+                    }}
+                  >
+                    📱 Mobile
+                  </button>
+                </div>
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Target URL <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  id="serp-input-url"
+                  type="url"
+                  value={serpUrl}
+                  onChange={(e) => setSerpUrl(e.target.value)}
+                  placeholder="https://example.com/page"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={labelStyle}>Page Title <span style={{ color: '#ef4444' }}>*</span></label>
+                  <span style={{ fontSize: '11px', color: serpTitle.length >= 30 && serpTitle.length <= 60 ? '#10b981' : '#f59e0b' }}>
+                    {serpTitle.length} chars (aim: 30–60)
+                  </span>
+                </div>
+                <input
+                  id="serp-input-title"
+                  type="text"
+                  value={serpTitle}
+                  onChange={(e) => setSerpTitle(e.target.value)}
+                  placeholder="Page title for search engines..."
+                  required
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={labelStyle}>Meta Description <span style={{ color: '#ef4444' }}>*</span></label>
+                  <span style={{ fontSize: '11px', color: serpDesc.length >= 70 && serpDesc.length <= 160 ? '#10b981' : '#f59e0b' }}>
+                    {serpDesc.length} chars (aim: 70–160)
+                  </span>
+                </div>
+                <textarea
+                  id="serp-input-desc"
+                  rows={4}
+                  value={serpDesc}
+                  onChange={(e) => setSerpDesc(e.target.value)}
+                  placeholder="Search snippet summary description..."
+                  required
+                  style={textareaStyle}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  id="btn-analyze-serp"
+                  type="submit"
+                  disabled={serpLoading}
+                  style={{ ...primaryBtnStyle, opacity: serpLoading ? 0.7 : 1 }}
+                >
+                  {serpLoading ? 'Simulating SERP...' : '🔍 Simulate Google SERP'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSerp}
+                  style={secondaryBtnStyle}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Result Card: Google Mockup & Pixel Progress */}
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  Google SERP Card Mockup ({serpDevice.toUpperCase()})
+                </h4>
+                {serpResult && (
+                  <button
+                    onClick={() => handleCopy(`${serpResult.rendered_title}\n${serpResult.url}\n${serpResult.rendered_description}`, 'serp')}
+                    style={copyBtnStyle}
+                  >
+                    {copiedKey === 'serp' ? '✓ Copied' : '📋 Copy Text'}
+                  </button>
+                )}
+              </div>
+
+              {serpResult ? (
+                <div>
+                  {/* Google SERP Card Preview */}
+                  <div
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #dadce0',
+                      borderRadius: serpDevice === 'mobile' ? '12px' : '8px',
+                      padding: '16px',
+                      maxWidth: serpDevice === 'mobile' ? '380px' : '650px',
+                      fontFamily: 'Arial, sans-serif',
+                      boxShadow: '0 1px 6px rgba(32, 33, 36, 0.1)',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    {/* Breadcrumb */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#202124', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '14px' }}>🌐</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90%' }}>
+                        {serpResult.breadcrumb || serpResult.url}
+                      </span>
+                    </div>
+                    {/* Title */}
+                    <div
+                      style={{
+                        fontSize: serpDevice === 'mobile' ? '18px' : '20px',
+                        lineHeight: 1.3,
+                        color: '#1a0dab',
+                        fontWeight: 400,
+                        cursor: 'pointer',
+                        marginBottom: '6px',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {serpResult.rendered_title}
+                    </div>
+                    {/* Description */}
+                    <div
+                      style={{
+                        fontSize: '14px',
+                        lineHeight: '1.58',
+                        color: '#4d5156',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {serpResult.rendered_description}
+                    </div>
+                  </div>
+
+                  {/* Pixel Width Progress Bars */}
+                  <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', marginBottom: '14px' }}>
+                    <div style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>Title Pixel Width</span>
+                        <span style={{ fontWeight: 700, color: serpResult.metrics.title_truncated ? '#ef4444' : '#10b981' }}>
+                          {serpResult.metrics.title_pixel_width}px / {serpResult.metrics.title_max_pixels}px
+                          {serpResult.metrics.title_truncated ? ' (Truncated)' : ' (Fits)'}
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.min(100, (serpResult.metrics.title_pixel_width / serpResult.metrics.title_max_pixels) * 100)}%`,
+                            backgroundColor: serpResult.metrics.title_truncated ? '#ef4444' : '#10b981',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>Description Pixel Width</span>
+                        <span style={{ fontWeight: 700, color: serpResult.metrics.description_truncated ? '#ef4444' : '#10b981' }}>
+                          {serpResult.metrics.description_pixel_width}px / {serpResult.metrics.description_max_pixels}px
+                          {serpResult.metrics.description_truncated ? ' (Truncated)' : ' (Fits)'}
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.min(100, (serpResult.metrics.description_pixel_width / serpResult.metrics.description_max_pixels) * 100)}%`,
+                            backgroundColor: serpResult.metrics.description_truncated ? '#ef4444' : '#10b981',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Warnings list */}
+                  {serpResult.warnings.length > 0 && (
+                    <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '6px', padding: '10px 12px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400e' }}>SERP Guidance:</span>
+                      <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '12px', color: '#b45309' }}>
+                        {serpResult.warnings.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Enter title, description, and URL, then click Simulate Google SERP to inspect exact pixel widths and search card rendering.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 8: PAGESPEED & CORE WEB VITALS */}
+      {/* ============================================================== */}
+      {activeTab === 'pagespeed' && (
+        <div style={{ marginTop: '20px' }}>
+          {psError && <div style={errorBannerStyle}>{psError}</div>}
+          <div style={grid2ColStyle}>
+            <form onSubmit={handleAnalyzePageSpeed} style={formCardStyle}>
+              <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                PageSpeed & Core Web Vitals Inputs
+              </h4>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Webpage URL <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  id="pagespeed-input-url"
+                  type="url"
+                  value={psUrl}
+                  onChange={(e) => setPsUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Strategy</label>
+                <select
+                  id="pagespeed-input-strategy"
+                  value={psStrategy}
+                  onChange={(e) => setPsStrategy(e.target.value as 'mobile' | 'desktop')}
+                  style={selectStyle}
+                >
+                  <option value="mobile">📱 Mobile (Moto G Power emulation, 4G throttling)</option>
+                  <option value="desktop">🖥️ Desktop (High-speed desktop)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  id="btn-analyze-pagespeed"
+                  type="submit"
+                  disabled={psLoading}
+                  style={{ ...primaryBtnStyle, opacity: psLoading ? 0.7 : 1 }}
+                >
+                  {psLoading ? 'Querying PageSpeed Insights...' : '⚡ Run PageSpeed Audit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetPageSpeed}
+                  style={secondaryBtnStyle}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Result Card: Category Scores & Core Web Vitals */}
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  PageSpeed & Core Web Vitals Results
+                </h4>
+                {psResult && (
+                  <button
+                    onClick={() => handleCopy(JSON.stringify(psResult, null, 2), 'pagespeed')}
+                    style={copyBtnStyle}
+                  >
+                    {copiedKey === 'pagespeed' ? '✓ Copied' : '📋 Copy JSON'}
+                  </button>
+                )}
+              </div>
+
+              {psResult ? (
+                <div>
+                  {/* Category Score Badges (0 - 100) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                    {[
+                      { label: 'Performance', score: psResult.scores.performance },
+                      { label: 'Accessibility', score: psResult.scores.accessibility },
+                      { label: 'Best Practices', score: psResult.scores.best_practices },
+                      { label: 'SEO', score: psResult.scores.seo },
+                    ].map((item, idx) => {
+                      const s = item.score ?? 0;
+                      const color = s >= 90 ? '#10b981' : s >= 50 ? '#f59e0b' : '#ef4444';
+                      const bg = s >= 90 ? '#ecfdf5' : s >= 50 ? '#fffbeb' : '#fef2f2';
+                      return (
+                        <div key={idx} style={{ textAlign: 'center', padding: '12px 6px', backgroundColor: bg, border: `1px solid ${color}40`, borderRadius: '8px' }}>
+                          <div style={{ fontSize: '22px', fontWeight: 800, color }}>{item.score !== null ? item.score : 'N/A'}</div>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginTop: '2px' }}>{item.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Core Web Vitals Metrics Grid */}
+                  <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                    Core Web Vitals Metrics
+                  </h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                      { label: 'LCP (Largest Contentful Paint)', data: psResult.core_web_vitals.lcp },
+                      { label: 'CLS (Cumulative Layout Shift)', data: psResult.core_web_vitals.cls },
+                      { label: 'FCP (First Contentful Paint)', data: psResult.core_web_vitals.fcp },
+                      { label: 'TTFB (Time to First Byte)', data: psResult.core_web_vitals.ttfb },
+                      { label: 'TBT (Total Blocking Time)', data: psResult.core_web_vitals.tbt },
+                      { label: 'FID / INP', data: psResult.core_web_vitals.fid_inp },
+                    ].filter((m) => m.data).map((m, i) => {
+                      const st = m.data?.status;
+                      const statusColor = st === 'good' ? '#10b981' : st === 'needs-improvement' ? '#f59e0b' : '#ef4444';
+                      return (
+                        <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px 10px', backgroundColor: '#f8fafc' }}>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{m.label}</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>{m.data?.display_value || 'N/A'}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: statusColor }}>
+                              {m.data?.status || 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Top Diagnostics / Opportunities */}
+                  {psResult.diagnostics.length > 0 && (
+                    <div>
+                      <h5 style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                        Top Performance Opportunities
+                      </h5>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {psResult.diagnostics.map((d, i) => (
+                          <div key={i} style={{ border: '1px solid #fed7aa', backgroundColor: '#fff7ed', borderRadius: '6px', padding: '8px 10px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: '#9a3412' }}>
+                              <span>{d.title}</span>
+                              {d.display_value && <span>{d.display_value}</span>}
+                            </div>
+                            <p style={{ margin: '2px 0 0 0', color: '#7c2d12', fontSize: '11px' }}>{d.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Enter a public webpage URL to evaluate live Core Web Vitals, category scores, and performance diagnostics.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 9: SINGLE-PAGE BROKEN LINK CHECKER */}
+      {/* ============================================================== */}
+      {activeTab === 'broken_links' && (
+        <div style={{ marginTop: '20px' }}>
+          {blError && <div style={errorBannerStyle}>{blError}</div>}
+          <div style={grid2ColStyle}>
+            <form onSubmit={handleCheckBrokenLinks} style={formCardStyle}>
+              <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                Single-Page Link Checker Inputs
+              </h4>
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Target Webpage URL <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  id="broken-links-input-url"
+                  type="url"
+                  value={blUrl}
+                  onChange={(e) => setBlUrl(e.target.value)}
+                  placeholder="https://example.com/blog/article"
+                  required
+                  style={inputStyle}
+                />
+                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  Lightweight, single-page scan. Strictly tests hyperlinks on this specific page with SSRF protection.
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  id="btn-scan-broken-links"
+                  type="submit"
+                  disabled={blLoading}
+                  style={{ ...primaryBtnStyle, opacity: blLoading ? 0.7 : 1 }}
+                >
+                  {blLoading ? 'Scanning Links...' : '🔗 Scan Page Links'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetBrokenLinks}
+                  style={secondaryBtnStyle}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Result Card: Summary & Link Table */}
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  Discovered Links & Reachability
+                </h4>
+                {blResult && (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setBlFilter('all')}
+                      style={{
+                        ...presetBtnStyle,
+                        backgroundColor: blFilter === 'all' ? '#2563eb' : '#f1f5f9',
+                        color: blFilter === 'all' ? '#ffffff' : '#475569',
+                      }}
+                    >
+                      All ({blResult.summary.total_links})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBlFilter('broken')}
+                      style={{
+                        ...presetBtnStyle,
+                        backgroundColor: blFilter === 'broken' ? '#ef4444' : '#f1f5f9',
+                        color: blFilter === 'broken' ? '#ffffff' : '#475569',
+                      }}
+                    >
+                      Broken ({blResult.summary.broken_links})
+                    </button>
+                    <button
+                      onClick={() => handleCopy(JSON.stringify(blResult, null, 2), 'broken_links')}
+                      style={copyBtnStyle}
+                    >
+                      {copiedKey === 'broken_links' ? '✓ Copied' : '📋 Copy JSON'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {blResult ? (
+                <div>
+                  {/* Summary Counters */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#f8fafc' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{blResult.summary.total_links}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>Total Links</div>
+                    </div>
+                    <div style={{ border: '1px solid #bbf7d0', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#f0fdf4' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#16a34a' }}>{blResult.summary.healthy_links}</div>
+                      <div style={{ fontSize: '11px', color: '#16a34a' }}>Healthy</div>
+                    </div>
+                    <div style={{ border: '1px solid #fecaca', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#fef2f2' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626' }}>{blResult.summary.broken_links}</div>
+                      <div style={{ fontSize: '11px', color: '#dc2626' }}>Broken</div>
+                    </div>
+                    <div style={{ border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#eff6ff' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#2563eb' }}>{blResult.summary.internal_links} / {blResult.summary.external_links}</div>
+                      <div style={{ fontSize: '11px', color: '#2563eb' }}>Int / Ext</div>
+                    </div>
+                  </div>
+
+                  {/* Links Table */}
+                  <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Status</th>
+                          <th style={{ padding: '6px 8px' }}>Anchor Text</th>
+                          <th style={{ padding: '6px 8px' }}>Destination URL</th>
+                          <th style={{ padding: '6px 8px' }}>Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {blResult.links
+                          .filter((l) => (blFilter === 'broken' ? l.is_broken : true))
+                          .map((link, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: link.is_broken ? '#fef2f2' : '#ffffff' }}>
+                              <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                                <span
+                                  style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    backgroundColor: link.is_broken ? '#fee2e2' : '#dcfce7',
+                                    color: link.is_broken ? '#991b1b' : '#166534',
+                                  }}
+                                >
+                                  {link.status_code ? `HTTP ${link.status_code}` : link.error_type || 'FAIL'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '6px 8px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {link.anchor_text}
+                              </td>
+                              <td style={{ padding: '6px 8px', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
+                                  {link.url}
+                                </a>
+                              </td>
+                              <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '10px', color: link.is_internal ? '#3b82f6' : '#64748b' }}>
+                                  {link.is_internal ? 'Internal' : 'External'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Enter a single webpage URL to scan its links and verify HTTP reachability in real time.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 10: AMHARIC FIDEL KEYWORD NORMALIZER */}
+      {/* ============================================================== */}
+      {activeTab === 'amharic' && (
+        <div style={{ marginTop: '20px' }}>
+          {amharicError && <div style={errorBannerStyle}>{amharicError}</div>}
+          <div style={grid2ColStyle}>
+            <form onSubmit={handleNormalizeAmharic} style={formCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  Amharic Fidel Inputs
+                </h4>
+                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                  Ge'ez Script Canonicalization
+                </span>
+              </div>
+
+              {/* Quick Presets */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ ...labelStyle, marginBottom: '6px' }}>Sample Homophone Presets:</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Ha series (ሐኪም)', t1: 'ሐኪም', t2: 'ሀኪም' },
+                    { label: 'A series (ዐዲስ አበባ)', t1: 'ዐዲስ አበባ', t2: 'አዲስ አበባ' },
+                    { label: 'Se series (ሠዓት)', t1: 'ሠዓት', t2: 'ሰአት' },
+                    { label: 'Tse series (ፀሐይ)', t1: 'ፀሐይ', t2: 'ጸሀይ' },
+                  ].map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setAmharicText(p.t1);
+                        setAmharicComparison(p.t2);
+                      }}
+                      style={presetBtnStyle}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Primary Amharic Text / Query <span style={{ color: '#ef4444' }}>*</span></label>
+                <textarea
+                  id="amharic-input-text"
+                  rows={3}
+                  value={amharicText}
+                  onChange={(e) => setAmharicText(e.target.value)}
+                  placeholder="የአማርኛ ጽሑፍ ያስገቡ..."
+                  required
+                  style={textareaStyle}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={labelStyle}>Comparison Term (Optional — Test Semantic Equivalence)</label>
+                <input
+                  id="amharic-input-comparison"
+                  type="text"
+                  value={amharicComparison}
+                  onChange={(e) => setAmharicComparison(e.target.value)}
+                  placeholder="አማራጭ የፊደል አጻጻፍ ያስገቡ..."
+                  style={inputStyle}
+                />
+                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  If provided, verifies whether both terms collapse to the exact same canonical search query.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  id="btn-normalize-amharic"
+                  type="submit"
+                  disabled={amharicLoading}
+                  style={{ ...primaryBtnStyle, opacity: amharicLoading ? 0.7 : 1 }}
+                >
+                  {amharicLoading ? 'Normalizing Fidel...' : '🇪🇹 Normalize Amharic Keyword'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetAmharic}
+                  style={secondaryBtnStyle}
+                >
+                  Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Result Card: Side-by-Side & Transformations */}
+            <div style={resultCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                  Normalized Canonical Output
+                </h4>
+                {amharicResult && (
+                  <button
+                    onClick={() => handleCopy(amharicResult.normalized_text, 'amharic')}
+                    style={copyBtnStyle}
+                  >
+                    {copiedKey === 'amharic' ? '✓ Copied' : '📋 Copy Normalized'}
+                  </button>
+                )}
+              </div>
+
+              {amharicResult ? (
+                <div>
+                  {/* Equivalence Status Banner */}
+                  {amharicResult.is_equivalent !== null && amharicResult.is_equivalent !== undefined && (
+                    <div
+                      style={{
+                        backgroundColor: amharicResult.is_equivalent ? '#ecfdf5' : '#fef2f2',
+                        border: `1px solid ${amharicResult.is_equivalent ? '#a7f3d0' : '#fecaca'}`,
+                        borderRadius: '6px',
+                        padding: '10px 14px',
+                        marginBottom: '14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '16px' }}>{amharicResult.is_equivalent ? '✅' : '❌'}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: amharicResult.is_equivalent ? '#065f46' : '#991b1b' }}>
+                          {amharicResult.is_equivalent
+                            ? 'Semantic / Fidel Equivalence Verified'
+                            : 'Queries Are Not Equivalent'}
+                        </span>
+                      </div>
+                      <p style={{ margin: '4px 0 0 22px', fontSize: '12px', color: amharicResult.is_equivalent ? '#047857' : '#b91c1c' }}>
+                        {amharicResult.is_equivalent
+                          ? `Both queries resolve to canonical keyword: "${amharicResult.normalized_text}"`
+                          : `Original resolved to "${amharicResult.normalized_text}", comparison resolved to "${amharicResult.normalized_comparison}"`}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Before / After View */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', backgroundColor: '#f8fafc' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Original Input</span>
+                      <div style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', marginTop: '6px' }}>{amharicResult.original_text}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{amharicResult.metrics.original_length} chars, {amharicResult.metrics.original_words} words</div>
+                    </div>
+                    <div style={{ border: '1px solid #bbf7d0', borderRadius: '6px', padding: '12px', backgroundColor: '#f0fdf4' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>Normalized (Canonical)</span>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#15803d', marginTop: '6px' }}>{amharicResult.normalized_text}</div>
+                      <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '4px' }}>{amharicResult.metrics.normalized_length} chars, {amharicResult.metrics.normalized_words} words</div>
+                    </div>
+                  </div>
+
+                  {/* Transformations Breakdown */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <h5 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                        Applied Transformations ({amharicResult.modifications_count})
+                      </h5>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                        {amharicResult.has_amharic_script ? 'Ge\'ez Script Detected' : 'Latin/Mixed Text'}
+                      </span>
+                    </div>
+                    {amharicResult.transformations_applied.length > 0 ? (
+                      <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
+                              <th style={{ padding: '4px 8px' }}>Pos</th>
+                              <th style={{ padding: '4px 8px' }}>Character</th>
+                              <th style={{ padding: '4px 8px' }}>Canonical</th>
+                              <th style={{ padding: '4px 8px' }}>Series / Rule</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {amharicResult.transformations_applied.map((t, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                <td style={{ padding: '4px 8px', color: '#64748b' }}>{t.position}</td>
+                                <td style={{ padding: '4px 8px', fontWeight: 700, color: '#ef4444' }}>{t.original}</td>
+                                <td style={{ padding: '4px 8px', fontWeight: 700, color: '#10b981' }}>{t.replacement}</td>
+                                <td style={{ padding: '4px 8px', color: '#334155' }}>{t.type}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '8px 12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', color: '#64748b' }}>
+                        No homophone substitutions needed. Text was already in canonical form.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={placeholderBoxStyle}>
+                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                    Enter Amharic text to collapse Ge'ez homophones (ሀ/ሐ/ኀ, ሰ/ሠ, አ/ዓ, ጸ/ፀ) and strip Ethiopic punctuation marks.
                   </p>
                 </div>
               )}

@@ -7,6 +7,10 @@ from .social import SocialPreviewGenerator
 from .robots import RobotsTxtGenerator, RobotsTxtTester
 from .sitemap import XmlSitemapGenerator, XmlSitemapValidator
 from .hreflang import HreflangBuilder
+from .serp_snippet import SerpSnippetAnalyzer
+from .pagespeed import PageSpeedAnalyzer
+from .broken_links import SinglePageBrokenLinkChecker
+from .amharic import AmharicNormalizerTool
 
 
 TOOL_CODE_META = 'meta_tag_generator'
@@ -15,6 +19,10 @@ TOOL_CODE_SOCIAL = 'open_graph_previewer'
 TOOL_CODE_ROBOTS = 'robots_txt_tool'
 TOOL_CODE_SITEMAP = 'xml_sitemap_tool'
 TOOL_CODE_HREFLANG = 'hreflang_builder'
+TOOL_CODE_SERP = 'serp_snippet_checker'
+TOOL_CODE_PAGESPEED = 'pagespeed_analyzer'
+TOOL_CODE_BROKEN_LINKS = 'broken_link_checker'
+TOOL_CODE_AMHARIC = 'amharic_normalizer'
 
 
 def _build_usage_meta(user, tool_code: str, usage_count: int) -> Dict[str, Any]:
@@ -137,11 +145,56 @@ class SEOToolsService:
         result['usage'] = _build_usage_meta(user, TOOL_CODE_HREFLANG, usage.count)
         return result
 
+    # --- 7. SERP SNIPPET PREVIEW / PIXEL-LENGTH CHECKER ---
+    @classmethod
+    def analyze_serp_snippet(cls, user, params: Dict[str, Any]) -> Dict[str, Any]:
+        usage = UsageLimitService.check_and_record_tool_usage(user, TOOL_CODE_SERP)
+        result = SerpSnippetAnalyzer.analyze(
+            title=params.get('title', ''),
+            description=params.get('description', ''),
+            url=params.get('url', ''),
+            device=params.get('device', 'desktop'),
+        )
+        result['usage'] = _build_usage_meta(user, TOOL_CODE_SERP, usage.count)
+        return result
+
+    # --- 8. PAGESPEED / CORE WEB VITALS ANALYZER ---
+    @classmethod
+    def analyze_pagespeed(cls, user, params: Dict[str, Any]) -> Dict[str, Any]:
+        usage = UsageLimitService.check_and_record_tool_usage(user, TOOL_CODE_PAGESPEED)
+        result = PageSpeedAnalyzer.analyze(
+            url=params.get('url', ''),
+            strategy=params.get('strategy', 'mobile'),
+        )
+        result['usage'] = _build_usage_meta(user, TOOL_CODE_PAGESPEED, usage.count)
+        return result
+
+    # --- 9. SINGLE-PAGE BROKEN LINK CHECKER ---
+    @classmethod
+    def check_broken_links(cls, user, params: Dict[str, Any]) -> Dict[str, Any]:
+        usage = UsageLimitService.check_and_record_tool_usage(user, TOOL_CODE_BROKEN_LINKS)
+        result = SinglePageBrokenLinkChecker.check_page(
+            url=params.get('url', ''),
+        )
+        result['usage'] = _build_usage_meta(user, TOOL_CODE_BROKEN_LINKS, usage.count)
+        return result
+
+    # --- 10. AMHARIC FIDEL KEYWORD NORMALIZER ---
+    @classmethod
+    def normalize_amharic(cls, user, params: Dict[str, Any]) -> Dict[str, Any]:
+        usage = UsageLimitService.check_and_record_tool_usage(user, TOOL_CODE_AMHARIC)
+        result = AmharicNormalizerTool.normalize(
+            text=params.get('text', ''),
+            comparison_text=params.get('comparison_text'),
+        )
+        result['usage'] = _build_usage_meta(user, TOOL_CODE_AMHARIC, usage.count)
+        return result
+
     # --- QUOTA STATUS ---
     @classmethod
     def get_user_tool_quota_status(cls, user) -> Dict[str, Any]:
         """
-        Return the current day's usage and limits for all 6 basic tools without consuming quota.
+        Return the current day's usage and limits for all 10 basic tools without consuming quota.
         """
         plan = SubscriptionService.get_user_plan(user)
         limit = plan.basic_tool_daily_limit
@@ -154,6 +207,10 @@ class SEOToolsService:
             TOOL_CODE_ROBOTS,
             TOOL_CODE_SITEMAP,
             TOOL_CODE_HREFLANG,
+            TOOL_CODE_SERP,
+            TOOL_CODE_PAGESPEED,
+            TOOL_CODE_BROKEN_LINKS,
+            TOOL_CODE_AMHARIC,
         ]
 
         tools_status = {}

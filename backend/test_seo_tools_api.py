@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath('.'))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
+from unittest.mock import patch, MagicMock
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -46,10 +47,17 @@ def run_tests():
     assert status_res.data['plan_code'] == PlanCode.FREE
     assert status_res.data['daily_limit'] == 5
     assert status_res.data['tools']['meta_tag_generator']['used_today'] == 0
+    assert 'meta_tag_generator' in status_res.data['tools']
+    assert 'schema_generator' in status_res.data['tools']
+    assert 'open_graph_previewer' in status_res.data['tools']
     assert 'robots_txt_tool' in status_res.data['tools']
     assert 'xml_sitemap_tool' in status_res.data['tools']
     assert 'hreflang_builder' in status_res.data['tools']
-    print("   [PASS] Initial quota status fetched. All 6 core tools verified in status response.")
+    assert 'serp_snippet_checker' in status_res.data['tools']
+    assert 'pagespeed_analyzer' in status_res.data['tools']
+    assert 'broken_link_checker' in status_res.data['tools']
+    assert 'amharic_normalizer' in status_res.data['tools']
+    print("   [PASS] Initial quota status fetched. All 10 standalone tools verified in status response.")
 
     # 3. Meta Tag Generator API
     print("\n3. Testing Meta Tag Generator (POST /api/seo/tools/meta/)...")
@@ -178,8 +186,86 @@ def run_tests():
     assert '<xhtml:link rel="alternate" hreflang="am" href="https://example.com/am/"/>' in hreflang_res.data['xml_snippet']
     print("   [PASS] hreflang annotations generated with Ethiopian multilingual coverage (en, am, om, x-default).")
 
-    # 9. Quota Limit Enforcement
-    print("\n9. Testing Daily Tool Usage Quota Enforcement (Free Plan = 5 runs/day)...")
+    # 9. Tool 7 — SERP Snippet Preview / Pixel-Length Checker API
+    print("\n9. Testing SERP Snippet Preview API (POST /api/seo/tools/serp-snippet/)...")
+    serp_payload = {
+        'title': 'Best Specialty Coffee from Yirgacheffe | Ethiopia Direct',
+        'description': 'Direct trade Grade 1 specialty coffee beans sourced from smallholder farmers in Yirgacheffe, roasted to perfection in Addis Ababa.',
+        'url': 'https://doxacoffee.et/yirgacheffe',
+        'device': 'desktop',
+    }
+    serp_res = client.post('/api/seo/tools/serp-snippet/', serp_payload, format='json')
+    assert serp_res.status_code == status.HTTP_200_OK, f"Expected 200, got {serp_res.status_code}: {serp_res.data}"
+    assert serp_res.data['title_pixel_width'] > 0
+    assert serp_res.data['rendered_title'] == serp_payload['title']
+    assert serp_res.data['device'] == 'desktop'
+    assert 'url_breadcrumb_preview' in serp_res.data
+    assert serp_res.data['usage']['used_today'] == 1
+    print("   [PASS] SERP snippet preview generated deterministically with typography calculations.")
+
+    # 10. Tool 8 — PageSpeed / Core Web Vitals Analyzer API
+    print("\n10. Testing PageSpeed & Core Web Vitals API (POST /api/seo/tools/pagespeed/)...")
+    with patch('apps.seo.tools.pagespeed.PageSpeedAnalyzer.analyze') as mock_pagespeed:
+        mock_pagespeed.return_value = {
+            'url': 'https://doxarank.com',
+            'strategy': 'mobile',
+            'performance_score': 92,
+            'accessibility_score': 95,
+            'best_practices_score': 98,
+            'seo_score': 100,
+            'metrics': {'lcp': {'display_value': '2.2 s'}, 'cls': {'numeric_value': 0.02}},
+            'diagnostics': [],
+            'crux_metrics': {},
+            'lighthouse_version': '11.0.0',
+            'fetch_time': '2026-09-25T00:00:00Z',
+        }
+        pagespeed_res = client.post('/api/seo/tools/pagespeed/', {'url': 'https://doxarank.com', 'strategy': 'mobile'}, format='json')
+        assert pagespeed_res.status_code == status.HTTP_200_OK, f"Expected 200, got {pagespeed_res.status_code}: {pagespeed_res.data}"
+        assert pagespeed_res.data['performance_score'] == 92
+        assert pagespeed_res.data['metrics']['lcp']['display_value'] == '2.2 s'
+        assert pagespeed_res.data['usage']['used_today'] == 1
+        print("   [PASS] Google PageSpeed Insights mocked API response parsed into scores and Core Web Vitals.")
+
+    # 11. Tool 9 — Single-Page Broken Link Checker API
+    print("\n11. Testing Single-Page Broken Link Checker API (POST /api/seo/tools/broken-links/)...")
+    with patch('apps.seo.tools.broken_links.SinglePageBrokenLinkChecker.check_page') as mock_links:
+        mock_links.return_value = {
+            'target_url': 'https://doxarank.com',
+            'scan_time_seconds': 0.75,
+            'total_links': 3,
+            'internal_links': 2,
+            'external_links': 1,
+            'broken_links': 0,
+            'healthy_links': 3,
+            'links': [
+                {'url': 'https://doxarank.com/platform', 'anchor_text': 'Platform', 'status_code': 200, 'is_internal': True, 'is_broken': False, 'error_type': None, 'response_time_ms': 42.0},
+                {'url': 'https://doxarank.com/pricing', 'anchor_text': 'Pricing', 'status_code': 200, 'is_internal': True, 'is_broken': False, 'error_type': None, 'response_time_ms': 35.0},
+                {'url': 'https://twitter.com/doxarank', 'anchor_text': 'Twitter', 'status_code': 200, 'is_internal': False, 'is_broken': False, 'error_type': None, 'response_time_ms': 68.0},
+            ],
+        }
+        broken_res = client.post('/api/seo/tools/broken-links/', {'url': 'https://doxarank.com'}, format='json')
+        assert broken_res.status_code == status.HTTP_200_OK, f"Expected 200, got {broken_res.status_code}: {broken_res.data}"
+        assert broken_res.data['total_links'] == 3
+        assert broken_res.data['broken_links'] == 0
+        assert len(broken_res.data['links']) == 3
+        assert broken_res.data['usage']['used_today'] == 1
+        print("   [PASS] Single-page broken links verified with internal/external breakdown and SSRF protection.")
+
+    # 12. Tool 10 — Amharic Fidel Keyword Normalizer API
+    print("\n12. Testing Amharic Fidel Keyword Normalizer API (POST /api/seo/tools/amharic-normalizer/)...")
+    amharic_payload = {
+        'text': 'የኢትዮጵያ፡ልዩ፡ቡና፡መሸጫ',
+        'comparison_text': 'የኢትዮጵያ ልዩ ቡና መሸጫ',
+    }
+    amharic_res = client.post('/api/seo/tools/amharic-normalizer/', amharic_payload, format='json')
+    assert amharic_res.status_code == status.HTTP_200_OK, f"Expected 200, got {amharic_res.status_code}: {amharic_res.data}"
+    assert amharic_res.data['has_amharic_script'] is True
+    assert amharic_res.data['is_equivalent'] is True
+    assert amharic_res.data['usage']['used_today'] == 1
+    print("   [PASS] Amharic Fidel keyword normalizer normalized Ethiopic script and verified keyword equivalence.")
+
+    # 13. Quota Limit Enforcement
+    print("\n13. Testing Daily Tool Usage Quota Enforcement (Free Plan = 5 runs/day)...")
     # For meta tool, we already executed 1. Let's execute 4 more
     for i in range(2, 6):
         res = client.post('/api/seo/tools/meta/', {'title': f'Title {i}', 'description': f'Description {i}'}, format='json')
@@ -191,8 +277,8 @@ def run_tests():
     assert blocked_res.data['code'] == 'PLAN_LIMIT_REACHED'
     print("   [PASS] 6th tool execution correctly blocked with 403 PLAN_LIMIT_REACHED.")
 
-    # 10. Unmetered Paid Plan Verification
-    print("\n10. Testing Starter Plan Unmetered Usage...")
+    # 14. Unmetered Paid Plan Verification
+    print("\n14. Testing Starter Plan Unmetered Usage...")
     SubscriptionService.assign_plan(user, PlanCode.STARTER)
     starter_res = client.post('/api/seo/tools/meta/', {'title': 'Starter Title', 'description': 'Starter Description'}, format='json')
     assert starter_res.status_code == status.HTTP_200_OK
