@@ -10,11 +10,14 @@ from apps.integrations.models import (
     IntegrationConnection,
     IntegrationProvider,
     IntegrationStatus,
+    ProjectGA4Connection,
 )
 from apps.integrations.serializers import (
     IntegrationStatusSerializer,
     SearchConsolePropertySerializer,
     SearchConsoleAssociateSerializer,
+    GA4PropertySerializer,
+    GA4AssociateSerializer,
     OAuthCallbackRequestSerializer,
 )
 from apps.integrations.services.google_oauth import (
@@ -30,18 +33,44 @@ from apps.integrations.services.search_console import (
     SearchConsoleCredentialsError,
     SearchConsoleApiError,
 )
-from apps.subscriptions.permissions import CanAccessGSC
+from apps.integrations.services.analytics import (
+    GA4IntegrationService,
+    GA4Error,
+    GA4NotConnectedError,
+    GA4ScopeMissingError,
+    GA4CredentialsError,
+    GA4RateLimitError,
+    GA4ApiError,
+)
+from apps.subscriptions.permissions import CanAccessGSC, CanAccessGA4
 
 logger = logging.getLogger(__name__)
+
+
+class CanAccessGoogleIntegrations(permissions.BasePermission):
+    """
+    Permission check requiring that the user has an active plan entitled to
+    either Google Search Console or Google Analytics 4.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        can_gsc = PlanEntitlementService.can_use_feature(request.user, FeatureCode.GSC)
+        can_ga4 = PlanEntitlementService.can_use_feature(request.user, FeatureCode.GA4)
+        if not (can_gsc or can_ga4):
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.GA4)
+        return True
 
 
 class GoogleConnectView(APIView):
     """
     Initiate Google OAuth2 connection flow for the authenticated user.
-    Requires authentication and an active subscription entitled to GSC.
+    Requires authentication and an active subscription entitled to Google integrations.
     (GET /api/integrations/google/connect/)
     """
-    permission_classes = [permissions.IsAuthenticated, CanAccessGSC]
+    permission_classes = [permissions.IsAuthenticated, CanAccessGoogleIntegrations]
 
     def get(self, request):
         redirect_uri = request.query_params.get('redirect_uri')
@@ -157,6 +186,7 @@ class IntegrationStatusView(APIView):
                 'connected_at': conn.connected_at,
                 'updated_at': conn.updated_at,
                 'has_valid_credentials': conn.has_valid_credentials,
+                'has_analytics_scope': conn.has_analytics_scope if conn.provider == IntegrationProvider.GOOGLE else False,
             }
 
         # Ensure google entry exists even if not yet connected
@@ -170,7 +200,28 @@ class IntegrationStatusView(APIView):
                 'connected_at': None,
                 'updated_at': None,
                 'has_valid_credentials': False,
+                'has_analytics_scope': False,
             }
+
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            try:
+                ga4_conn = ProjectGA4Connection.objects.filter(
+                    project_id=project_id,
+                    project__owner=request.user,
+                    is_connected=True
+                ).first()
+                if ga4_conn:
+                    results['project_ga4'] = {
+                        'property_id': ga4_conn.property_id,
+                        'display_name': ga4_conn.display_name,
+                        'is_connected': ga4_conn.is_connected,
+                        'connected_at': ga4_conn.connected_at,
+                    }
+                else:
+                    results['project_ga4'] = None
+            except (ValueError, TypeError):
+                results['project_ga4'] = None
 
         return Response(results, status=status.HTTP_200_OK)
 
@@ -245,3 +296,88 @@ class SearchConsoleAssociatePropertyView(APIView):
                 {'detail': f"Failed to associate property: {str(exc)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class GA4PropertiesView(APIView):
+    """
+    Retrieve user's accessible Google Analytics 4 (GA4) properties via Google API.
+    Requires authentication and GA4 subscription entitlement.
+    (GET /api/integrations/google/analytics/properties/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGA4]
+
+    def get(self, request):
+        try:
+            properties = GA4IntegrationService.list_properties(request.user)
+            serializer = GA4PropertySerializer(properties, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except GA4NotConnectedError as exc:
+            return Response({'code': 'NOT_CONNECTED', 'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except GA4ScopeMissingError as exc:
+            return Response({'code': 'ANALYTICS_SCOPE_MISSING', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except GA4CredentialsError as exc:
+            return Response({'code': 'CREDENTIALS_INVALID', 'detail': str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+        except GA4RateLimitError as exc:
+            return Response({'code': 'RATE_LIMIT_EXCEEDED', 'detail': str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except GA4ApiError as exc:
+            return Response({'code': 'GOOGLE_API_ERROR', 'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as exc:
+            logger.error(f"[GA4PropertiesView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to retrieve GA4 properties: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GA4AssociatePropertyView(APIView):
+    """
+    Associate a verified GA4 property with a user's DoxaRank Project.
+    Requires authentication and GA4 subscription entitlement.
+    (POST /api/integrations/google/analytics/associate/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGA4]
+
+    def post(self, request):
+        serializer = GA4AssociateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        try:
+            result = GA4IntegrationService.associate_project_property(
+                user=request.user,
+                project_id=validated['project_id'],
+                property_id=validated['property_id'],
+                display_name=validated.get('display_name')
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except GA4ScopeMissingError as exc:
+            return Response({'code': 'ANALYTICS_SCOPE_MISSING', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except GA4Error as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.error(f"[GA4AssociatePropertyView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to associate GA4 property: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GA4ProjectConnectionView(APIView):
+    """
+    Retrieve active GA4 connection for a specific DoxaRank Project.
+    (GET /api/integrations/google/analytics/project/?project_id=<id>)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGA4]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'detail': "project_id query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            info = GA4IntegrationService.get_project_connection(user=request.user, project_id=int(project_id))
+            if not info:
+                return Response({'is_connected': False, 'detail': "No GA4 property linked to this project."}, status=status.HTTP_200_OK)
+            return Response(info, status=status.HTTP_200_OK)
+        except (ValueError, TypeError):
+            return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)

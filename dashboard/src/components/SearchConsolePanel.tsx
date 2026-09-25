@@ -16,6 +16,7 @@ import { syncSearchConsole } from '../api/searchConsoleAnalytics';
 import { getGoogleAuthorizationUrl } from '../api/googleOAuth';
 import { SearchConsoleFormModal } from './SearchConsoleFormModal';
 import { GoogleIntegrationSection } from './GoogleIntegrationSection';
+import { GoogleAnalyticsSection } from './GoogleAnalyticsSection';
 
 interface SearchConsolePanelProps {
   project: Project;
@@ -233,6 +234,11 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
             fetchConnection(project.id);
           }
         }}
+      />
+
+      {/* Google Analytics 4 Integration Section (Original SRS GA4 Integration) */}
+      <GoogleAnalyticsSection
+        project={project}
       />
 
       {/* Body States */}

@@ -141,3 +141,65 @@ class IntegrationConnection(models.Model):
             and self.encrypted_refresh_token
             and self.encrypted_refresh_token.strip()
         )
+
+    def has_scope(self, scope: str) -> bool:
+        """Check if a specific scope is included in granted scopes."""
+        if not self.scopes or not isinstance(self.scopes, (list, tuple)):
+            return False
+        return scope in self.scopes
+
+    @property
+    def has_analytics_scope(self) -> bool:
+        """Check if connection includes Google Analytics read-only scope."""
+        return self.has_scope('https://www.googleapis.com/auth/analytics.readonly')
+
+
+class ProjectGA4Connection(models.Model):
+    """
+    Links a DoxaRank Project to an associated Google Analytics 4 (GA4) property.
+    Relationship: Project 1 <---> 1 ProjectGA4Connection (OneToOne)
+    Ownership: project.owner (tenant isolation)
+    """
+    project = models.OneToOneField(
+        'projects.Project',
+        on_delete=models.CASCADE,
+        related_name='ga4_connection',
+        help_text='The project linked to this GA4 property.'
+    )
+    property_id = models.CharField(
+        max_length=100,
+        help_text='The GA4 property ID (e.g. "123456789").'
+    )
+    display_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Display name of the GA4 property.'
+    )
+    account_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='The Google Analytics account ID.'
+    )
+    is_connected = models.BooleanField(
+        default=True,
+        help_text='Whether this project is actively connected to GA4.'
+    )
+    connected_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the GA4 property was associated.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp of last update.'
+    )
+
+    class Meta:
+        db_table = 'integrations_ga4_connections'
+        verbose_name = 'Project GA4 Connection'
+        verbose_name_plural = 'Project GA4 Connections'
+        ordering = ['-connected_at']
+
+    def __str__(self):
+        return f"GA4: {self.property_id} ({self.project.name})"

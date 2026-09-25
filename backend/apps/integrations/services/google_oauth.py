@@ -145,6 +145,7 @@ class GoogleOAuthIntegrationService:
         ).strip()
         scopes = getattr(settings, 'GOOGLE_OAUTH_SCOPES', [
             'https://www.googleapis.com/auth/webmasters.readonly',
+            'https://www.googleapis.com/auth/analytics.readonly',
             'openid',
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/userinfo.profile',
@@ -343,7 +344,9 @@ class GoogleOAuthIntegrationService:
             connection.account_id = sub_id
             connection.token_expires_at = token_expires_at
             if scopes_list:
-                connection.scopes = scopes_list
+                merged_scopes = set(connection.scopes or [])
+                merged_scopes.update(scopes_list)
+                connection.scopes = sorted(list(merged_scopes))
             connection.metadata = {'picture': user_identity.get('picture', '')}
 
         # Handle tokens

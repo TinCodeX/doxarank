@@ -261,6 +261,7 @@ GOOGLE_OAUTH_REDIRECT_URI = config(
 )
 GOOGLE_OAUTH_SCOPES = [
     'https://www.googleapis.com/auth/webmasters.readonly',
+    'https://www.googleapis.com/auth/analytics.readonly',
     'openid',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',

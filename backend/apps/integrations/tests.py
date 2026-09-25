@@ -399,3 +399,319 @@ class TenantIsolationTests(TestCase):
         response = self.client_b.get(f'/api/integrations/google/callback/?code=test_code&state={state_for_a}')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('does not match the currently authenticated user', response.data['detail'])
+
+    def test_user_b_cannot_associate_user_a_project_with_ga4(self):
+        proj_a = Project.objects.create(
+            owner=self.user_a,
+            name='User A Project',
+            website_url='https://usera.com'
+        )
+
+        response_b = self.client_b.post('/api/integrations/google/analytics/associate/', data={
+            'project_id': proj_a.id,
+            'property_id': '987654321',
+            'display_name': 'Hacked Property'
+        })
+        self.assertEqual(response_b.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('not found or you do not have permission', response_b.data['detail'].lower())
+
+    def test_user_b_cannot_view_user_a_project_ga4_connection(self):
+        proj_a = Project.objects.create(
+            owner=self.user_a,
+            name='User A Project',
+            website_url='https://usera.com'
+        )
+        response_b = self.client_b.get(f'/api/integrations/google/analytics/project/?project_id={proj_a.id}')
+        # Should report no connection or not found
+        self.assertFalse(response_b.data.get('is_connected', False))
+
+
+@override_settings(**MOCK_OAUTH_SETTINGS)
+class GA4IntegrationTests(TestCase):
+    """
+    Tests for Google Analytics 4 (GA4) integration:
+    - OAuth scope detection and missing scope handling
+    - Reauthorization scope merging
+    - Listing GA4 properties
+    - Normalization of Google Analytics Admin API response
+    - Error handling (401, 403, 429, 500)
+    - Token refresh handling
+    - Project association with GA4 property
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        SubscriptionService.bootstrap_default_plans()
+
+        self.user = User.objects.create_user(
+            email='ga4_user@example.com',
+            password='Password123!'
+        )
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        self.client.force_authenticate(user=self.user)
+
+        self.connection = IntegrationConnection.objects.create(
+            user=self.user,
+            provider=IntegrationProvider.GOOGLE,
+            status=IntegrationStatus.CONNECTED,
+            account_email='ga4_user@example.com',
+            scopes=[
+                'https://www.googleapis.com/auth/webmasters.readonly',
+                'https://www.googleapis.com/auth/analytics.readonly',
+                'openid',
+                'https://www.googleapis.com/auth/userinfo.email',
+            ],
+            token_expires_at=timezone.now() + timedelta(hours=1)
+        )
+        self.connection.set_access_token('mock_ga4_access_token')
+        self.connection.set_refresh_token('mock_ga4_refresh_token')
+        self.connection.save()
+
+    def test_unauthenticated_request_rejected(self):
+        unauth_client = APIClient()
+        response = unauth_client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_disconnected_user_returns_error(self):
+        self.connection.status = IntegrationStatus.DISCONNECTED
+        self.connection.save()
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'NOT_CONNECTED')
+
+    def test_missing_analytics_scope_handled(self):
+        # Connection only has Search Console scope, missing analytics.readonly
+        self.connection.scopes = ['https://www.googleapis.com/auth/webmasters.readonly']
+        self.connection.save()
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'ANALYTICS_SCOPE_MISSING')
+        self.assertIn('reconnect your google account', response.data['detail'].lower())
+
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.fetch_user_identity')
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.exchange_code')
+    def test_reauthorization_merges_scopes_safely(self, mock_exchange, mock_identity):
+        # Existing connection with GSC scope only
+        self.connection.scopes = ['https://www.googleapis.com/auth/webmasters.readonly']
+        self.connection.save()
+
+        # Reauthorization callback granting analytics.readonly
+        mock_exchange.return_value = {
+            'access_token': 'new_access_token',
+            'refresh_token': 'new_refresh_token',
+            'expires_in': 3600,
+            'scope': 'https://www.googleapis.com/auth/analytics.readonly'
+        }
+        mock_identity.return_value = {
+            'email': 'ga4_user@example.com',
+            'name': 'GA4 User',
+            'id': 'google-uid-ga4',
+            'verified_email': True
+        }
+
+        state = OAuthStateService.generate_state(self.user)
+        response = self.client.get(f'/api/integrations/google/callback/?code=reauth_code&state={state}')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.connection.refresh_from_db()
+        # Verify both scopes exist (non-destructive merge)
+        self.assertIn('https://www.googleapis.com/auth/webmasters.readonly', self.connection.scopes)
+        self.assertIn('https://www.googleapis.com/auth/analytics.readonly', self.connection.scopes)
+        self.assertTrue(self.connection.has_analytics_scope)
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_properties_normalized_successfully(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.accountSummaries().list().execute.return_value = {
+            'accountSummaries': [
+                {
+                    'name': 'accountSummaries/12345',
+                    'displayName': 'Example Corp',
+                    'propertySummaries': [
+                        {
+                            'property': 'properties/987654321',
+                            'displayName': 'Corporate Site',
+                            'propertyType': 'PROPERTY_TYPE_ORDINARY'
+                        },
+                        {
+                            'property': 'properties/112233445',
+                            'displayName': 'Store Site',
+                            'propertyType': 'PROPERTY_TYPE_ORDINARY'
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0], {
+            'property_id': '987654321',
+            'display_name': 'Corporate Site',
+            'property_type': 'GA4'
+        })
+        self.assertEqual(response.data[1], {
+            'property_id': '112233445',
+            'display_name': 'Store Site',
+            'property_type': 'GA4'
+        })
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_empty_properties_handled(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.accountSummaries().list().execute.return_value = {}
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_google_api_403_handled(self, mock_get_client):
+        mock_client = MagicMock()
+        resp = MagicMock(status=403, reason='Forbidden')
+        mock_client.accountSummaries().list().execute.side_effect = HttpError(resp=resp, content=b'Permission Denied')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data.get('code'), 'CREDENTIALS_INVALID')
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_google_api_429_rate_limit_handled(self, mock_get_client):
+        mock_client = MagicMock()
+        resp = MagicMock(status=429, reason='Too Many Requests')
+        mock_client.accountSummaries().list().execute.side_effect = HttpError(resp=resp, content=b'Rate Limit Exceeded')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data.get('code'), 'RATE_LIMIT_EXCEEDED')
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_google_api_500_handled(self, mock_get_client):
+        mock_client = MagicMock()
+        resp = MagicMock(status=500, reason='Internal Error')
+        mock_client.accountSummaries().list().execute.side_effect = HttpError(resp=resp, content=b'Backend Error')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data.get('code'), 'GOOGLE_API_ERROR')
+
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.refresh_connection_tokens')
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.get_client')
+    def test_token_refresh_invoked_on_expired_token(self, mock_get_client, mock_refresh):
+        self.connection.token_expires_at = timezone.now() - timedelta(minutes=5)
+        self.connection.save()
+
+        mock_refresh.return_value = self.connection
+        mock_client = MagicMock()
+        mock_client.accountSummaries().list().execute.return_value = {'accountSummaries': []}
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_refresh.assert_called_once()
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.list_properties')
+    def test_associate_project_property_success(self, mock_list):
+        mock_list.return_value = [
+            {'property_id': '987654321', 'display_name': 'Corporate Site', 'property_type': 'GA4'}
+        ]
+
+        project = Project.objects.create(
+            owner=self.user,
+            name='My Corporate Project',
+            website_url='https://example.com'
+        )
+
+        response = self.client.post('/api/integrations/google/analytics/associate/', data={
+            'project_id': project.id,
+            'property_id': '987654321',
+            'display_name': 'Corporate Site'
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['property_id'], '987654321')
+        self.assertTrue(response.data['is_connected'])
+
+        # Check retrieval endpoint
+        get_resp = self.client.get(f'/api/integrations/google/analytics/project/?project_id={project.id}')
+        self.assertEqual(get_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(get_resp.data['property_id'], '987654321')
+        self.assertTrue(get_resp.data['is_connected'])
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.list_properties')
+    def test_associate_project_property_rejects_unowned_property(self, mock_list):
+        mock_list.return_value = [
+            {'property_id': '987654321', 'display_name': 'Corporate Site', 'property_type': 'GA4'}
+        ]
+
+        project = Project.objects.create(
+            owner=self.user,
+            name='My Corporate Project',
+            website_url='https://example.com'
+        )
+
+        # Attempt to associate a property ID not returned in list_properties
+        response = self.client.post('/api/integrations/google/analytics/associate/', data={
+            'project_id': project.id,
+            'property_id': '999999999',
+            'display_name': 'Fake Property'
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('not found in your connected google account', response.data['detail'].lower())
+
+    @patch('apps.integrations.services.analytics.GA4IntegrationService.list_properties')
+    def test_duplicate_association_updates_safely(self, mock_list):
+        mock_list.return_value = [
+            {'property_id': '987654321', 'display_name': 'Corporate Site', 'property_type': 'GA4'},
+            {'property_id': '112233445', 'display_name': 'Store Site', 'property_type': 'GA4'},
+        ]
+
+        project = Project.objects.create(
+            owner=self.user,
+            name='My Corporate Project',
+            website_url='https://example.com'
+        )
+
+        # First association
+        self.client.post('/api/integrations/google/analytics/associate/', data={
+            'project_id': project.id,
+            'property_id': '987654321',
+        })
+
+        # Second association updates project to new property
+        resp = self.client.post('/api/integrations/google/analytics/associate/', data={
+            'project_id': project.id,
+            'property_id': '112233445',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['property_id'], '112233445')
+
+    def test_free_tier_rejected_from_ga4_properties(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.FREE)
+        response = self.client.get('/api/integrations/google/analytics/properties/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'FEATURE_NOT_ENTITLED')
+        self.assertTrue(response.data.get('upgrade_required'))
+
+    def test_starter_tier_allowed_ga4_properties(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        with patch('apps.integrations.services.analytics.GA4IntegrationService.list_properties') as mock_list:
+            mock_list.return_value = []
+            response = self.client.get('/api/integrations/google/analytics/properties/')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_agency_tier_allowed_ga4_properties(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.AGENCY)
+        with patch('apps.integrations.services.analytics.GA4IntegrationService.list_properties') as mock_list:
+            mock_list.return_value = []
+            response = self.client.get('/api/integrations/google/analytics/properties/')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)

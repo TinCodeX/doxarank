@@ -6,6 +6,9 @@ from apps.integrations.views import (
     GoogleDisconnectView,
     SearchConsolePropertiesView,
     SearchConsoleAssociatePropertyView,
+    GA4PropertiesView,
+    GA4AssociatePropertyView,
+    GA4ProjectConnectionView,
 )
 
 app_name = 'integrations'
@@ -22,4 +25,9 @@ urlpatterns = [
     # Google Search Console
     path('google/search-console/properties/', SearchConsolePropertiesView.as_view(), name='search-console-properties'),
     path('google/search-console/associate/', SearchConsoleAssociatePropertyView.as_view(), name='search-console-associate'),
+
+    # Google Analytics 4 (GA4)
+    path('google/analytics/properties/', GA4PropertiesView.as_view(), name='ga4-properties'),
+    path('google/analytics/associate/', GA4AssociatePropertyView.as_view(), name='ga4-associate'),
+    path('google/analytics/project/', GA4ProjectConnectionView.as_view(), name='ga4-project-connection'),
 ]

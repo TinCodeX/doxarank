@@ -10,6 +10,8 @@ export interface IntegrationConnectionStatus {
   connected_at?: string | null;
   updated_at?: string | null;
   has_valid_credentials?: boolean;
+  has_analytics_scope?: boolean;
+  project_ga4?: ProjectGA4ConnectionResponse | null;
 }
 
 export type IntegrationsStatusResponse = Record<string, IntegrationConnectionStatus>;
@@ -38,12 +40,45 @@ export interface AssociatePropertyResponse {
   google_account_email?: string;
 }
 
+export interface GA4Property {
+  property_id: string;
+  display_name: string;
+  property_type: string;
+}
+
+export interface AssociateGA4PropertyPayload {
+  project_id: number;
+  property_id: string;
+  display_name?: string;
+}
+
+export interface AssociateGA4PropertyResponse {
+  project_id: number;
+  project_name: string;
+  property_id: string;
+  display_name: string;
+  account_id?: string;
+  is_connected: boolean;
+  connected_at: string;
+}
+
+export interface ProjectGA4ConnectionResponse {
+  project_id: number;
+  project_name: string;
+  property_id: string;
+  display_name: string;
+  account_id?: string;
+  is_connected: boolean;
+  connected_at: string;
+}
+
 /**
  * Retrieve integration connection statuses for the authenticated user.
  * (GET /api/integrations/status/)
  */
-export async function getIntegrationsStatus(): Promise<IntegrationsStatusResponse> {
-  return apiFetch<IntegrationsStatusResponse>('/api/integrations/status/');
+export async function getIntegrationsStatus(projectId?: number): Promise<IntegrationsStatusResponse> {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  return apiFetch<IntegrationsStatusResponse>(`/api/integrations/status/${query}`);
 }
 
 /**
@@ -99,3 +134,44 @@ export async function associateSearchConsoleProperty(
     body: JSON.stringify(payload),
   });
 }
+
+/**
+ * Retrieve accessible Google Analytics 4 (GA4) properties for the connected user.
+ * (GET /api/integrations/google/analytics/properties/)
+ */
+export async function getGA4Properties(): Promise<GA4Property[]> {
+  return apiFetch<GA4Property[]>('/api/integrations/google/analytics/properties/');
+}
+
+/**
+ * Associate an accessible GA4 property with a DoxaRank project.
+ * (POST /api/integrations/google/analytics/associate/)
+ */
+export async function associateGA4Property(
+  payload: AssociateGA4PropertyPayload
+): Promise<AssociateGA4PropertyResponse> {
+  return apiFetch<AssociateGA4PropertyResponse>('/api/integrations/google/analytics/associate/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Retrieve active GA4 connection for a specific project.
+ * (GET /api/integrations/google/analytics/project/?project_id=<id>)
+ */
+export async function getProjectGA4Connection(
+  projectId: number
+): Promise<ProjectGA4ConnectionResponse | null> {
+  try {
+    return await apiFetch<ProjectGA4ConnectionResponse>(
+      `/api/integrations/google/analytics/project/?project_id=${encodeURIComponent(projectId)}`
+    );
+  } catch (err: any) {
+    if (err?.status === 404 || err?.data?.detail?.includes('not associated') || err?.data?.code === 'NOT_FOUND') {
+      return null;
+    }
+    throw err;
+  }
+}
+
