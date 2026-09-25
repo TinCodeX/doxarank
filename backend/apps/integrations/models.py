@@ -153,6 +153,11 @@ class IntegrationConnection(models.Model):
         """Check if connection includes Google Analytics read-only scope."""
         return self.has_scope('https://www.googleapis.com/auth/analytics.readonly')
 
+    @property
+    def has_gtm_scope(self) -> bool:
+        """Check if connection includes Google Tag Manager read-only scope."""
+        return self.has_scope('https://www.googleapis.com/auth/tagmanager.readonly')
+
 
 class ProjectGA4Connection(models.Model):
     """
@@ -267,3 +272,61 @@ class ProjectClarityConnection(models.Model):
     def get_api_token(self) -> Optional[str]:
         """Decrypt and return plaintext Clarity API token."""
         return decrypt_token(self.encrypted_api_token) if self.encrypted_api_token else None
+
+
+class ProjectGTMConnection(models.Model):
+    """
+    Links a DoxaRank Project to an associated Google Tag Manager (GTM) container.
+    Relationship: Project 1 <---> 1 ProjectGTMConnection (OneToOne)
+    Ownership: project.owner (tenant isolation)
+    """
+    project = models.OneToOneField(
+        'projects.Project',
+        on_delete=models.CASCADE,
+        related_name='gtm_connection',
+        help_text='The project linked to this GTM container.'
+    )
+    account_id = models.CharField(
+        max_length=100,
+        help_text='The GTM account ID (e.g. "123456").'
+    )
+    container_id = models.CharField(
+        max_length=100,
+        help_text='The GTM container ID (numeric ID, e.g. "789012").'
+    )
+    container_public_id = models.CharField(
+        max_length=50,
+        help_text='The public GTM container ID (e.g. "GTM-XXXXXX").'
+    )
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Display name of the GTM container.'
+    )
+    usage_context = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='GTM usage contexts (e.g. ["web"]).'
+    )
+    is_connected = models.BooleanField(
+        default=True,
+        help_text='Whether this project is actively connected to GTM.'
+    )
+    connected_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the GTM container was associated.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp of last update.'
+    )
+
+    class Meta:
+        db_table = 'integrations_gtm_connections'
+        verbose_name = 'Project GTM Connection'
+        verbose_name_plural = 'Project GTM Connections'
+        ordering = ['-connected_at']
+
+    def __str__(self):
+        return f"GTM: {self.container_public_id} ({self.project.name})"

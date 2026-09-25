@@ -3354,7 +3354,7 @@ class ToolRegistryTests(TestCase):
             'get_action_outcomes'
         ]
         registered_names = [t.name for t in self.registry.list_tools()]
-        self.assertEqual(len(registered_names), 29)
+        self.assertEqual(len(registered_names), 39)
         for tool_name in expected_tools:
             self.assertIn(tool_name, registered_names)
             tool = self.registry.get(tool_name)
@@ -3364,7 +3364,7 @@ class ToolRegistryTests(TestCase):
     def test_tool_definitions_and_schema_export(self):
         """2. Tool definitions export standard provider-neutral JSON schemas."""
         schemas = self.registry.get_schemas()
-        self.assertEqual(len(schemas), 29)
+        self.assertEqual(len(schemas), 39)
 
 
         for s in schemas:

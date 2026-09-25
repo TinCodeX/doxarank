@@ -15,6 +15,7 @@ from apps.integrations.models import (
     IntegrationStatus,
     ProjectGA4Connection,
     ProjectClarityConnection,
+    ProjectGTMConnection,
 )
 from apps.integrations.services.google_oauth import (
     GoogleOAuthIntegrationService,
@@ -1035,4 +1036,443 @@ class ClarityIntegrationTests(TestCase):
         self.assertNotIn('encrypted_refresh_token', ms_data)
         self.assertNotIn('access_token', ms_data)
         self.assertNotIn('refresh_token', ms_data)
+
+
+@override_settings(**MOCK_OAUTH_SETTINGS)
+class GTMIntegrationTests(TestCase):
+    """
+    Tests for Google Tag Manager (GTM) integration:
+    - Scope handling and verification
+    - Scope merging during reauthorization
+    - Token refresh behavior
+    - Discovery of GTM accounts and containers
+    - Google API error handling (401, 403, 429, 500)
+    - Project container association (idempotent reassociation)
+    - Tenant isolation & project ownership
+    - Invalid container rejection
+    - Subscription gating: Free blocked, Starter allowed, Agency allowed
+    - Status endpoint and token security (no leakage)
+    - Project disconnection
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        SubscriptionService.bootstrap_default_plans()
+
+        self.user = User.objects.create_user(
+            email='gtm_user@example.com',
+            password='Password123!'
+        )
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        self.client.force_authenticate(user=self.user)
+
+        self.project = Project.objects.create(
+            name='GTM Web Project',
+            website_url='https://gtm-example.com',
+            owner=self.user
+        )
+
+        self.other_user = User.objects.create_user(
+            email='other_gtm_user@example.com',
+            password='Password123!'
+        )
+        SubscriptionService.assign_plan(self.other_user, PlanCode.STARTER)
+        self.other_project = Project.objects.create(
+            name='Other Web Project',
+            website_url='https://other-example.com',
+            owner=self.other_user
+        )
+
+        self.connection = IntegrationConnection.objects.create(
+            user=self.user,
+            provider=IntegrationProvider.GOOGLE,
+            status=IntegrationStatus.CONNECTED,
+            account_email='gtm_user@example.com',
+            scopes=[
+                'https://www.googleapis.com/auth/webmasters.readonly',
+                'https://www.googleapis.com/auth/analytics.readonly',
+                'https://www.googleapis.com/auth/tagmanager.readonly',
+                'openid',
+                'https://www.googleapis.com/auth/userinfo.email',
+            ],
+            token_expires_at=timezone.now() + timedelta(hours=1)
+        )
+        self.connection.set_access_token('mock_gtm_access_token')
+        self.connection.set_refresh_token('mock_gtm_refresh_token')
+        self.connection.save()
+
+    def test_gtm_scope_property_on_connection(self):
+        self.assertTrue(self.connection.has_gtm_scope)
+        self.connection.scopes = ['https://www.googleapis.com/auth/webmasters.readonly']
+        self.connection.save()
+        self.assertFalse(self.connection.has_gtm_scope)
+
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.fetch_user_identity')
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.exchange_code')
+    def test_reauthorization_merges_gtm_scope_safely(self, mock_exchange, mock_identity):
+        self.connection.scopes = [
+            'https://www.googleapis.com/auth/webmasters.readonly',
+            'https://www.googleapis.com/auth/analytics.readonly',
+        ]
+        self.connection.save()
+
+        mock_exchange.return_value = {
+            'access_token': 'new_gtm_access_token',
+            'refresh_token': 'new_gtm_refresh_token',
+            'expires_in': 3600,
+            'scope': 'https://www.googleapis.com/auth/tagmanager.readonly'
+        }
+        mock_identity.return_value = {
+            'email': 'gtm_user@example.com',
+            'name': 'GTM User',
+            'id': 'google-uid-gtm',
+            'verified_email': True
+        }
+
+        state = OAuthStateService.generate_state(self.user)
+        response = self.client.get(f'/api/integrations/google/callback/?code=gtm_code&state={state}')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.connection.refresh_from_db()
+        self.assertIn('https://www.googleapis.com/auth/webmasters.readonly', self.connection.scopes)
+        self.assertIn('https://www.googleapis.com/auth/analytics.readonly', self.connection.scopes)
+        self.assertIn('https://www.googleapis.com/auth/tagmanager.readonly', self.connection.scopes)
+        self.assertTrue(self.connection.has_gtm_scope)
+
+    def test_unauthenticated_request_rejected(self):
+        unauth_client = APIClient()
+        response = unauth_client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_disconnected_user_returns_400(self):
+        self.connection.status = IntegrationStatus.DISCONNECTED
+        self.connection.save()
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'NOT_CONNECTED')
+
+    def test_missing_gtm_scope_returns_403(self):
+        self.connection.scopes = [
+            'https://www.googleapis.com/auth/webmasters.readonly',
+            'https://www.googleapis.com/auth/analytics.readonly',
+        ]
+        self.connection.save()
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'GTM_SCOPE_MISSING')
+        self.assertIn('reconnect your google account', response.data['detail'].lower())
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.get_client')
+    def test_list_containers_success_and_normalization(self, mock_get_client):
+        mock_client = MagicMock()
+        # Mock accounts list
+        mock_client.accounts().list().execute.return_value = {
+            'account': [
+                {'accountId': '1001', 'name': 'Corporate Account'},
+                {'accountId': '1002', 'name': 'Marketing Account'},
+            ]
+        }
+        # Mock containers list per account
+        def mock_containers_list(parent=None):
+            req = MagicMock()
+            if parent == 'accounts/1001':
+                req.execute.return_value = {
+                    'container': [
+                        {
+                            'accountId': '1001',
+                            'containerId': '2001',
+                            'publicId': 'GTM-AAA111',
+                            'name': 'Corporate Main Site',
+                            'usageContext': ['web'],
+                        }
+                    ]
+                }
+            elif parent == 'accounts/1002':
+                req.execute.return_value = {
+                    'container': [
+                        {
+                            'accountId': '1002',
+                            'containerId': '2002',
+                            'publicId': 'GTM-BBB222',
+                            'name': 'Landing Pages',
+                            'usageContext': ['web', 'amp'],
+                        }
+                    ]
+                }
+            else:
+                req.execute.return_value = {}
+            return req
+
+        mock_client.accounts().containers().list.side_effect = mock_containers_list
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]['container_id'], '2001')
+        self.assertEqual(response.data[0]['public_id'], 'GTM-AAA111')
+        self.assertEqual(response.data[0]['name'], 'Corporate Main Site')
+        self.assertEqual(response.data[0]['account_id'], '1001')
+        self.assertEqual(response.data[0]['account_name'], 'Corporate Account')
+        self.assertEqual(response.data[0]['usage_context'], ['web'])
+
+        self.assertEqual(response.data[1]['container_id'], '2002')
+        self.assertEqual(response.data[1]['public_id'], 'GTM-BBB222')
+        self.assertEqual(response.data[1]['name'], 'Landing Pages')
+        self.assertEqual(response.data[1]['account_id'], '1002')
+        self.assertEqual(response.data[1]['account_name'], 'Marketing Account')
+        self.assertEqual(response.data[1]['usage_context'], ['web', 'amp'])
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.get_client')
+    def test_list_containers_handles_google_api_429(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status = 429
+        mock_client.accounts().list().execute.side_effect = HttpError(resp=mock_resp, content=b'Rate limit exceeded')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data.get('code'), 'RATE_LIMIT_EXCEEDED')
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.get_client')
+    def test_list_containers_handles_google_api_403(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status = 403
+        mock_client.accounts().list().execute.side_effect = HttpError(resp=mock_resp, content=b'Forbidden')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data.get('code'), 'CREDENTIALS_INVALID')
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.get_client')
+    def test_list_containers_handles_google_api_500(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status = 500
+        mock_client.accounts().list().execute.side_effect = HttpError(resp=mock_resp, content=b'Server Error')
+        mock_get_client.return_value = mock_client
+
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data.get('code'), 'GOOGLE_API_ERROR')
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_associate_container_success(self, mock_list):
+        mock_list.return_value = [
+            {
+                'account_id': '1001',
+                'account_name': 'Corporate Account',
+                'container_id': '2001',
+                'public_id': 'GTM-AAA111',
+                'name': 'Corporate Main Site',
+                'usage_context': ['web'],
+            }
+        ]
+
+        response = self.client.post('/api/integrations/google/gtm/associate/', data={
+            'project_id': self.project.id,
+            'container_id': '2001',
+            'container_public_id': 'GTM-AAA111',
+            'name': 'Corporate Main Site',
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['container_id'], '2001')
+        self.assertEqual(response.data['container_public_id'], 'GTM-AAA111')
+        self.assertEqual(response.data['project_id'], self.project.id)
+        self.assertTrue(response.data['is_connected'])
+
+        conn = ProjectGTMConnection.objects.get(project=self.project)
+        self.assertEqual(conn.container_id, '2001')
+        self.assertEqual(conn.container_public_id, 'GTM-AAA111')
+        self.assertTrue(conn.is_connected)
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_associate_container_idempotent_reassociation(self, mock_list):
+        mock_list.return_value = [
+            {
+                'account_id': '1001',
+                'account_name': 'Corporate Account',
+                'container_id': '2001',
+                'public_id': 'GTM-AAA111',
+                'name': 'First Container',
+                'usage_context': ['web'],
+            },
+            {
+                'account_id': '1001',
+                'account_name': 'Corporate Account',
+                'container_id': '2002',
+                'public_id': 'GTM-BBB222',
+                'name': 'Second Container',
+                'usage_context': ['web'],
+            }
+        ]
+
+        # First association
+        self.client.post('/api/integrations/google/gtm/associate/', data={
+            'project_id': self.project.id,
+            'container_id': '2001',
+        })
+
+        # Second association updates existing record without duplicate
+        response = self.client.post('/api/integrations/google/gtm/associate/', data={
+            'project_id': self.project.id,
+            'container_id': '2002',
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['container_id'], '2002')
+        self.assertEqual(response.data['container_public_id'], 'GTM-BBB222')
+        self.assertEqual(ProjectGTMConnection.objects.filter(project=self.project).count(), 1)
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_associate_container_invalid_container_rejected(self, mock_list):
+        mock_list.return_value = [
+            {
+                'account_id': '1001',
+                'account_name': 'Corporate Account',
+                'container_id': '2001',
+                'public_id': 'GTM-AAA111',
+                'name': 'Valid Container',
+                'usage_context': ['web'],
+            }
+        ]
+
+        response = self.client.post('/api/integrations/google/gtm/associate/', data={
+            'project_id': self.project.id,
+            'container_id': 'NONEXISTENT_CONTAINER',
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('not found', response.data['detail'].lower())
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_associate_container_tenant_isolation(self, mock_list):
+        mock_list.return_value = [
+            {
+                'account_id': '1001',
+                'account_name': 'Corporate Account',
+                'container_id': '2001',
+                'public_id': 'GTM-AAA111',
+                'name': 'Valid Container',
+                'usage_context': ['web'],
+            }
+        ]
+
+        # User attempts to associate container with another user's project
+        response = self.client.post('/api/integrations/google/gtm/associate/', data={
+            'project_id': self.other_project.id,
+            'container_id': '2001',
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data.get('code'), 'PROJECT_NOT_FOUND')
+
+    def test_get_project_connection_success(self):
+        ProjectGTMConnection.objects.create(
+            project=self.project,
+            account_id='1001',
+            container_id='2001',
+            container_public_id='GTM-AAA111',
+            name='My GTM Web Container',
+            usage_context=['web'],
+            is_connected=True
+        )
+
+        response = self.client.get(f'/api/integrations/google/gtm/project/?project_id={self.project.id}')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['container_id'], '2001')
+        self.assertEqual(response.data['container_public_id'], 'GTM-AAA111')
+        self.assertTrue(response.data['is_connected'])
+
+    def test_get_project_connection_not_connected(self):
+        response = self.client.get(f'/api/integrations/google/gtm/project/?project_id={self.project.id}')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data['is_connected'])
+
+    def test_disconnect_project_gtm(self):
+        ProjectGTMConnection.objects.create(
+            project=self.project,
+            account_id='1001',
+            container_id='2001',
+            container_public_id='GTM-AAA111',
+            name='My GTM Web Container',
+            usage_context=['web'],
+            is_connected=True
+        )
+
+        response = self.client.post('/api/integrations/google/gtm/disconnect/', data={
+            'project_id': self.project.id
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['disconnected'])
+
+        conn = ProjectGTMConnection.objects.get(project=self.project)
+        self.assertFalse(conn.is_connected)
+
+    def test_free_subscription_blocked_from_gtm(self):
+        SubscriptionService.assign_plan(self.user, PlanCode.FREE)
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get('code'), 'FEATURE_NOT_ENTITLED')
+        self.assertTrue(response.data.get('upgrade_required'))
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_starter_subscription_allowed_gtm(self, mock_list):
+        mock_list.return_value = []
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @patch('apps.integrations.services.gtm.GTMIntegrationService.list_containers')
+    def test_agency_subscription_allowed_gtm(self, mock_list):
+        mock_list.return_value = []
+        SubscriptionService.assign_plan(self.user, PlanCode.AGENCY)
+        response = self.client.get('/api/integrations/google/gtm/containers/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_status_endpoint_includes_has_gtm_scope_and_project_gtm(self):
+        ProjectGTMConnection.objects.create(
+            project=self.project,
+            account_id='1001',
+            container_id='2001',
+            container_public_id='GTM-AAA111',
+            name='My GTM Web Container',
+            usage_context=['web'],
+            is_connected=True
+        )
+
+        response = self.client.get(f'/api/integrations/status/?project_id={self.project.id}')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('google', response.data)
+        self.assertTrue(response.data['google']['has_gtm_scope'])
+        self.assertIn('project_gtm', response.data)
+        self.assertEqual(response.data['project_gtm']['container_public_id'], 'GTM-AAA111')
+
+    def test_serializer_never_exposes_tokens(self):
+        response = self.client.get('/api/integrations/status/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        google_data = response.data.get('google', {})
+        self.assertNotIn('encrypted_access_token', google_data)
+        self.assertNotIn('encrypted_refresh_token', google_data)
+        self.assertNotIn('access_token', google_data)
+        self.assertNotIn('refresh_token', google_data)
+
+    @patch('apps.integrations.services.google_oauth.GoogleOAuthIntegrationService.refresh_connection_tokens')
+    def test_token_refresh_behavior(self, mock_refresh):
+        self.connection.token_expires_at = timezone.now() - timedelta(minutes=5)
+        self.connection.save()
+
+        mock_refresh.return_value = self.connection
+
+        from apps.integrations.services.gtm import GTMIntegrationService
+        creds = GTMIntegrationService.get_credentials(self.connection)
+        mock_refresh.assert_called_once_with(self.connection)
+        self.assertEqual(creds.token, 'mock_gtm_access_token')
+
 

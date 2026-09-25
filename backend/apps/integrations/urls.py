@@ -15,6 +15,10 @@ from apps.integrations.views import (
     MicrosoftClarityProjectsView,
     MicrosoftClarityAssociatePropertyView,
     MicrosoftClarityProjectConnectionView,
+    GTMContainersView,
+    GTMAssociateContainerView,
+    GTMProjectConnectionView,
+    GTMDisconnectProjectView,
 )
 
 app_name = 'integrations'
@@ -36,6 +40,12 @@ urlpatterns = [
     path('google/analytics/properties/', GA4PropertiesView.as_view(), name='ga4-properties'),
     path('google/analytics/associate/', GA4AssociatePropertyView.as_view(), name='ga4-associate'),
     path('google/analytics/project/', GA4ProjectConnectionView.as_view(), name='ga4-project-connection'),
+
+    # Google Tag Manager (GTM)
+    path('google/gtm/containers/', GTMContainersView.as_view(), name='gtm-containers'),
+    path('google/gtm/associate/', GTMAssociateContainerView.as_view(), name='gtm-associate'),
+    path('google/gtm/project/', GTMProjectConnectionView.as_view(), name='gtm-project-connection'),
+    path('google/gtm/disconnect/', GTMDisconnectProjectView.as_view(), name='gtm-disconnect-project'),
 
     # Microsoft Clarity
     path('microsoft/clarity/connect/', MicrosoftClarityConnectView.as_view(), name='clarity-connect'),

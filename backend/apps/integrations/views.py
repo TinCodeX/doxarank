@@ -12,6 +12,7 @@ from apps.integrations.models import (
     IntegrationStatus,
     ProjectGA4Connection,
     ProjectClarityConnection,
+    ProjectGTMConnection,
 )
 from apps.integrations.serializers import (
     IntegrationStatusSerializer,
@@ -22,6 +23,8 @@ from apps.integrations.serializers import (
     ClarityProjectSerializer,
     ClarityAssociateSerializer,
     OAuthCallbackRequestSerializer,
+    GTMContainerSerializer,
+    GTMAssociateSerializer,
 )
 from apps.integrations.services.google_oauth import (
     GoogleOAuthIntegrationService,
@@ -54,7 +57,17 @@ from apps.integrations.services.clarity import (
     ClarityApiError,
     ClarityProjectNotFoundError,
 )
-from apps.subscriptions.permissions import CanAccessGSC, CanAccessGA4, CanAccessClarity
+from apps.integrations.services.gtm import (
+    GTMIntegrationService,
+    GTMError,
+    GTMNotConnectedError,
+    GTMScopeMissingError,
+    GTMCredentialsError,
+    GTMRateLimitError,
+    GTMApiError,
+    GTMProjectNotFoundError,
+)
+from apps.subscriptions.permissions import CanAccessGSC, CanAccessGA4, CanAccessClarity, CanAccessGTM
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +75,7 @@ logger = logging.getLogger(__name__)
 class CanAccessGoogleIntegrations(permissions.BasePermission):
     """
     Permission check requiring that the user has an active plan entitled to
-    either Google Search Console or Google Analytics 4.
+    either Google Search Console, Google Analytics 4, or Google Tag Manager.
     """
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -71,8 +84,9 @@ class CanAccessGoogleIntegrations(permissions.BasePermission):
         from apps.subscriptions.models import FeatureCode
         can_gsc = PlanEntitlementService.can_use_feature(request.user, FeatureCode.GSC)
         can_ga4 = PlanEntitlementService.can_use_feature(request.user, FeatureCode.GA4)
-        if not (can_gsc or can_ga4):
-            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.GA4)
+        can_gtm = PlanEntitlementService.can_use_feature(request.user, FeatureCode.GTM)
+        if not (can_gsc or can_ga4 or can_gtm):
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.GTM)
         return True
 
 
@@ -199,6 +213,7 @@ class IntegrationStatusView(APIView):
                 'updated_at': conn.updated_at,
                 'has_valid_credentials': conn.has_valid_credentials,
                 'has_analytics_scope': conn.has_analytics_scope if conn.provider == IntegrationProvider.GOOGLE else False,
+                'has_gtm_scope': conn.has_gtm_scope if conn.provider == IntegrationProvider.GOOGLE else False,
             }
 
         # Ensure google entry exists even if not yet connected
@@ -213,6 +228,7 @@ class IntegrationStatusView(APIView):
                 'updated_at': None,
                 'has_valid_credentials': False,
                 'has_analytics_scope': False,
+                'has_gtm_scope': False,
             }
 
         # Ensure microsoft entry exists even if not yet connected
@@ -261,9 +277,28 @@ class IntegrationStatusView(APIView):
                     }
                 else:
                     results['project_clarity'] = None
+
+                gtm_conn = ProjectGTMConnection.objects.filter(
+                    project_id=project_id,
+                    project__owner=request.user,
+                    is_connected=True
+                ).first()
+                if gtm_conn:
+                    results['project_gtm'] = {
+                        'account_id': gtm_conn.account_id,
+                        'container_id': gtm_conn.container_id,
+                        'container_public_id': gtm_conn.container_public_id,
+                        'name': gtm_conn.name,
+                        'usage_context': gtm_conn.usage_context,
+                        'is_connected': gtm_conn.is_connected,
+                        'connected_at': gtm_conn.connected_at,
+                    }
+                else:
+                    results['project_gtm'] = None
             except (ValueError, TypeError):
                 results['project_ga4'] = None
                 results['project_clarity'] = None
+                results['project_gtm'] = None
 
         return Response(results, status=status.HTTP_200_OK)
 
@@ -631,4 +666,122 @@ class MicrosoftClarityProjectConnectionView(APIView):
             return Response(info, status=status.HTTP_200_OK)
         except (ValueError, TypeError):
             return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GTMContainersView(APIView):
+    """
+    Retrieve user's accessible Google Tag Manager (GTM) containers via Google API.
+    Requires authentication and GTM subscription entitlement.
+    (GET /api/integrations/google/gtm/containers/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGTM]
+
+    def get(self, request):
+        try:
+            containers = GTMIntegrationService.list_containers(request.user)
+            serializer = GTMContainerSerializer(containers, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except GTMNotConnectedError as exc:
+            return Response({'code': 'NOT_CONNECTED', 'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except GTMScopeMissingError as exc:
+            return Response({'code': 'GTM_SCOPE_MISSING', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except GTMCredentialsError as exc:
+            return Response({'code': 'CREDENTIALS_INVALID', 'detail': str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+        except GTMRateLimitError as exc:
+            return Response({'code': 'RATE_LIMIT_EXCEEDED', 'detail': str(exc)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except GTMApiError as exc:
+            return Response({'code': 'GOOGLE_API_ERROR', 'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as exc:
+            logger.error(f"[GTMContainersView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to retrieve GTM containers: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GTMAssociateContainerView(APIView):
+    """
+    Associate a verified GTM container with a user's DoxaRank Project.
+    Requires authentication and GTM subscription entitlement.
+    (POST /api/integrations/google/gtm/associate/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGTM]
+
+    def post(self, request):
+        serializer = GTMAssociateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        try:
+            result = GTMIntegrationService.associate_project_container(
+                user=request.user,
+                project_id=validated['project_id'],
+                container_id=validated['container_id'],
+                account_id=validated.get('account_id'),
+                container_public_id=validated.get('container_public_id'),
+                name=validated.get('name'),
+                usage_context=validated.get('usage_context'),
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except GTMScopeMissingError as exc:
+            return Response({'code': 'GTM_SCOPE_MISSING', 'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except GTMProjectNotFoundError as exc:
+            return Response({'code': 'PROJECT_NOT_FOUND', 'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except GTMError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.error(f"[GTMAssociateContainerView] Error: {exc}")
+            return Response(
+                {'detail': f"Failed to associate GTM container: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GTMProjectConnectionView(APIView):
+    """
+    Retrieve active GTM connection for a specific DoxaRank Project.
+    (GET /api/integrations/google/gtm/project/?project_id=<id>)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGTM]
+
+    def get(self, request):
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response({'detail': "project_id query parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            info = GTMIntegrationService.get_project_connection(user=request.user, project_id=int(project_id))
+            if not info:
+                return Response(
+                    {'is_connected': False, 'detail': "No GTM container linked to this project."},
+                    status=status.HTTP_200_OK
+                )
+            return Response(info, status=status.HTTP_200_OK)
+        except (ValueError, TypeError):
+            return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GTMDisconnectProjectView(APIView):
+    """
+    Disconnect GTM container from a specific DoxaRank Project.
+    (POST /api/integrations/google/gtm/disconnect/)
+    """
+    permission_classes = [permissions.IsAuthenticated, CanAccessGTM]
+
+    def post(self, request):
+        project_id = request.data.get('project_id')
+        if not project_id:
+            return Response({'detail': "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            disconnected = GTMIntegrationService.disconnect_project(user=request.user, project_id=int(project_id))
+            return Response({'disconnected': disconnected}, status=status.HTTP_200_OK)
+        except GTMProjectNotFoundError as exc:
+            return Response({'code': 'PROJECT_NOT_FOUND', 'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except (ValueError, TypeError):
+            return Response({'detail': "Invalid project_id."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.error(f"[GTMDisconnectProjectView] Error: {exc}")
+            return Response({'detail': f"Failed to disconnect GTM: {str(exc)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 

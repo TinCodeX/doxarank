@@ -11,8 +11,10 @@ export interface IntegrationConnectionStatus {
   updated_at?: string | null;
   has_valid_credentials?: boolean;
   has_analytics_scope?: boolean;
+  has_gtm_scope?: boolean;
   project_ga4?: ProjectGA4ConnectionResponse | null;
   project_clarity?: ProjectClarityConnectionResponse | null;
+  project_gtm?: ProjectGTMConnectionResponse | null;
 }
 
 export type IntegrationsStatusResponse = Record<string, IntegrationConnectionStatus>;
@@ -268,5 +270,103 @@ export async function getProjectClarityConnection(
     throw err;
   }
 }
+
+export interface GTMContainer {
+  account_id: string;
+  account_name?: string;
+  container_id: string;
+  public_id: string;
+  name: string;
+  usage_context?: string[];
+}
+
+export interface AssociateGTMPayload {
+  project_id: number;
+  container_id: string;
+  account_id?: string;
+  container_public_id?: string;
+  name?: string;
+  usage_context?: string[];
+}
+
+export interface AssociateGTMResponse {
+  project_id: number;
+  project_name: string;
+  account_id: string;
+  container_id: string;
+  container_public_id: string;
+  name: string;
+  usage_context: string[];
+  is_connected: boolean;
+  connected_at: string;
+}
+
+export interface ProjectGTMConnectionResponse {
+  project_id: number;
+  project_name: string;
+  account_id: string;
+  container_id: string;
+  container_public_id: string;
+  name: string;
+  usage_context: string[];
+  is_connected: boolean;
+  connected_at: string;
+}
+
+/**
+ * Retrieve accessible Google Tag Manager (GTM) containers for the connected user.
+ * (GET /api/integrations/google/gtm/containers/)
+ */
+export async function getGTMContainers(): Promise<GTMContainer[]> {
+  return apiFetch<GTMContainer[]>('/api/integrations/google/gtm/containers/');
+}
+
+/**
+ * Associate an accessible GTM container with a DoxaRank project.
+ * (POST /api/integrations/google/gtm/associate/)
+ */
+export async function associateGTMContainer(
+  payload: AssociateGTMPayload
+): Promise<AssociateGTMResponse> {
+  return apiFetch<AssociateGTMResponse>('/api/integrations/google/gtm/associate/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Retrieve active GTM connection for a specific project.
+ * (GET /api/integrations/google/gtm/project/?project_id=<id>)
+ */
+export async function getProjectGTMConnection(
+  projectId: number
+): Promise<ProjectGTMConnectionResponse | null> {
+  try {
+    const res = await apiFetch<any>(
+      `/api/integrations/google/gtm/project/?project_id=${encodeURIComponent(projectId)}`
+    );
+    if (!res || res.is_connected === false) {
+      return null;
+    }
+    return res as ProjectGTMConnectionResponse;
+  } catch (err: any) {
+    if (err?.status === 404 || err?.data?.detail?.includes('not associated') || err?.data?.code === 'NOT_FOUND') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Disconnect GTM container from a project.
+ * (POST /api/integrations/google/gtm/disconnect/)
+ */
+export async function disconnectProjectGTM(projectId: number): Promise<{ disconnected: boolean }> {
+  return apiFetch<{ disconnected: boolean }>('/api/integrations/google/gtm/disconnect/', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId }),
+  });
+}
+
 
 

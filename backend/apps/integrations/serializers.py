@@ -9,6 +9,7 @@ class IntegrationStatusSerializer(serializers.ModelSerializer):
     """
     has_valid_credentials = serializers.BooleanField(read_only=True)
     has_analytics_scope = serializers.BooleanField(read_only=True)
+    has_gtm_scope = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = IntegrationConnection
@@ -25,6 +26,7 @@ class IntegrationStatusSerializer(serializers.ModelSerializer):
             'token_expires_at',
             'has_valid_credentials',
             'has_analytics_scope',
+            'has_gtm_scope',
         ]
         read_only_fields = fields
 
@@ -93,3 +95,36 @@ class ClarityAssociateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_blank=True, default='')
     website = serializers.CharField(required=False, allow_blank=True, default='')
     api_token = serializers.CharField(required=False, allow_blank=True, default='', write_only=True)
+
+
+class GTMContainerSerializer(serializers.Serializer):
+    """
+    Normalized Google Tag Manager container representation.
+    """
+    account_id = serializers.CharField()
+    account_name = serializers.CharField(required=False, allow_blank=True, default='')
+    container_id = serializers.CharField()
+    public_id = serializers.CharField()
+    name = serializers.CharField()
+    usage_context = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list
+    )
+
+
+class GTMAssociateSerializer(serializers.Serializer):
+    """
+    Payload for associating a discovered GTM container with a DoxaRank project.
+    """
+    project_id = serializers.IntegerField(required=True)
+    container_id = serializers.CharField(required=True, max_length=100)
+    account_id = serializers.CharField(required=False, allow_blank=True, default='')
+    container_public_id = serializers.CharField(required=False, allow_blank=True, default='')
+    name = serializers.CharField(required=False, allow_blank=True, default='')
+    usage_context = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list
+    )
+

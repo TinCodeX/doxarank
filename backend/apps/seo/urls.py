@@ -88,6 +88,7 @@ urlpatterns = [
     path('ai/learning/performance/', SEOAgentLearningPerformanceView.as_view(), name='seo-agent-learning-performance'),
     path('ai/strategy/', SEOAdaptiveStrategyView.as_view(), name='seo-adaptive-strategy'),
     path('integrations/google/authorization-url/', GoogleOAuthAuthorizationUrlView.as_view(), name='google-oauth-authorization-url'),
+    path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     # Standalone SEO Tools
     path('tools/', include('apps.seo.tools.urls')),
     path('', include(router.urls)),
