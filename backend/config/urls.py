@@ -23,5 +23,6 @@ urlpatterns = [
     path('api/projects/', include('apps.projects.urls')),
     path('api/seo/', include('apps.seo.urls')),
     path('api/subscriptions/', include('apps.subscriptions.urls')),
+    path('api/integrations/', include('apps.integrations.urls')),
 ]
 

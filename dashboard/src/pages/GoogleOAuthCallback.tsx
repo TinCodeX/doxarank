@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { exchangeGoogleOAuthCallback } from '../api/googleOAuth';
+import { exchangeUserGoogleOAuthCallback } from '../api/integrations';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 export const GoogleOAuthCallback: React.FC = () => {
@@ -41,12 +42,38 @@ export const GoogleOAuthCallback: React.FC = () => {
 
     const performExchange = async () => {
       try {
-        const result = await exchangeGoogleOAuthCallback({
-          code,
-          state,
-        });
-        setConnection(result);
-        setStatus('success');
+        // First try user-level Google integration callback
+        try {
+          const userConn = await exchangeUserGoogleOAuthCallback({ code, state });
+          setStatus('success');
+          setConnection({
+            id: userConn.id || 0,
+            project: 0 as any,
+            project_name: 'User Account',
+            project_website_url: '',
+            property_url: 'Connected to User Account',
+            permission_level: 'siteOwner' as any,
+            is_connected: true,
+            connected_at: userConn.connected_at || new Date().toISOString(),
+            last_synced_at: null,
+            sync_status: 'idle' as any,
+            error_message: null,
+            google_account_email: userConn.account_email || '',
+            scopes: userConn.scopes || [],
+            token_expires_at: null,
+            created_at: userConn.connected_at || new Date().toISOString(),
+            updated_at: userConn.updated_at || new Date().toISOString(),
+          });
+          return;
+        } catch (userErr: any) {
+          // If not user-level state, fall back to project-level callback
+          const result = await exchangeGoogleOAuthCallback({
+            code,
+            state,
+          });
+          setConnection(result);
+          setStatus('success');
+        }
       } catch (err: any) {
         setStatus('error');
         setErrorMessage(

@@ -15,6 +15,7 @@ import {
 import { syncSearchConsole } from '../api/searchConsoleAnalytics';
 import { getGoogleAuthorizationUrl } from '../api/googleOAuth';
 import { SearchConsoleFormModal } from './SearchConsoleFormModal';
+import { GoogleIntegrationSection } from './GoogleIntegrationSection';
 
 interface SearchConsolePanelProps {
   project: Project;
@@ -223,6 +224,16 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
           {error}
         </div>
       )}
+
+      {/* Google Account Integration Section (Original SRS Google OAuth + Search Console) */}
+      <GoogleIntegrationSection
+        project={project}
+        onPropertyAssociated={() => {
+          if (project?.id) {
+            fetchConnection(project.id);
+          }
+        }}
+      />
 
       {/* Body States */}
       {isLoading ? (
