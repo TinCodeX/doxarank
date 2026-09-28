@@ -284,6 +284,254 @@ class RankCheckJob(models.Model):
         return f"RankCheckJob #{self.id} [{self.status.upper()}] - {self.project.name} ({self.completed_keywords}/{self.total_keywords})"
 
 
+# =============================================================================
+# COMPETITOR SERP SNAPSHOTS (Original SRS: Weekly Competitor Snapshots)
+# =============================================================================
+
+class Competitor(models.Model):
+    """
+    Competitor model representing an active competitor domain monitored for a project.
+    Relationship: Project 1 ─────── * Competitor
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='competitors',
+        help_text='The project website this competitor is monitored against.'
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text='Descriptive label/brand name for the competitor (e.g. "Addis Insight").'
+    )
+    domain = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text='Normalized canonical domain name (e.g. "addisinsight.net").'
+    )
+    website_url = models.URLField(
+        max_length=2048,
+        blank=True,
+        default='',
+        help_text='Optional full website URL for the competitor.'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text='Whether this competitor is currently active for weekly snapshots.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_competitors'
+        verbose_name = 'competitor'
+        verbose_name_plural = 'competitors'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'domain'],
+                name='unique_project_competitor_domain'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['project', 'is_active'], name='seo_comp_proj_active_idx'),
+            models.Index(fields=['domain'], name='seo_comp_domain_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.domain}) - {self.project.name}"
+
+
+class CompetitorSnapshotJobStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    PARTIAL_FAILURE = 'partial_failure', 'Partial Failure'
+
+
+class CompetitorSnapshotJob(models.Model):
+    """
+    CompetitorSnapshotJob model representing a batch execution of competitor SERP checks.
+    Relationship: Project 1 ─────── * CompetitorSnapshotJob
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='competitor_snapshot_jobs',
+        help_text='The project website for which competitor snapshots were run.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=CompetitorSnapshotJobStatus.choices,
+        default=CompetitorSnapshotJobStatus.PENDING,
+        db_index=True,
+        help_text='Execution status of the competitor snapshot job.'
+    )
+    total_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of keywords evaluated during this snapshot job.'
+    )
+    completed_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of keywords successfully queried and processed.'
+    )
+    failed_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of keywords whose SERP query failed.'
+    )
+    trigger = models.CharField(
+        max_length=50,
+        default='manual',
+        help_text='Origin trigger: "manual" or "scheduled_weekly".'
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the snapshot job execution began.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the snapshot job execution concluded.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error details if the snapshot job experienced a failure.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_competitor_snapshot_jobs'
+        verbose_name = 'competitor snapshot job'
+        verbose_name_plural = 'competitor snapshot jobs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', '-created_at'], name='seo_comp_job_proj_idx'),
+            models.Index(fields=['status'], name='seo_comp_job_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"CompetitorSnapshotJob #{self.id} [{self.status.upper()}] - {self.project.name} ({self.completed_keywords}/{self.total_keywords})"
+
+
+class CompetitorSnapshot(models.Model):
+    """
+    CompetitorSnapshot model recording a competitor's ranking position in Google Ethiopia
+    for a specific project keyword during a point-in-time snapshot.
+    Historical observations are strictly preserved over time.
+
+    Relationship:
+      Competitor 1 ─────── * CompetitorSnapshot
+      Project 1 ────────── * CompetitorSnapshot
+      Keyword 1 ────────── * CompetitorSnapshot
+    """
+    competitor = models.ForeignKey(
+        Competitor,
+        on_delete=models.CASCADE,
+        related_name='snapshots',
+        help_text='The competitor domain observed in this snapshot.'
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='competitor_snapshots',
+        help_text='The project tracking this competitor.'
+    )
+    keyword = models.ForeignKey(
+        Keyword,
+        on_delete=models.CASCADE,
+        related_name='competitor_snapshots',
+        help_text='The tracked search query/keyword.'
+    )
+    snapshot_job = models.ForeignKey(
+        CompetitorSnapshotJob,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='snapshots',
+        help_text='The snapshot batch job that produced this observation.'
+    )
+    position = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Organic ranking position (1-100) on google.com.et, or null if NOT FOUND.'
+    )
+    ranking_url = models.URLField(
+        max_length=2048,
+        blank=True,
+        default='',
+        help_text='The exact landing page URL of the competitor found in SERP.'
+    )
+    title = models.CharField(
+        max_length=512,
+        blank=True,
+        default='',
+        help_text='The SERP snippet title found for the competitor.'
+    )
+    result_status = models.CharField(
+        max_length=20,
+        choices=RankingResultStatus.choices,
+        default=RankingResultStatus.NOT_FOUND,
+        db_index=True,
+        help_text='Result status: "found" (1-100), "not_found" (>100), or "error".'
+    )
+    search_engine = models.CharField(
+        max_length=50,
+        default=SearchEngine.GOOGLE,
+        help_text='Target search engine (default: google).'
+    )
+    search_domain = models.CharField(
+        max_length=100,
+        default='google.com.et',
+        help_text='Target Google domain (default: google.com.et for Google Ethiopia).'
+    )
+    country = models.CharField(
+        max_length=10,
+        default=Country.ET,
+        help_text='Target country code (default: ET).'
+    )
+    language = models.CharField(
+        max_length=10,
+        default=Language.EN,
+        help_text='Target query language ("en" or "am").'
+    )
+    device = models.CharField(
+        max_length=20,
+        default=Device.DESKTOP,
+        help_text='Target device category ("desktop" or "mobile").'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error details if the check encountered an issue.'
+    )
+    recorded_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text='Timestamp when the snapshot was recorded.'
+    )
+
+    class Meta:
+        db_table = 'seo_competitor_snapshots'
+        verbose_name = 'competitor snapshot'
+        verbose_name_plural = 'competitor snapshots'
+        ordering = ['-recorded_at', '-id']
+        indexes = [
+            models.Index(fields=['competitor', '-recorded_at'], name='seo_comp_snap_comp_idx'),
+            models.Index(fields=['project', '-recorded_at'], name='seo_comp_snap_proj_idx'),
+            models.Index(fields=['keyword', '-recorded_at'], name='seo_comp_snap_kw_idx'),
+            models.Index(fields=['competitor', 'keyword', '-recorded_at'], name='seo_comp_snap_ck_idx'),
+            models.Index(fields=['result_status', '-recorded_at'], name='seo_comp_snap_stat_idx'),
+        ]
+
+    def __str__(self):
+        pos_str = f"#{self.position}" if self.position is not None else "Not Found"
+        return f"{self.competitor.domain} for '{self.keyword.keyword}' - {pos_str} ({self.recorded_at.strftime('%Y-%m-%d') if self.recorded_at else 'pending'})"
+
+
 class AuditStatus(models.TextChoices):
     PENDING = 'pending', 'Pending'
     RUNNING = 'running', 'Running'

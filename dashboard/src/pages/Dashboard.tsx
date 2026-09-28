@@ -27,7 +27,9 @@ import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
 import { SEOActionsPanel } from '../components/SEOActionsPanel';
 import { SEOToolsPanel } from '../components/SEOToolsPanel';
 import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
+import { CompetitorSnapshotsPanel } from '../components/CompetitorSnapshotsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
+
 import { getUserSubscription } from '../api/subscriptions';
 import type { UserSubscriptionSummary } from '../types/subscription';
 
@@ -1016,6 +1018,16 @@ export const Dashboard: React.FC = () => {
             project={selectedProject}
             hasCrawlerEntitlement={
               !!(subscriptionSummary?.plan?.features ?? []).includes('TECHNICAL_CRAWLER')
+            }
+          />
+        )}
+
+        {/* SECTION 3.6: COMPETITOR SERP SNAPSHOTS (Agency Plan) */}
+        {selectedProject && (
+          <CompetitorSnapshotsPanel
+            project={selectedProject}
+            hasCompetitorEntitlement={
+              !!(subscriptionSummary?.plan?.features ?? []).includes('COMPETITOR_SNAPSHOTS')
             }
           />
         )}

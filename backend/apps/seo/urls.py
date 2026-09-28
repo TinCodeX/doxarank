@@ -27,6 +27,7 @@ from .views import (
     PlatformCircuitBreakerDetailView, PlatformOperatorActionsView,
     PlatformRunInspectionView, PlatformRunRecoveryView, PlatformAuditLogView,
     CrawlJobViewSet, CrawlPageViewSet,
+    CompetitorViewSet, CompetitorSnapshotViewSet, CompetitorSnapshotJobViewSet,
 )
 
 app_name = 'seo'
@@ -56,6 +57,10 @@ router.register('ai/strategic-initiatives', StrategicInitiativeViewSet, basename
 router.register('ai/strategy-reviews', StrategyReviewRecordViewSet, basename='strategy-review')
 router.register('crawler', CrawlJobViewSet, basename='crawljob')
 router.register('crawler-pages', CrawlPageViewSet, basename='crawlpage')
+router.register('competitors', CompetitorViewSet, basename='competitor')
+router.register('competitor-snapshots', CompetitorSnapshotViewSet, basename='competitor-snapshot')
+router.register('competitor-snapshot-jobs', CompetitorSnapshotJobViewSet, basename='competitor-snapshot-job')
+
 
 
 urlpatterns = [
@@ -94,6 +99,14 @@ urlpatterns = [
     path('integrations/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     # Standalone SEO Tools
     path('tools/', include('apps.seo.tools.urls')),
+
+    # Competitor Snapshot SRS explicit routes
+    path('competitors/snapshots/check/', CompetitorSnapshotViewSet.as_view({'post': 'launch_check'}), name='competitor-snapshots-check'),
+    path('competitors/snapshots/', CompetitorSnapshotViewSet.as_view({'get': 'list'}), name='competitor-snapshots-list'),
+    path('competitors/snapshots/<int:pk>/', CompetitorSnapshotViewSet.as_view({'get': 'retrieve'}), name='competitor-snapshots-detail'),
+    path('competitors/snapshot-jobs/', CompetitorSnapshotJobViewSet.as_view({'get': 'list'}), name='competitor-snapshot-jobs-list'),
+    path('competitors/snapshot-jobs/<int:pk>/', CompetitorSnapshotJobViewSet.as_view({'get': 'retrieve'}), name='competitor-snapshot-jobs-detail'),
+
     path('', include(router.urls)),
 ]
 

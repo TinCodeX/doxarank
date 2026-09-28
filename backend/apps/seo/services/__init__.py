@@ -56,6 +56,10 @@ from .rank_tracker import (
     SerpParser,
     SerpResult,
 )
+from .competitor_service import (
+    CompetitorSnapshotService,
+    validate_and_normalize_competitor_domain,
+)
 
 __all__ = [
     'SEOInvestigationService',
@@ -131,9 +135,11 @@ __all__ = [
     'SLOW_RESPONSE',
     'MISSING_STRUCTURED_DATA',
     'normalize_amharic_query',
-    'are_keywords_equivalent',
     'RankTrackerService',
     'GoogleEtSerpClient',
     'SerpParser',
     'SerpResult',
+    'CompetitorSnapshotService',
+    'validate_and_normalize_competitor_domain',
 ]
+

@@ -99,6 +99,7 @@ class SerpParser:
         'ads',
         'ማስታወቂያ',
     }
+    AD_PATTERN = re.compile(r'\b(sponsored|ad|ads|ማስታወቂያ)\b', re.IGNORECASE)
 
     # Domains to ignore as organic results (Google internal/service URLs)
     IGNORED_HOSTS = {
@@ -209,8 +210,8 @@ class SerpParser:
 
         for container in containers:
             # Check if container has ad badges or text
-            text_preview = container.get_text(separator=' ', strip=True).lower()
-            if any(label in text_preview[:50] for label in cls.AD_LABELS):
+            text_preview = container.get_text(separator=' ', strip=True)
+            if cls.AD_PATTERN.search(text_preview[:50]):
                 continue
 
             # Find main ranking link with title

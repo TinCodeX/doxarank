@@ -230,7 +230,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.seo.tasks.run_daily_rank_checks',
         'schedule': 86400.0,  # Run daily google.com.et rank tracking checks
     },
+    'weekly-competitor-serp-snapshots': {
+        'task': 'apps.seo.tasks.run_weekly_competitor_snapshots',
+        'schedule': 604800.0,  # Weekly competitor SERP snapshots (7 days in seconds)
+    },
 }
+
 
 
 # ASGI & Django Channels Configuration

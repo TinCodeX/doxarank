@@ -21,6 +21,7 @@ from .models import (
     StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
     CrawlJob, CrawlJobStatus, CrawlPage,
     RankingResultStatus, RankCheckJob, RankCheckJobStatus,
+    Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
 )
 from apps.projects.models import Project
 
@@ -2271,3 +2272,137 @@ class LaunchCrawlRequestSerializer(serializers.Serializer):
         required=False, default=True,
         help_text='Whether to respect robots.txt (default True).'
     )
+
+
+# =============================================================================
+# COMPETITOR SERP SNAPSHOT SERIALIZERS (Original SRS: Weekly Competitor Snapshots)
+# =============================================================================
+
+class CompetitorSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Competitor model.
+    Validates and normalizes domain names with strong SSRF protection.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = Competitor
+        fields = [
+            'id',
+            'project',
+            'project_name',
+            'name',
+            'domain',
+            'website_url',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        from apps.seo.services.competitor_service import validate_and_normalize_competitor_domain
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        project = attrs.get('project') or (self.instance.project if self.instance else None)
+        domain_or_url = attrs.get('domain') or (self.instance.domain if self.instance else None)
+
+        if not domain_or_url:
+            raise serializers.ValidationError({"domain": "A competitor domain or URL is required."})
+
+        try:
+            canonical_domain, canonical_url = validate_and_normalize_competitor_domain(
+                domain_or_url,
+                project=project
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"domain": exc.message if hasattr(exc, 'message') else str(exc)})
+
+        attrs['domain'] = canonical_domain
+        if not attrs.get('website_url'):
+            attrs['website_url'] = canonical_url
+
+        # Check uniqueness constraint within the project
+        if project:
+            existing_qs = Competitor.objects.filter(project=project, domain=canonical_domain)
+            if self.instance:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            if existing_qs.exists():
+                raise serializers.ValidationError(
+                    {"domain": f"Competitor with domain '{canonical_domain}' already exists for this project."}
+                )
+
+        return attrs
+
+
+class CompetitorSnapshotSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for historical CompetitorSnapshot observations.
+    """
+    competitor_name = serializers.CharField(source='competitor.name', read_only=True)
+    competitor_domain = serializers.CharField(source='competitor.domain', read_only=True)
+    keyword_name = serializers.CharField(source='keyword.keyword', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = CompetitorSnapshot
+        fields = [
+            'id',
+            'competitor',
+            'competitor_name',
+            'competitor_domain',
+            'project',
+            'project_name',
+            'keyword',
+            'keyword_name',
+            'snapshot_job',
+            'position',
+            'ranking_url',
+            'title',
+            'result_status',
+            'search_engine',
+            'search_domain',
+            'country',
+            'language',
+            'device',
+            'error_message',
+            'recorded_at',
+        ]
+        read_only_fields = fields
+
+
+class CompetitorSnapshotJobSerializer(serializers.ModelSerializer):
+    """
+    Serializer for CompetitorSnapshotJob execution status.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = CompetitorSnapshotJob
+        fields = [
+            'id',
+            'project',
+            'project_name',
+            'status',
+            'total_keywords',
+            'completed_keywords',
+            'failed_keywords',
+            'trigger',
+            'started_at',
+            'completed_at',
+            'error_message',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class LaunchCompetitorSnapshotSerializer(serializers.Serializer):
+    """
+    Validates input for launching a manual competitor SERP snapshot batch.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text='ID of the project to run competitor snapshots for.'
+    )
+

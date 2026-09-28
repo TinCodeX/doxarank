@@ -26,10 +26,13 @@ from .models import (
     StrategyStatus, ReviewApprovalStatus,
     CrawlJob, CrawlJobStatus, CrawlPage,
     RankCheckJob, RankCheckJobStatus,
+    Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     RankCheckJobSerializer, LaunchRankCheckSerializer,
+    CompetitorSerializer, CompetitorSnapshotSerializer,
+    CompetitorSnapshotJobSerializer, LaunchCompetitorSnapshotSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
     SearchConsoleSyncRequestSerializer,
@@ -3614,4 +3617,246 @@ class CrawlPageViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(is_slow=is_slow.lower() == 'true')
 
         return qs
+
+
+# =============================================================================
+# COMPETITOR SERP SNAPSHOT VIEWSETS (Original SRS: Weekly Competitor Snapshots)
+# =============================================================================
+
+class CompetitorViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing Competitors associated with a project.
+    Gated by FeatureCode.COMPETITOR_SNAPSHOTS (Agency tier feature).
+    Strictly isolated by project__owner == request.user.
+    """
+    serializer_class = CompetitorSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.user and request.user.is_authenticated:
+            from apps.subscriptions.services import PlanEntitlementService
+            from apps.subscriptions.models import FeatureCode
+            from apps.subscriptions.exceptions import FeatureNotEntitledException
+            try:
+                PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.COMPETITOR_SNAPSHOTS)
+            except FeatureNotEntitledException:
+                self.permission_denied(
+                    request,
+                    message="Competitor Snapshots require an Agency subscription. Please upgrade your plan."
+                )
+
+    def get_queryset(self):
+        qs = Competitor.objects.filter(project__owner=self.request.user).select_related('project')
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data['project']
+        if project.owner != self.request.user:
+            self.permission_denied(
+                self.request,
+                message="You do not have permission to add competitors to this project."
+            )
+        serializer.save()
+
+    @action(detail=False, methods=['post'], url_path='snapshots/check')
+    def launch_snapshot(self, request):
+        """
+        Alias action for launching competitor SERP snapshot:
+        POST /api/seo/competitors/snapshots/check/
+        """
+        view = CompetitorSnapshotViewSet()
+        view.request = request
+        view.format_kwarg = None
+        return view.launch_check(request)
+
+    @action(detail=False, methods=['get'], url_path='snapshots')
+    def list_snapshots(self, request):
+        """
+        Alias action for listing competitor snapshots:
+        GET /api/seo/competitors/snapshots/?project_id=<id>
+        """
+        view = CompetitorSnapshotViewSet()
+        view.request = request
+        view.format_kwarg = None
+        return view.list(request)
+
+    @action(detail=False, methods=['get'], url_path='snapshot-jobs')
+    def list_snapshot_jobs(self, request):
+        """
+        Alias action for listing snapshot jobs:
+        GET /api/seo/competitors/snapshot-jobs/?project_id=<id>
+        """
+        view = CompetitorSnapshotJobViewSet()
+        view.request = request
+        view.format_kwarg = None
+        return view.list(request)
+
+
+class CompetitorSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing historical CompetitorSnapshot records and triggering checks.
+    Gated by FeatureCode.COMPETITOR_SNAPSHOTS (Agency tier feature).
+    Strictly isolated by project__owner == request.user.
+    """
+    serializer_class = CompetitorSnapshotSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.user and request.user.is_authenticated:
+            from apps.subscriptions.services import PlanEntitlementService
+            from apps.subscriptions.models import FeatureCode
+            from apps.subscriptions.exceptions import FeatureNotEntitledException
+            try:
+                PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.COMPETITOR_SNAPSHOTS)
+            except FeatureNotEntitledException:
+                self.permission_denied(
+                    request,
+                    message="Competitor Snapshots require an Agency subscription. Please upgrade your plan."
+                )
+
+    def get_queryset(self):
+        qs = CompetitorSnapshot.objects.filter(
+            project__owner=self.request.user
+        ).select_related('competitor', 'keyword', 'project', 'snapshot_job')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        competitor_id = self.request.query_params.get('competitor_id')
+        if competitor_id:
+            qs = qs.filter(competitor_id=competitor_id)
+
+        keyword_id = self.request.query_params.get('keyword_id')
+        if keyword_id:
+            qs = qs.filter(keyword_id=keyword_id)
+
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='check')
+    def launch_check(self, request):
+        """
+        Trigger an asynchronous competitor SERP snapshot for a project.
+        POST /api/seo/competitor-snapshots/check/ or /api/seo/competitors/snapshots/check/
+        Body: { "project_id": <int> }
+        """
+        from apps.projects.models import Project
+        from apps.seo.tasks import run_project_competitor_snapshot
+
+        serializer = LaunchCompetitorSnapshotSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': f"Project #{project_id} does not exist or you do not have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check for already running job on this project
+        active_job = CompetitorSnapshotJob.objects.filter(
+            project=project,
+            status__in=[CompetitorSnapshotJobStatus.PENDING, CompetitorSnapshotJobStatus.RUNNING]
+        ).first()
+
+        if active_job:
+            return Response(
+                {
+                    'status': active_job.status,
+                    'job_id': active_job.id,
+                    'project_id': project.id,
+                    'message': f"A competitor snapshot job (#{active_job.id}) is already in progress for this project.",
+                },
+                status=status.HTTP_200_OK
+            )
+
+        # Create new job
+        job = CompetitorSnapshotJob.objects.create(
+            project=project,
+            trigger='manual',
+            status=CompetitorSnapshotJobStatus.PENDING,
+        )
+
+        task = run_project_competitor_snapshot.delay(project.id, job.id)
+
+        return Response(
+            {
+                'status': 'pending',
+                'job_id': job.id,
+                'task_id': str(task.id) if task else None,
+                'project_id': project.id,
+                'message': f"Competitor SERP snapshot queued for '{project.name}' against google.com.et.",
+            },
+            status=status.HTTP_202_ACCEPTED
+        )
+
+    @action(detail=False, methods=['get'], url_path='latest')
+    def latest_matrix(self, request):
+        """
+        Get latest snapshot observation for each (competitor, keyword) pair for a project.
+        GET /api/seo/competitor-snapshots/latest/?project_id=<id>
+        """
+        from apps.projects.models import Project
+        from apps.seo.services.competitor_service import CompetitorSnapshotService
+
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {'error': "Query parameter 'project_id' is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': f"Project #{project_id} not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        data = CompetitorSnapshotService.get_latest_project_snapshots(project.id)
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class CompetitorSnapshotJobViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for inspecting CompetitorSnapshotJob records and tracking background progress.
+    Gated by FeatureCode.COMPETITOR_SNAPSHOTS (Agency tier feature).
+    Strictly isolated by project__owner == request.user.
+    """
+    serializer_class = CompetitorSnapshotJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.user and request.user.is_authenticated:
+            from apps.subscriptions.services import PlanEntitlementService
+            from apps.subscriptions.models import FeatureCode
+            from apps.subscriptions.exceptions import FeatureNotEntitledException
+            try:
+                PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.COMPETITOR_SNAPSHOTS)
+            except FeatureNotEntitledException:
+                self.permission_denied(
+                    request,
+                    message="Competitor Snapshots require an Agency subscription. Please upgrade your plan."
+                )
+
+    def get_queryset(self):
+        qs = CompetitorSnapshotJob.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        return qs
+
 

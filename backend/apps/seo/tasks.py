@@ -17,6 +17,7 @@ from apps.seo.models import (
     SiteAudit, AuditStatus, AuditIssue,
     CrawlJob, CrawlJobStatus, CrawlPage,
     Keyword, KeywordRanking, RankingResultStatus, RankCheckJob, RankCheckJobStatus,
+    Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
 )
 from apps.seo.services.agent_orchestrator import AgentOrchestrator
 from apps.seo.services.action_executors import get_action_executor
@@ -24,6 +25,7 @@ from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
 from apps.seo.services.technical_crawler import TechnicalCrawlerService
 from apps.seo.services.seo_audit_engine import SEOAuditEngine
 from apps.seo.services.rank_tracker import RankTrackerService
+from apps.seo.services.competitor_service import CompetitorSnapshotService
 
 logger = logging.getLogger(__name__)
 
@@ -1330,5 +1332,135 @@ def run_daily_rank_checks() -> Dict[str, Any]:
         'failed': failed_count,
     }
     logger.info(f"[DailyRankTracker] Daily check completed: {summary}")
+    return summary
+
+
+# =============================================================================
+# COMPETITOR SERP SNAPSHOT TASKS (Original SRS: Weekly Competitor Snapshots)
+# =============================================================================
+
+def _mark_competitor_snapshot_job_failed(job: CompetitorSnapshotJob, error_message: str) -> None:
+    """Safely transitions a CompetitorSnapshotJob to FAILED without throwing exceptions."""
+    try:
+        job.status = CompetitorSnapshotJobStatus.FAILED
+        job.error_message = error_message[:2000]
+        job.completed_at = timezone.now()
+        job.save(update_fields=['status', 'error_message', 'completed_at'])
+    except Exception as exc:
+        logger.error(f"[CompetitorSnapshot] Could not mark job #{job.id} as failed: {exc}")
+
+
+@shared_task(
+    bind=True,
+    name='apps.seo.tasks.run_project_competitor_snapshot',
+    max_retries=2,
+    default_retry_delay=60,
+)
+def run_project_competitor_snapshot(self, project_id: int, job_id: Optional[int] = None) -> Optional[int]:
+    """
+    Executes a competitor SERP snapshot batch for all active keywords and competitors in a project.
+    Ensures safe job state transitions and guarantees the job never remains stuck in RUNNING.
+    """
+    try:
+        service = CompetitorSnapshotService()
+        job = service.run_snapshot_for_project(project_id=project_id, job_id=job_id)
+        return job.id
+    except RETRYABLE_EXCEPTIONS as exc:
+        logger.warning(
+            f"[CompetitorSnapshot] Transient error on project #{project_id} (attempt {self.request.retries + 1}): {exc}"
+        )
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        else:
+            if job_id:
+                try:
+                    job = CompetitorSnapshotJob.objects.get(id=job_id)
+                    _mark_competitor_snapshot_job_failed(job, f"Exhausted retries: {exc}")
+                except CompetitorSnapshotJob.DoesNotExist:
+                    pass
+            return None
+    except Exception as exc:
+        logger.error(f"[CompetitorSnapshot] Fatal error on project #{project_id}: {exc}", exc_info=True)
+        if job_id:
+            try:
+                job = CompetitorSnapshotJob.objects.get(id=job_id)
+                _mark_competitor_snapshot_job_failed(job, str(exc))
+            except CompetitorSnapshotJob.DoesNotExist:
+                pass
+        return None
+
+
+@shared_task(name='apps.seo.tasks.run_weekly_competitor_snapshots')
+def run_weekly_competitor_snapshots() -> Dict[str, Any]:
+    """
+    Weekly periodic task (scheduled via Celery Beat) executing competitor SERP snapshots
+    for all eligible projects across the platform.
+
+    Guarantees:
+    - Entitlement: Only projects whose owners have FeatureCode.COMPETITOR_SNAPSHOTS (Agency plan).
+    - Idempotency: Projects that already ran a snapshot job within the last 6 days are skipped.
+    - Error isolation: A failure on one project never stops other projects from being processed.
+    """
+    from apps.projects.models import Project
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+    import datetime
+
+    now = timezone.now()
+    six_days_ago = now - datetime.timedelta(days=6)
+
+    projects = Project.objects.all().select_related('owner')
+    total_projects = 0
+    enqueued_count = 0
+    skipped_count = 0
+    failed_count = 0
+
+    for project in projects:
+        total_projects += 1
+
+        # 1. Entitlement verification
+        if not PlanEntitlementService.can_use_feature(project.owner, FeatureCode.COMPETITOR_SNAPSHOTS):
+            skipped_count += 1
+            continue
+
+        # 2. Check active competitors and active keywords exist
+        has_competitors = project.competitors.filter(is_active=True).exists()
+        has_keywords = project.keywords.filter(is_active=True).exists()
+        if not has_competitors or not has_keywords:
+            skipped_count += 1
+            continue
+
+        # 3. Weekly idempotency check: skip if a job completed within the last 6 days
+        already_run_recently = CompetitorSnapshotJob.objects.filter(
+            project=project,
+            status__in=[CompetitorSnapshotJobStatus.COMPLETED, CompetitorSnapshotJobStatus.PARTIAL_FAILURE],
+            created_at__gte=six_days_ago,
+        ).exists()
+
+        if already_run_recently:
+            skipped_count += 1
+            continue
+
+        # 4. Enqueue weekly snapshot job
+        try:
+            job = CompetitorSnapshotJob.objects.create(
+                project=project,
+                trigger='scheduled_weekly',
+                status=CompetitorSnapshotJobStatus.PENDING,
+            )
+            run_project_competitor_snapshot.delay(project.id, job.id)
+            enqueued_count += 1
+        except Exception as exc:
+            logger.error(f"[WeeklyCompetitorSnapshots] Failed to enqueue job for project #{project.id}: {exc}")
+            failed_count += 1
+
+    summary = {
+        'date': str(now.date()),
+        'total_projects': total_projects,
+        'enqueued': enqueued_count,
+        'skipped': skipped_count,
+        'failed': failed_count,
+    }
+    logger.info(f"[WeeklyCompetitorSnapshots] Weekly schedule run completed: {summary}")
     return summary
 
