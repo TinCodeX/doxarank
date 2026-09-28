@@ -28,6 +28,7 @@ import { SEOActionsPanel } from '../components/SEOActionsPanel';
 import { SEOToolsPanel } from '../components/SEOToolsPanel';
 import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
 import { CompetitorSnapshotsPanel } from '../components/CompetitorSnapshotsPanel';
+import { SEORecommendationsPanel } from '../components/SEORecommendationsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 import { getUserSubscription } from '../api/subscriptions';
@@ -1029,6 +1030,13 @@ export const Dashboard: React.FC = () => {
             hasCompetitorEntitlement={
               !!(subscriptionSummary?.plan?.features ?? []).includes('COMPETITOR_SNAPSHOTS')
             }
+          />
+        )}
+
+        {/* SECTION 3.7: ACTIONABLE SEO RECOMMENDATIONS FEED */}
+        {selectedProject && (
+          <SEORecommendationsPanel
+            project={selectedProject}
           />
         )}
 

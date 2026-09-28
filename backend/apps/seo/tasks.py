@@ -1464,3 +1464,56 @@ def run_weekly_competitor_snapshots() -> Dict[str, Any]:
     logger.info(f"[WeeklyCompetitorSnapshots] Weekly schedule run completed: {summary}")
     return summary
 
+
+# =============================================================================
+# SEO RECOMMENDATIONS FEED TASKS (Original SRS: Rule-Based Recommendations)
+# =============================================================================
+
+@shared_task(
+    bind=True,
+    name='apps.seo.tasks.generate_project_recommendations_task',
+    max_retries=2,
+    default_retry_delay=30,
+)
+def generate_project_recommendations_task(self, project_id: int) -> Dict[str, Any]:
+    """
+    Asynchronously evaluates crawler, rank tracker, and competitor data to generate
+    or update actionable, prioritized recommendations for a project.
+
+    Guarantees:
+    - Tenant safety: Operates strictly within the requested project's boundary.
+    - Idempotency: Multiple runs update existing active recommendations without creating duplicates.
+    - Failure safety: Safely logs and handles unexpected errors without leaking credentials.
+    """
+    from apps.projects.models import Project
+    from apps.seo.services.recommendations import RecommendationEngine
+    from apps.seo.models import Recommendation, RecommendationState
+
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        logger.error(f"[RecommendationsTask] Project #{project_id} does not exist.")
+        return {'status': 'error', 'message': f'Project #{project_id} not found', 'project_id': project_id}
+
+    try:
+        recommendations = RecommendationEngine.generate_project_recommendations(project)
+        open_count = Recommendation.objects.filter(
+            project=project,
+            status=RecommendationState.OPEN
+        ).count()
+
+        summary = {
+            'status': 'success',
+            'project_id': project_id,
+            'total_generated': len(recommendations),
+            'open_count': open_count,
+        }
+        logger.info(f"[RecommendationsTask] Successfully generated recommendations for project #{project_id}: {summary}")
+        return summary
+    except Exception as exc:
+        logger.error(f"[RecommendationsTask] Error generating recommendations for project #{project_id}: {exc}", exc_info=True)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
+        return {'status': 'failed', 'error': str(exc), 'project_id': project_id}
+
+

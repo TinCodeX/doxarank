@@ -141,5 +141,9 @@ __all__ = [
     'SerpResult',
     'CompetitorSnapshotService',
     'validate_and_normalize_competitor_domain',
+    'RecommendationEngine',
+    'calculate_recommendation_priority',
 ]
+
+from .recommendations import RecommendationEngine, calculate_recommendation_priority
 

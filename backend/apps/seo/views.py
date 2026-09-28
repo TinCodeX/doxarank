@@ -27,12 +27,14 @@ from .models import (
     CrawlJob, CrawlJobStatus, CrawlPage,
     RankCheckJob, RankCheckJobStatus,
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
+    Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
     RankCheckJobSerializer, LaunchRankCheckSerializer,
     CompetitorSerializer, CompetitorSnapshotSerializer,
     CompetitorSnapshotJobSerializer, LaunchCompetitorSnapshotSerializer,
+    RecommendationSerializer, RecommendationUpdateSerializer, GenerateRecommendationsSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
     SearchConsoleSyncRequestSerializer,
@@ -3858,5 +3860,129 @@ class CompetitorSnapshotJobViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(project_id=project_id)
 
         return qs
+
+
+# =============================================================================
+# SEO RECOMMENDATIONS FEED VIEWSET (Original SRS: Rule-Based Recommendations)
+# =============================================================================
+
+class RecommendationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for listing, inspecting, updating, and generating project-scoped SEO recommendations.
+    Provides deterministic, rule-based recommendations from Technical Crawler, Rank Tracker,
+    and Competitor Snapshots.
+
+    Guarantees:
+    - Strictly isolated by project__owner == request.user.
+    - Status transitions update resolved_at timestamp automatically.
+    - Supports filtering by project_id, status, severity, category, and source_type.
+    """
+    serializer_class = RecommendationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action in ['partial_update', 'update']:
+            return RecommendationUpdateSerializer
+        return RecommendationSerializer
+
+    def get_queryset(self):
+        qs = Recommendation.objects.filter(
+            project__owner=self.request.user
+        ).select_related('project')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param)
+
+        severity_param = self.request.query_params.get('severity')
+        if severity_param:
+            qs = qs.filter(severity=severity_param)
+
+        category_param = self.request.query_params.get('category')
+        if category_param:
+            qs = qs.filter(category=category_param)
+
+        source_type_param = self.request.query_params.get('source_type')
+        if source_type_param:
+            qs = qs.filter(source_type=source_type_param)
+
+        return qs.order_by('-priority', '-created_at')
+
+    def perform_update(self, serializer):
+        new_status = serializer.validated_data.get('status')
+        if new_status in [RecommendationState.RESOLVED, RecommendationState.DISMISSED]:
+            serializer.save(resolved_at=timezone.now())
+        elif new_status == RecommendationState.OPEN:
+            serializer.save(resolved_at=None)
+        else:
+            serializer.save()
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Trigger recommendation generation for a project.
+        POST /api/seo/recommendations/generate/
+        Body: { "project_id": <int>, "async": <bool optional> }
+        """
+        from apps.projects.models import Project
+        from apps.seo.services.recommendations import RecommendationEngine
+        from apps.seo.tasks import generate_project_recommendations_task
+
+        serializer = GenerateRecommendationsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': f"Project #{project_id} not found or you do not have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        run_async = request.data.get('async', False)
+        if run_async:
+            task = generate_project_recommendations_task.delay(project.id)
+            return Response(
+                {
+                    'status': 'queued',
+                    'task_id': str(task.id) if task else None,
+                    'project_id': project.id,
+                    'message': f"Recommendation generation queued for project '{project.name}'."
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+
+        recommendations = RecommendationEngine.generate_project_recommendations(project)
+        out_serializer = RecommendationSerializer(recommendations, many=True)
+        return Response(out_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='acknowledge')
+    def acknowledge(self, request, pk=None):
+        rec = self.get_object()
+        rec.status = RecommendationState.ACKNOWLEDGED
+        rec.save(update_fields=['status', 'updated_at'])
+        return Response(RecommendationSerializer(rec).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='resolve')
+    def resolve(self, request, pk=None):
+        rec = self.get_object()
+        rec.status = RecommendationState.RESOLVED
+        rec.resolved_at = timezone.now()
+        rec.save(update_fields=['status', 'resolved_at', 'updated_at'])
+        return Response(RecommendationSerializer(rec).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='dismiss')
+    def dismiss(self, request, pk=None):
+        rec = self.get_object()
+        rec.status = RecommendationState.DISMISSED
+        rec.resolved_at = timezone.now()
+        rec.save(update_fields=['status', 'resolved_at', 'updated_at'])
+        return Response(RecommendationSerializer(rec).data, status=status.HTTP_200_OK)
+
 
 

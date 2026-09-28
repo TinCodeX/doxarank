@@ -22,6 +22,7 @@ from .models import (
     CrawlJob, CrawlJobStatus, CrawlPage,
     RankingResultStatus, RankCheckJob, RankCheckJobStatus,
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
+    Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
 )
 from apps.projects.models import Project
 
@@ -2405,4 +2406,89 @@ class LaunchCompetitorSnapshotSerializer(serializers.Serializer):
         required=True,
         help_text='ID of the project to run competitor snapshots for.'
     )
+
+
+# =============================================================================
+# SEO RECOMMENDATIONS FEED SERIALIZERS (Original SRS: Rule-Based Recommendations)
+# =============================================================================
+
+class RecommendationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for project-scoped SEO Recommendation model.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+
+    class Meta:
+        model = Recommendation
+        fields = [
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'source_type',
+            'source_id',
+            'category',
+            'severity',
+            'title',
+            'description',
+            'recommended_action',
+            'affected_url',
+            'affected_keyword',
+            'status',
+            'priority',
+            'fingerprint',
+            'metadata',
+            'created_at',
+            'updated_at',
+            'resolved_at',
+        ]
+        read_only_fields = [
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'source_type',
+            'source_id',
+            'category',
+            'severity',
+            'title',
+            'description',
+            'recommended_action',
+            'affected_url',
+            'affected_keyword',
+            'priority',
+            'fingerprint',
+            'metadata',
+            'created_at',
+            'updated_at',
+            'resolved_at',
+        ]
+
+
+class RecommendationUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating recommendation lifecycle status (open, acknowledged, resolved, dismissed).
+    """
+    class Meta:
+        model = Recommendation
+        fields = ['status']
+
+    def validate_status(self, value):
+        if value not in RecommendationState.values:
+            raise serializers.ValidationError(
+                f"Invalid status '{value}'. Allowed: {', '.join(RecommendationState.values)}"
+            )
+        return value
+
+
+class GenerateRecommendationsSerializer(serializers.Serializer):
+    """
+    Input serializer for generating/refreshing project recommendations.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text='ID of the project to generate recommendations for.'
+    )
+
 

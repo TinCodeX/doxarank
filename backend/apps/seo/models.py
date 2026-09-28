@@ -4408,3 +4408,163 @@ class PlatformAlertRecord(models.Model):
         status_str = "RESOLVED" if self.is_resolved else "ACTIVE"
         return f"Alert [{self.severity.upper()} - {self.alert_type}] ({status_str}): {self.message[:60]}"
 
+
+# =============================================================================
+# SEO RECOMMENDATIONS FEED (Original SRS: User-Facing Recommendations Feed)
+# =============================================================================
+
+class RecommendationSource(models.TextChoices):
+    CRAWLER = 'crawler', 'Technical Crawler'
+    RANK_TRACKER = 'rank_tracker', 'Rank Tracker'
+    COMPETITOR_SNAPSHOT = 'competitor_snapshot', 'Competitor SERP Snapshots'
+    SEO_TOOL = 'seo_tool', 'SEO Tool'
+    SYSTEM = 'system', 'System'
+
+
+class RecommendationCategory(models.TextChoices):
+    TECHNICAL_SEO = 'technical_seo', 'Technical SEO'
+    ON_PAGE_SEO = 'on_page_seo', 'On-Page SEO'
+    PERFORMANCE = 'performance', 'Performance'
+    INDEXING = 'indexing', 'Indexing & Crawlability'
+    RANKINGS = 'rankings', 'Rankings & Visibility'
+    CONTENT = 'content', 'Content'
+    COMPETITORS = 'competitors', 'Competitor Intelligence'
+
+
+class RecommendationSeverity(models.TextChoices):
+    CRITICAL = 'critical', 'Critical'
+    HIGH = 'high', 'High'
+    MEDIUM = 'medium', 'Medium'
+    LOW = 'low', 'Low'
+    INFO = 'info', 'Info'
+
+
+class RecommendationState(models.TextChoices):
+    OPEN = 'open', 'Open'
+    ACKNOWLEDGED = 'acknowledged', 'Acknowledged'
+    RESOLVED = 'resolved', 'Resolved'
+    DISMISSED = 'dismissed', 'Dismissed'
+
+
+class Recommendation(models.Model):
+    """
+    Persistent project-scoped recommendation model derived deterministically
+    from existing DoxaRank findings (Technical Crawler, Rank Tracker, Competitor Snapshots).
+
+    Relationship:
+      Project 1 ─────── * Recommendation
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='project_recommendations',
+        help_text='The project website this recommendation belongs to.'
+    )
+    source_type = models.CharField(
+        max_length=50,
+        choices=RecommendationSource.choices,
+        default=RecommendationSource.SYSTEM,
+        db_index=True,
+        help_text='Originating system (crawler, rank_tracker, competitor_snapshot, etc).'
+    )
+    source_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Optional reference to originating entity (e.g. crawl_page_id, keyword_id).'
+    )
+    category = models.CharField(
+        max_length=50,
+        choices=RecommendationCategory.choices,
+        default=RecommendationCategory.TECHNICAL_SEO,
+        db_index=True,
+        help_text='Categorization of the SEO recommendation.'
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=RecommendationSeverity.choices,
+        default=RecommendationSeverity.MEDIUM,
+        db_index=True,
+        help_text='Severity level: critical, high, medium, low, info.'
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text='Concise, user-facing recommendation headline.'
+    )
+    description = models.TextField(
+        help_text='Detailed breakdown: Problem detected and Why it matters.'
+    )
+    recommended_action = models.TextField(
+        help_text='Concrete actionable guidance explaining what the user can do.'
+    )
+    affected_url = models.CharField(
+        max_length=1000,
+        blank=True,
+        default='',
+        help_text='Specific page URL affected by this recommendation, if applicable.'
+    )
+    affected_keyword = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Specific tracked keyword affected by this recommendation, if applicable.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RecommendationState.choices,
+        default=RecommendationState.OPEN,
+        db_index=True,
+        help_text='Lifecycle status: open, acknowledged, resolved, dismissed.'
+    )
+    priority = models.PositiveIntegerField(
+        default=50,
+        db_index=True,
+        help_text='Deterministic priority score (1-100) based on severity, impact, and frequency.'
+    )
+    fingerprint = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text='Deterministic deduplication key: rule_code:resource_identifier.'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured contextual data and diagnostic metrics.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text='Timestamp when the recommendation was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the recommendation was last modified.'
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the recommendation was resolved or dismissed.'
+    )
+
+    class Meta:
+        db_table = 'seo_project_recommendations'
+        verbose_name = 'recommendation'
+        verbose_name_plural = 'recommendations'
+        ordering = ['-priority', '-created_at']
+        indexes = [
+            models.Index(fields=['project', 'status'], name='seo_prec_proj_stat_idx'),
+            models.Index(fields=['project', 'severity'], name='seo_prec_proj_sev_idx'),
+            models.Index(fields=['project', 'category'], name='seo_prec_proj_cat_idx'),
+            models.Index(fields=['project', 'source_type'], name='seo_prec_proj_src_idx'),
+            models.Index(fields=['project', '-priority'], name='seo_prec_proj_prio_idx'),
+            models.Index(fields=['project', 'fingerprint'], name='seo_prec_proj_fp_idx'),
+            models.Index(fields=['project', '-created_at'], name='seo_prec_proj_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.severity.upper()}] {self.title} ({self.project.name}) - {self.status}"
+
+
+ProjectRecommendation = Recommendation
+
+
