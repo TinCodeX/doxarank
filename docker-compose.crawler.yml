@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: doxarank_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  crawler_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.crawler
+    container_name: doxarank_crawler_worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@db:5432/doxarank}
+      - SECRET_KEY=${SECRET_KEY:-local-dev-secret-key-32-chars-long-xxx}
+      - DEBUG=True
+    volumes:
+      - ./backend:/app
+
+volumes:
+  redis_data:

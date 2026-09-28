@@ -25,7 +25,8 @@ from .views import (
     PlatformHealthCheckView, PlatformReadinessCheckView, PlatformLivenessCheckView,
     PlatformMetricsView, PlatformAlertsView, PlatformCircuitBreakersView,
     PlatformCircuitBreakerDetailView, PlatformOperatorActionsView,
-    PlatformRunInspectionView, PlatformRunRecoveryView, PlatformAuditLogView
+    PlatformRunInspectionView, PlatformRunRecoveryView, PlatformAuditLogView,
+    CrawlJobViewSet, CrawlPageViewSet,
 )
 
 app_name = 'seo'
@@ -53,6 +54,8 @@ router.register('ai/long-term-strategy', LongTermSEOStrategyViewSet, basename='l
 router.register('ai/strategic-objectives', StrategicObjectiveViewSet, basename='strategic-objective')
 router.register('ai/strategic-initiatives', StrategicInitiativeViewSet, basename='strategic-initiative')
 router.register('ai/strategy-reviews', StrategyReviewRecordViewSet, basename='strategy-review')
+router.register('crawler', CrawlJobViewSet, basename='crawljob')
+router.register('crawler-pages', CrawlPageViewSet, basename='crawlpage')
 
 
 urlpatterns = [

@@ -14,11 +14,13 @@ from django.utils import timezone
 from apps.seo.models import (
     AgentRun, AgentRunStatus, AgentStep, AgentStepStatus,
     SEOAction, ActionStatus,
-    SiteAudit, AuditStatus, AuditIssue
+    SiteAudit, AuditStatus, AuditIssue,
+    CrawlJob, CrawlJobStatus, CrawlPage,
 )
 from apps.seo.services.agent_orchestrator import AgentOrchestrator
 from apps.seo.services.action_executors import get_action_executor
 from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
+from apps.seo.services.technical_crawler import TechnicalCrawlerService
 from apps.seo.services.seo_audit_engine import SEOAuditEngine
 
 logger = logging.getLogger(__name__)
@@ -995,3 +997,169 @@ def compact_platform_data_task(older_than_days: int = 30) -> Dict[str, int]:
     from apps.seo.services.production_platform import DataRetentionManager
     return DataRetentionManager.compact_ephemeral_data(older_than_days=older_than_days)
 
+
+# =============================================================================
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=10,
+    name='apps.seo.tasks.run_technical_crawl'
+)
+def run_technical_crawl(
+    self,
+    crawl_job_id: int,
+    max_pages: int = 100,
+    max_depth: int = 3,
+    respect_robots_txt: bool = True,
+) -> Optional[int]:
+    """
+    Execute a full-site Technical SEO Crawl asynchronously in a Celery worker.
+
+    Guarantees:
+    - Atomically transitions CrawlJob status PENDING → RUNNING via select_for_update.
+    - SSRF-safe: all target IPs are validated before any outbound requests.
+    - Idempotent: already-running jobs are not re-executed.
+    - Persists structured CrawlPage records and aggregate summary counters.
+    - Transitions CrawlJob to COMPLETED or FAILED; never hangs indefinitely.
+    """
+    # 1. Atomically acquire lock and transition to RUNNING
+    try:
+        with transaction.atomic():
+            try:
+                crawl_job = CrawlJob.objects.select_for_update().select_related('project').get(id=crawl_job_id)
+            except CrawlJob.DoesNotExist:
+                logger.error(f"[CrawlTask] CrawlJob #{crawl_job_id} does not exist. Aborting.")
+                return None
+
+            if crawl_job.status not in (CrawlJobStatus.PENDING,):
+                logger.warning(
+                    f"[CrawlTask] CrawlJob #{crawl_job_id} status is '{crawl_job.status}'. Skipping."
+                )
+                return crawl_job.id
+
+            crawl_job.status = CrawlJobStatus.RUNNING
+            crawl_job.started_at = timezone.now()
+            task_id = getattr(getattr(self, 'request', None), 'id', None)
+            crawl_job.celery_task_id = task_id or 'direct-task'
+            crawl_job.save(update_fields=['status', 'started_at', 'celery_task_id', 'updated_at'])
+
+    except Exception as lock_exc:
+        logger.exception(f"[CrawlTask] DB error acquiring lock for CrawlJob #{crawl_job_id}: {lock_exc}")
+        retries = getattr(getattr(self, 'request', None), 'retries', 0)
+        max_retries = getattr(self, 'max_retries', 2)
+        if isinstance(lock_exc, RETRYABLE_EXCEPTIONS) and retries < max_retries and hasattr(self, 'retry'):
+            raise self.retry(exc=lock_exc, countdown=2 ** retries)
+        return None
+
+    # 2. Run the crawl
+    try:
+        start_url = crawl_job.project.website_url
+        crawler = TechnicalCrawlerService(
+            max_pages=max_pages,
+            max_depth=max_depth,
+            respect_robots_txt=respect_robots_txt,
+        )
+        summary, pages_data = crawler.crawl(start_url)
+
+        # 3. Persist CrawlPage records in bulk
+        crawl_pages = [
+            CrawlPage(
+                crawl_job=crawl_job,
+                url=p.url[:2048],
+                final_url=(p.final_url or p.url)[:2048],
+                status_code=p.status_code,
+                response_time_ms=p.response_time_ms,
+                depth=p.depth,
+                title=p.title,
+                meta_description=p.meta_description,
+                h1_count=p.h1_count,
+                word_count=p.word_count,
+                canonical_url=p.canonical_url,
+                has_redirect=p.has_redirect,
+                redirect_chain=p.redirect_chain,
+                internal_links_count=p.internal_links_count,
+                external_links_count=p.external_links_count,
+                images_count=p.images_count,
+                images_missing_alt_count=p.images_missing_alt_count,
+                is_broken=p.is_broken,
+                is_slow=p.is_slow,
+                issues=[{'type': f.issue_type, 'severity': f.severity, 'message': f.message}
+                        for f in p.findings],
+            )
+            for p in pages_data
+        ]
+        CrawlPage.objects.bulk_create(crawl_pages, batch_size=100)
+
+        # 4. Update CrawlJob with aggregates and mark COMPLETED
+        crawl_job.status = CrawlJobStatus.COMPLETED
+        crawl_job.completed_at = timezone.now()
+        crawl_job.pages_crawled = summary.pages_crawled
+        crawl_job.pages_discovered = summary.pages_discovered
+        crawl_job.broken_links_count = summary.broken_links_count
+        crawl_job.missing_titles_count = summary.missing_titles_count
+        crawl_job.missing_descriptions_count = summary.missing_descriptions_count
+        crawl_job.duplicate_titles_count = summary.duplicate_titles_count
+        crawl_job.missing_h1_count = summary.missing_h1_count
+        crawl_job.redirect_chains_count = summary.redirect_chains_count
+        crawl_job.slow_pages_count = summary.slow_pages_count
+        crawl_job.crawl_metadata = summary.metadata
+        crawl_job.save(update_fields=[
+            'status', 'completed_at', 'pages_crawled', 'pages_discovered',
+            'broken_links_count', 'missing_titles_count', 'missing_descriptions_count',
+            'duplicate_titles_count', 'missing_h1_count', 'redirect_chains_count',
+            'slow_pages_count', 'crawl_metadata', 'updated_at',
+        ])
+
+        logger.info(
+            f"[CrawlTask] CrawlJob #{crawl_job.id} completed: "
+            f"{summary.pages_crawled} pages crawled, {summary.broken_links_count} broken links."
+        )
+        return crawl_job.id
+
+    except ValueError as ssrf_exc:
+        # SSRF or URL validation error — do not retry
+        logger.error(f"[CrawlTask] SSRF/validation error for CrawlJob #{crawl_job_id}: {ssrf_exc}")
+        _mark_crawl_job_failed(crawl_job, f"URL validation error: {ssrf_exc}")
+        return crawl_job.id
+
+    except RETRYABLE_EXCEPTIONS as retry_exc:
+        retries = getattr(getattr(self, 'request', None), 'retries', 0)
+        max_retries = getattr(self, 'max_retries', 2)
+        logger.warning(
+            f"[CrawlTask] Transient error for CrawlJob #{crawl_job_id} "
+            f"(attempt {retries + 1}/{max_retries}): {retry_exc}"
+        )
+        if retries < max_retries and hasattr(self, 'retry'):
+            countdown = (2 ** retries) * 10
+            raise self.retry(exc=retry_exc, countdown=countdown)
+        else:
+            _mark_crawl_job_failed(
+                crawl_job,
+                f"Transient failure after {max_retries} retries: {retry_exc}"
+            )
+        return crawl_job.id
+
+    except Exception as fatal_exc:
+        logger.exception(f"[CrawlTask] Fatal error for CrawlJob #{crawl_job_id}: {fatal_exc}")
+        _mark_crawl_job_failed(
+            crawl_job,
+            f"Fatal crawl error: {fatal_exc.__class__.__name__} — {str(fatal_exc)}"
+        )
+        return crawl_job.id
+
+
+def _mark_crawl_job_failed(crawl_job: CrawlJob, error_message: str) -> None:
+    """Helper to safely transition a CrawlJob to terminal FAILED state."""
+    try:
+        crawl_job.refresh_from_db()
+        crawl_job.status = CrawlJobStatus.FAILED
+        crawl_job.error_message = error_message[:1000]
+        crawl_job.completed_at = timezone.now()
+        crawl_job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+    except Exception as e:
+        logger.error(f"Failed to record FAILED status for CrawlJob #{crawl_job.id}: {e}")
+
+
+# =============================================================================
+# RANK TRACKER MVP — Celery Tasks

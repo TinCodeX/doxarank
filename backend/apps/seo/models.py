@@ -296,6 +296,271 @@ class AuditIssue(models.Model):
         return f"[{self.severity.upper()}] {self.title} (Audit #{self.audit_id})"
 
 
+class CrawlJobStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class CrawlJob(models.Model):
+    """
+    CrawlJob model representing a full-site technical SEO crawl for a project.
+
+    This is the paid Playwright-based crawl feature (FeatureCode.TECHNICAL_CRAWLER),
+    distinct from the existing SiteAudit/LiveSiteCrawlerService which uses httpx
+    for lightweight SEO audit evaluations.
+
+    Relationship: Project 1 ─────── * CrawlJob
+    Ownership follows: crawl_job.project → project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='crawl_jobs',
+        help_text='The project/website this crawl job belongs to.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=CrawlJobStatus.choices,
+        default=CrawlJobStatus.PENDING,
+        db_index=True,
+        help_text='Current execution status of the crawl job.'
+    )
+    # Configuration
+    max_pages = models.PositiveIntegerField(
+        default=100,
+        help_text='Maximum number of pages to crawl (capped at 500 per job).'
+    )
+    max_depth = models.PositiveIntegerField(
+        default=3,
+        help_text='Maximum BFS depth to traverse (capped at 10).'
+    )
+    respect_robots_txt = models.BooleanField(
+        default=True,
+        help_text='Whether to respect robots.txt directives during the crawl.'
+    )
+    # Timing
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the crawl execution began.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the crawl execution concluded.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when the crawl job was created.'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text='Timestamp when the crawl job was last updated.'
+    )
+    # Results aggregate
+    pages_crawled = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of pages successfully crawled.'
+    )
+    pages_discovered = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of unique URLs discovered during crawl.'
+    )
+    # Findings summary counters
+    broken_links_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of 4xx/5xx URLs found across all crawled pages.'
+    )
+    missing_titles_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of pages with missing or empty <title> tags.'
+    )
+    missing_descriptions_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of pages with missing meta descriptions.'
+    )
+    duplicate_titles_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of duplicate page titles detected across crawled pages.'
+    )
+    missing_h1_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of pages with zero H1 headings.'
+    )
+    redirect_chains_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of URLs that include redirect chains.'
+    )
+    slow_pages_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of pages with response times exceeding 3 seconds.'
+    )
+    # Celery task tracking
+    celery_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Celery task ID for tracking the background crawl worker.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Error details if the crawl job failed.'
+    )
+    # Structured crawl data
+    crawl_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Structured crawl metadata (robots.txt status, config, timings).'
+    )
+
+    class Meta:
+        db_table = 'seo_crawl_jobs'
+        verbose_name = 'crawl job'
+        verbose_name_plural = 'crawl jobs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', '-created_at'], name='seo_crawl_job_project_idx'),
+            models.Index(fields=['status'], name='seo_crawl_job_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"CrawlJob #{self.id} - {self.project.name} ({self.status})"
+
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        """Return crawl duration in seconds, or None if not completed."""
+        if self.started_at and self.completed_at:
+            return round((self.completed_at - self.started_at).total_seconds(), 2)
+        return None
+
+
+class CrawlPage(models.Model):
+    """
+    CrawlPage model storing per-page structured findings for a CrawlJob.
+
+    Each crawled URL produces one CrawlPage record with extracted SEO data
+    and any detected issues for that specific page.
+
+    Relationship: CrawlJob 1 ─────── * CrawlPage
+    """
+    crawl_job = models.ForeignKey(
+        CrawlJob,
+        on_delete=models.CASCADE,
+        related_name='pages',
+        help_text='The parent crawl job this page result belongs to.'
+    )
+    url = models.URLField(
+        max_length=2048,
+        help_text='The canonical URL of this crawled page.'
+    )
+    final_url = models.URLField(
+        max_length=2048,
+        blank=True,
+        null=True,
+        help_text='Final URL after following redirects.'
+    )
+    status_code = models.PositiveIntegerField(
+        help_text='HTTP response status code returned for this URL.'
+    )
+    response_time_ms = models.FloatField(
+        default=0.0,
+        help_text='HTTP response time in milliseconds.'
+    )
+    depth = models.PositiveIntegerField(
+        default=0,
+        help_text='BFS depth at which this page was discovered.'
+    )
+    # SEO extraction fields
+    title = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text='Page <title> tag content.'
+    )
+    meta_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Page meta description content.'
+    )
+    h1_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of H1 heading tags on this page.'
+    )
+    word_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Approximate visible text word count.'
+    )
+    canonical_url = models.URLField(
+        max_length=2048,
+        blank=True,
+        null=True,
+        help_text='Canonical URL declared on the page via <link rel="canonical">.'
+    )
+    has_redirect = models.BooleanField(
+        default=False,
+        help_text='Whether this URL underwent one or more HTTP redirects.'
+    )
+    redirect_chain = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Ordered list of intermediate redirect URLs.'
+    )
+    internal_links_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of unique internal links found on this page.'
+    )
+    external_links_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of unique external links found on this page.'
+    )
+    images_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of <img> elements found on this page.'
+    )
+    images_missing_alt_count = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of images with missing or empty alt attributes.'
+    )
+    # Issue flags
+    is_broken = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='True if this page returned a 4xx or 5xx HTTP status code.'
+    )
+    is_slow = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='True if response time exceeded 3000ms.'
+    )
+    issues = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of detected SEO issue objects for this page, e.g. [{type, severity, message}].'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text='Timestamp when this page result was recorded.'
+    )
+
+    class Meta:
+        db_table = 'seo_crawl_pages'
+        verbose_name = 'crawl page'
+        verbose_name_plural = 'crawl pages'
+        ordering = ['depth', 'url']
+        indexes = [
+            models.Index(fields=['crawl_job', 'is_broken'], name='seo_crawl_pg_job_broken_idx'),
+            models.Index(fields=['crawl_job', 'is_slow'], name='seo_crawl_pg_job_slow_idx'),
+            models.Index(fields=['crawl_job', 'status_code'], name='seo_crawl_pg_job_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"CrawlPage: {self.url} [{self.status_code}] (Job #{self.crawl_job_id})"
+
+
 class SearchConsoleSyncStatus(models.TextChoices):
     IDLE = 'idle', 'Idle'
     SYNCING = 'syncing', 'Syncing'

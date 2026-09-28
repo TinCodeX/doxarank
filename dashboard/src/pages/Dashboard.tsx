@@ -24,6 +24,7 @@ import { ProductionOperationsPanel } from '../components/ProductionOperationsPan
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
+import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
 import { SEOActionsPanel } from '../components/SEOActionsPanel';
 import { SEOToolsPanel } from '../components/SEOToolsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
@@ -780,6 +781,16 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 3: SITE AUDIT (Visible when a project is selected) */}
         {selectedProject && (
           <SiteAuditPanel project={selectedProject} />
+        )}
+
+        {/* SECTION 3.5: TECHNICAL SEO CRAWLER (Paid — Starter/Agency) */}
+        {selectedProject && (
+          <TechnicalCrawlerPanel
+            project={selectedProject}
+            hasCrawlerEntitlement={
+              !!(subscriptionSummary?.plan?.features ?? []).includes('TECHNICAL_CRAWLER')
+            }
+          />
         )}
 
         {/* SECTION 4: GOOGLE SEARCH CONSOLE (Visible when a project is selected) */}

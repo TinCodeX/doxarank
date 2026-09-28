@@ -18,7 +18,8 @@ from .models import (
     MonitoringState, MonitoringSnapshot, MonitorType, MonitorStatus,
     ProjectRemediationPolicy, RemediationRecord,
     ExternalConnection, ExternalOperationRecord,
-    StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord
+    StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
+    CrawlJob, CrawlJobStatus, CrawlPage,
 )
 from apps.projects.models import Project
 
@@ -2087,3 +2088,140 @@ class PlatformOperatorActionRequestSerializer(serializers.Serializer):
     project_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     rationale = serializers.CharField(required=False, allow_blank=True, default="")
 
+
+# =============================================================================
+
+class CrawlPageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for CrawlPage model — per-page crawl results.
+    Read-only; pages are created exclusively by the Celery crawler task.
+    """
+    class Meta:
+        model = CrawlPage
+        fields = (
+            'id',
+            'crawl_job',
+            'url',
+            'final_url',
+            'status_code',
+            'response_time_ms',
+            'depth',
+            'title',
+            'meta_description',
+            'h1_count',
+            'word_count',
+            'canonical_url',
+            'has_redirect',
+            'redirect_chain',
+            'internal_links_count',
+            'external_links_count',
+            'images_count',
+            'images_missing_alt_count',
+            'is_broken',
+            'is_slow',
+            'issues',
+            'created_at',
+        )
+        read_only_fields = fields
+
+
+class CrawlJobSerializer(serializers.ModelSerializer):
+    """
+    Serializer for CrawlJob model.
+    Enforces project ownership and bounds max_pages/max_depth.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    duration_seconds = serializers.SerializerMethodField()
+    pages_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrawlJob
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'status',
+            'max_pages',
+            'max_depth',
+            'respect_robots_txt',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+            'pages_crawled',
+            'pages_discovered',
+            'broken_links_count',
+            'missing_titles_count',
+            'missing_descriptions_count',
+            'duplicate_titles_count',
+            'missing_h1_count',
+            'redirect_chains_count',
+            'slow_pages_count',
+            'celery_task_id',
+            'error_message',
+            'crawl_metadata',
+            'duration_seconds',
+            'pages_count',
+        )
+        read_only_fields = (
+            'id', 'project_name', 'project_website_url', 'status',
+            'started_at', 'completed_at', 'created_at', 'updated_at',
+            'pages_crawled', 'pages_discovered',
+            'broken_links_count', 'missing_titles_count', 'missing_descriptions_count',
+            'duplicate_titles_count', 'missing_h1_count', 'redirect_chains_count',
+            'slow_pages_count', 'celery_task_id', 'error_message', 'crawl_metadata',
+            'duration_seconds', 'pages_count',
+        )
+
+    def get_duration_seconds(self, obj: CrawlJob):
+        return obj.duration_seconds
+
+    def get_pages_count(self, obj: CrawlJob):
+        return obj.pages.count()
+
+    def validate_project(self, value):
+        """
+        Critical security boundary:
+        Ensure the target project is owned by the currently authenticated user.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if value.owner != request.user:
+                raise serializers.ValidationError(
+                    "You do not have permission to create crawl jobs for this project."
+                )
+        return value
+
+    def validate_max_pages(self, value):
+        if value < 1 or value > 500:
+            raise serializers.ValidationError("max_pages must be between 1 and 500.")
+        return value
+
+    def validate_max_depth(self, value):
+        if value < 0 or value > 10:
+            raise serializers.ValidationError("max_depth must be between 0 and 10.")
+        return value
+
+
+class LaunchCrawlRequestSerializer(serializers.Serializer):
+    """
+    Validates POST body for the launch_crawl action endpoint.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text='ID of the project to crawl (must be owned by the authenticated user).'
+    )
+    max_pages = serializers.IntegerField(
+        required=False, default=100, min_value=1, max_value=500,
+        help_text='Maximum pages to crawl (1–500, default 100).'
+    )
+    max_depth = serializers.IntegerField(
+        required=False, default=3, min_value=0, max_value=10,
+        help_text='Maximum BFS depth (0–10, default 3).'
+    )
+    respect_robots_txt = serializers.BooleanField(
+        required=False, default=True,
+        help_text='Whether to respect robots.txt (default True).'
+    )

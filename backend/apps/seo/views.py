@@ -23,7 +23,8 @@ from .models import (
     ProjectRemediationPolicy, RemediationRecord,
     ExternalConnection, ExternalOperationRecord,
     StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
-    StrategyStatus, ReviewApprovalStatus
+    StrategyStatus, ReviewApprovalStatus,
+    CrawlJob, CrawlJobStatus, CrawlPage,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -44,7 +45,8 @@ from .serializers import (
     ProjectRemediationPolicySerializer, RemediationRecordSerializer,
     ExternalConnectionSerializer, ExternalOperationRecordSerializer,
     StrategicObjectiveSerializer, StrategicInitiativeSerializer,
-    LongTermSEOStrategySerializer, StrategyReviewRecordSerializer
+    LongTermSEOStrategySerializer, StrategyReviewRecordSerializer,
+    CrawlJobSerializer, CrawlPageSerializer, LaunchCrawlRequestSerializer,
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.google_oauth import (
@@ -3279,3 +3281,140 @@ class PlatformAuditLogView(APIView):
         serializer = OperatorAuditLogSerializer(qs[:100], many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+# =============================================================================
+
+class CrawlJobViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Technical SEO CrawlJob operations.
+
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by project__owner == request.user.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports optional project_id query filter.
+    5. The launch action is gated by FeatureCode.TECHNICAL_CRAWLER subscription entitlement.
+    """
+    serializer_class = CrawlJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only crawl jobs belonging to projects owned by the authenticated user."""
+        qs = CrawlJob.objects.filter(project__owner=self.request.user).select_related('project')
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='launch')
+    def launch_crawl(self, request):
+        """
+        Launch a new Technical SEO Crawl for a project.
+
+        POST /api/seo/crawler/launch/
+        Body: { project_id, max_pages?, max_depth?, respect_robots_txt? }
+
+        Requirements:
+        - User must own the target project.
+        - User must have FeatureCode.TECHNICAL_CRAWLER subscription entitlement.
+        - No more than one PENDING/RUNNING job per project at a time.
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        from apps.subscriptions.models import FeatureCode
+        from apps.seo.tasks import run_technical_crawl
+
+        serializer = LaunchCrawlRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # 1. Subscription entitlement check
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.TECHNICAL_CRAWLER)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your plan does not include the Technical Site Crawler feature. '
+                          'Please upgrade to Starter or Agency.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. Resolve and authorize project
+        project_id = data['project_id']
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': f'Project #{project_id} not found or does not belong to you.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. Prevent duplicate concurrent crawls (max 1 active per project)
+        active_job = CrawlJob.objects.filter(
+            project=project,
+            status__in=[CrawlJobStatus.PENDING, CrawlJobStatus.RUNNING]
+        ).first()
+        if active_job:
+            return Response(
+                {'error': f'A crawl is already in progress for this project (Job #{active_job.id}, status: {active_job.status}).'},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        # 4. Create CrawlJob and dispatch Celery task
+        max_pages = min(data.get('max_pages', 100), 500)
+        max_depth = min(data.get('max_depth', 3), 10)
+        respect_robots_txt = data.get('respect_robots_txt', True)
+
+        crawl_job = CrawlJob.objects.create(
+            project=project,
+            status=CrawlJobStatus.PENDING,
+            max_pages=max_pages,
+            max_depth=max_depth,
+            respect_robots_txt=respect_robots_txt,
+        )
+
+        task = run_technical_crawl.delay(
+            crawl_job_id=crawl_job.id,
+            max_pages=max_pages,
+            max_depth=max_depth,
+            respect_robots_txt=respect_robots_txt,
+        )
+        crawl_job.celery_task_id = task.id
+        crawl_job.save(update_fields=['celery_task_id', 'updated_at'])
+
+        response_serializer = CrawlJobSerializer(crawl_job, context={'request': request})
+        return Response(
+            {'crawl_job': response_serializer.data},
+            status=status.HTTP_202_ACCEPTED
+        )
+
+
+class CrawlPageViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only ViewSet for CrawlPage results under a CrawlJob.
+
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset is strictly filtered by crawl_job__project__owner == request.user.
+    3. Supports optional crawl_job_id and is_broken / is_slow query filters.
+    """
+    serializer_class = CrawlPageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CrawlPage.objects.filter(
+            crawl_job__project__owner=self.request.user
+        ).select_related('crawl_job')
+
+        crawl_job_id = self.request.query_params.get('crawl_job_id')
+        if crawl_job_id:
+            qs = qs.filter(crawl_job_id=crawl_job_id)
+
+        is_broken = self.request.query_params.get('is_broken')
+        if is_broken is not None:
+            qs = qs.filter(is_broken=is_broken.lower() == 'true')
+
+        is_slow = self.request.query_params.get('is_slow')
+        if is_slow is not None:
+            qs = qs.filter(is_slow=is_slow.lower() == 'true')
+
+        return qs

@@ -1,0 +1,49 @@
+# Dockerfile for DoxaRank Technical SEO Crawler Worker
+# Includes Python 3.12, Celery, and Playwright with headless Chromium
+
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install system dependencies required by Playwright / Chromium
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    wget \
+    gnupg \
+    libglib2.0-0 \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir playwright>=1.40.0
+
+# Install Playwright browser binaries (headless Chromium only for minimal image size)
+RUN playwright install --with-deps chromium
+
+# Copy backend application code
+COPY backend/ /app/
+
+# Run Celery worker for the crawler queue
+CMD ["celery", "-A", "config", "worker", "-l", "info", "-Q", "crawler,default", "-c", "2"]
