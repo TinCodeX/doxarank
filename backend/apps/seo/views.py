@@ -25,9 +25,11 @@ from .models import (
     StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
     StrategyStatus, ReviewApprovalStatus,
     CrawlJob, CrawlJobStatus, CrawlPage,
+    RankCheckJob, RankCheckJobStatus,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
+    RankCheckJobSerializer, LaunchRankCheckSerializer,
     SiteAuditSerializer, AuditIssueSerializer,
     SearchConsoleConnectionSerializer, SearchAnalyticsDataSerializer,
     SearchConsoleSyncRequestSerializer,
@@ -102,6 +104,40 @@ class KeywordViewSet(viewsets.ModelViewSet):
         PlanEntitlementService.check_can_add_keyword(self.request.user)
         serializer.save()
 
+    @action(detail=True, methods=['post'], url_path='check')
+    def check_ranking(self, request, pk=None):
+        """
+        Trigger an asynchronous rank check for this specific keyword.
+        POST /api/seo/keywords/<id>/check/
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        from apps.seo.tasks import check_keyword_ranking
+
+        keyword = self.get_object()
+
+        # Enforce subscription entitlement
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.RANK_TRACKING)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your current plan does not include Rank Tracking. Please upgrade to Starter or Agency.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        task = check_keyword_ranking.delay(keyword.id)
+        return Response(
+            {
+                'status': 'queued',
+                'task_id': str(task.id) if task else None,
+                'keyword_id': keyword.id,
+                'keyword': keyword.keyword,
+                'message': f"Ranking check queued for '{keyword.keyword}' against google.com.et."
+            },
+            status=status.HTTP_200_OK
+        )
+
 
 class KeywordRankingViewSet(viewsets.ModelViewSet):
     """
@@ -112,6 +148,7 @@ class KeywordRankingViewSet(viewsets.ModelViewSet):
     2. Queryset is strictly filtered by `keyword__project__owner == request.user`.
     3. Cross-user access returns 404 Not Found.
     4. Supports optional `keyword_id` filtering without bypassing ownership isolation.
+    5. Rank tracking checks are gated by FeatureCode.RANK_TRACKING subscription entitlement.
     """
     serializer_class = KeywordRankingSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -127,6 +164,163 @@ class KeywordRankingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(keyword_id=keyword_id)
 
         return queryset
+
+    @action(detail=False, methods=['post'], url_path='check')
+    def launch_check(self, request):
+        """
+        Launch an asynchronous rank check for a single keyword or all keywords of a project.
+        POST /api/seo/rankings/check/
+        Body: { keyword_id?: int, project_id?: int }
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        from apps.seo.tasks import check_keyword_ranking, run_project_rank_check
+
+        # 1. Enforce subscription entitlement
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.RANK_TRACKING)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your current plan does not include Rank Tracking. Please upgrade to Starter or Agency.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = LaunchRankCheckSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        keyword_id = data.get('keyword_id')
+        project_id = data.get('project_id')
+
+        # Single keyword check
+        if keyword_id:
+            keyword = Keyword.objects.filter(id=keyword_id, project__owner=request.user).first()
+            if not keyword:
+                return Response(
+                    {'error': 'Keyword not found or access denied.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            task = check_keyword_ranking.delay(keyword.id)
+            return Response(
+                {
+                    'status': 'queued',
+                    'task_id': str(task.id) if task else None,
+                    'keyword_id': keyword.id,
+                    'keyword': keyword.keyword,
+                    'message': f"Ranking check queued for '{keyword.keyword}'."
+                },
+                status=status.HTTP_200_OK
+            )
+
+        # Batch project check
+        if project_id:
+            project = Project.objects.filter(id=project_id, owner=request.user).first()
+            if not project:
+                return Response(
+                    {'error': 'Project not found or access denied.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            active_keywords_count = project.keywords.filter(is_active=True).count()
+            job = RankCheckJob.objects.create(
+                project=project,
+                status=RankCheckJobStatus.PENDING,
+                total_keywords=active_keywords_count,
+                trigger='manual'
+            )
+
+            run_project_rank_check.delay(project.id, job.id)
+            return Response(
+                {
+                    'status': 'queued',
+                    'job_id': job.id,
+                    'project_id': project.id,
+                    'total_keywords': active_keywords_count,
+                    'message': f"Batch ranking check queued for {active_keywords_count} keywords on project '{project.name}'."
+                },
+                status=status.HTTP_200_OK
+            )
+
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """
+        Get ranking summary with latest position, previous position, and position delta
+        for all tracked keywords in a project.
+        GET /api/seo/rankings/summary/?project_id=<id>
+        """
+        project_id = request.query_params.get('project_id')
+        if not project_id:
+            return Response(
+                {'error': 'project_id query parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        project = Project.objects.filter(id=project_id, owner=request.user).first()
+        if not project:
+            return Response(
+                {'error': 'Project not found or access denied.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from apps.seo.services.rank_tracker import RankTrackerService
+        summary_data = RankTrackerService.get_project_ranking_summary(project)
+        return Response(summary_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='history')
+    def history(self, request):
+        """
+        Get historical ranking snapshots for a tracked keyword.
+        GET /api/seo/rankings/history/?keyword_id=<id>
+        """
+        keyword_id = request.query_params.get('keyword_id')
+        if not keyword_id:
+            return Response(
+                {'error': 'keyword_id query parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        keyword = Keyword.objects.filter(id=keyword_id, project__owner=request.user).first()
+        if not keyword:
+            return Response(
+                {'error': 'Keyword not found or access denied.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        rankings = keyword.rankings.order_by('-recorded_at')
+        serializer = KeywordRankingSerializer(rankings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='jobs')
+    def list_jobs(self, request):
+        """
+        List rank check jobs for the user's projects.
+        GET /api/seo/rankings/jobs/?project_id=<id>
+        """
+        qs = RankCheckJob.objects.filter(project__owner=request.user).select_related('project')
+        project_id = request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        serializer = RankCheckJobSerializer(qs[:50], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path=r'jobs/(?P<job_id>\d+)')
+    def get_job(self, request, job_id=None):
+        """
+        Retrieve execution status of a specific rank check job.
+        GET /api/seo/rankings/jobs/<job_id>/
+        """
+        job = RankCheckJob.objects.filter(id=job_id, project__owner=request.user).select_related('project').first()
+        if not job:
+            return Response(
+                {'error': 'Rank check job not found or access denied.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = RankCheckJobSerializer(job)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class SiteAuditViewSet(viewsets.ModelViewSet):
@@ -3283,6 +3477,8 @@ class PlatformAuditLogView(APIView):
 
 
 # =============================================================================
+# TECHNICAL SEO CRAWLER VIEWSETS
+# =============================================================================
 
 class CrawlJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -3418,3 +3614,4 @@ class CrawlPageViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(is_slow=is_slow.lower() == 'true')
 
         return qs
+

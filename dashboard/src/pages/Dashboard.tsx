@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, createProject, updateProject, deleteProject } from '../api/projects';
 import { getKeywords, createKeyword, updateKeyword, deleteKeyword } from '../api/keywords';
-import { getRankings, createRanking, updateRanking, deleteRanking } from '../api/rankings';
+import { getRankings, createRanking, updateRanking, deleteRanking, triggerRankCheck, getRankingSummary, getRankCheckJobs } from '../api/rankings';
 import type { Project, CreateProjectPayload } from '../types/project';
 import type { Keyword, CreateKeywordPayload, UpdateKeywordPayload } from '../types/keyword';
-import type { Ranking, CreateRankingPayload, UpdateRankingPayload } from '../types/ranking';
+import type { Ranking, CreateRankingPayload, UpdateRankingPayload, KeywordRankingSummary, RankCheckJob } from '../types/ranking';
 import { ProjectFormModal } from '../components/ProjectFormModal';
 import { KeywordFormModal } from '../components/KeywordFormModal';
 import { RankingFormModal } from '../components/RankingFormModal';
@@ -24,9 +24,9 @@ import { ProductionOperationsPanel } from '../components/ProductionOperationsPan
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
-import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
 import { SEOActionsPanel } from '../components/SEOActionsPanel';
 import { SEOToolsPanel } from '../components/SEOToolsPanel';
+import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 import { getUserSubscription } from '../api/subscriptions';
 import type { UserSubscriptionSummary } from '../types/subscription';
@@ -72,6 +72,12 @@ export const Dashboard: React.FC = () => {
   const [editingRanking, setEditingRanking] = useState<Ranking | null>(null);
   const [deletingRanking, setDeletingRanking] = useState<Ranking | null>(null);
   const [isDeletingRanking, setIsDeletingRanking] = useState(false);
+
+  // Rank Tracker MVP state
+  const [rankingSummaries, setRankingSummaries] = useState<Record<number, KeywordRankingSummary>>({});
+  const [activeRankJob, setActiveRankJob] = useState<RankCheckJob | null>(null);
+  const [isCheckingRankings, setIsCheckingRankings] = useState<boolean>(false);
+  const [rankCheckNotice, setRankCheckNotice] = useState<string | null>(null);
 
   // Content Brief state
   const [briefTargetRecId, setBriefTargetRecId] = useState<number | null>(null);
@@ -124,6 +130,55 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // Fetch keywords whenever active project changes
+  const fetchRankingSummaries = async (projectId: number) => {
+    try {
+      const summaryList = await getRankingSummary(projectId);
+      const map: Record<number, KeywordRankingSummary> = {};
+      summaryList.forEach((s) => {
+        map[s.keyword_id] = s;
+      });
+      setRankingSummaries(map);
+    } catch (err) {
+      console.warn('Could not load ranking summaries:', err);
+    }
+  };
+
+  const fetchRankJobs = async (projectId: number) => {
+    try {
+      const jobs = await getRankCheckJobs(projectId);
+      if (jobs.length > 0) {
+        setActiveRankJob(jobs[0]);
+      } else {
+        setActiveRankJob(null);
+      }
+    } catch (err) {
+      console.warn('Could not load rank check jobs:', err);
+    }
+  };
+
+  const handleTriggerRankCheck = async (keywordId?: number) => {
+    if (!selectedProject) return;
+    setIsCheckingRankings(true);
+    setRankCheckNotice(null);
+    try {
+      const res = await triggerRankCheck({
+        project_id: keywordId ? undefined : selectedProject.id,
+        keyword_id: keywordId,
+      });
+      setRankCheckNotice(res.message);
+      await fetchRankingSummaries(selectedProject.id);
+      await fetchRankJobs(selectedProject.id);
+      if (selectedKeyword) {
+        await fetchKeywordRankings(selectedKeyword.id);
+      }
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.data?.detail || err?.message || 'Failed to trigger rank check.';
+      setRankCheckNotice(`Notice: ${msg}`);
+    } finally {
+      setIsCheckingRankings(false);
+    }
+  };
+
   const fetchProjectKeywords = async (projectId: number) => {
     setIsLoadingKeywords(true);
     setKeywordError(null);
@@ -137,6 +192,9 @@ export const Dashboard: React.FC = () => {
       } else {
         setSelectedKeyword(null);
       }
+      // Also load ranking summaries and jobs
+      fetchRankingSummaries(projectId);
+      fetchRankJobs(projectId);
     } catch (err: any) {
       setKeywordError(err?.data?.detail || 'Failed to load keywords for this project.');
     } finally {
@@ -151,6 +209,8 @@ export const Dashboard: React.FC = () => {
       setKeywords([]);
       setSelectedKeyword(null);
       setRankings([]);
+      setRankingSummaries({});
+      setActiveRankJob(null);
     }
   }, [selectedProject?.id]);
 
@@ -455,23 +515,50 @@ export const Dashboard: React.FC = () => {
         {/* SECTION 1: KEYWORDS MANAGEMENT (Visible when a project is selected) */}
         {selectedProject && (
           <section style={{ marginTop: '36px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
                   Tracked Keywords {keywords.length > 0 && `(${keywords.length})`}
                 </h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-                  SEO queries monitored for <strong>{selectedProject.name}</strong> on Ethiopian Google search. Select a keyword to view ranking history.
+                  SEO queries monitored for <strong>{selectedProject.name}</strong> on Google Ethiopia (google.com.et). Select a keyword to view ranking history.
                 </p>
               </div>
-              <button
-                id="add-keyword-button"
-                onClick={handleOpenCreateKeywordModal}
-                style={primaryAddBtnStyle}
-              >
-                + Track Keyword
-              </button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  id="check-all-rankings-button"
+                  onClick={() => handleTriggerRankCheck()}
+                  disabled={isCheckingRankings || keywords.length === 0}
+                  style={{
+                    ...primaryAddBtnStyle,
+                    backgroundColor: isCheckingRankings ? '#9ca3af' : '#10b981',
+                    cursor: isCheckingRankings || keywords.length === 0 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {isCheckingRankings ? 'Checking...' : '⚡ Check All Rankings'}
+                </button>
+                <button
+                  id="add-keyword-button"
+                  onClick={handleOpenCreateKeywordModal}
+                  style={primaryAddBtnStyle}
+                >
+                  + Track Keyword
+                </button>
+              </div>
             </div>
+
+            {rankCheckNotice && (
+              <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{rankCheckNotice}</span>
+                <button onClick={() => setRankCheckNotice(null)} style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+              </div>
+            )}
+
+            {activeRankJob && activeRankJob.status === 'running' && (
+              <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '14px' }}>
+                🔄 <strong>Ranking check in progress:</strong> {activeRankJob.completed_keywords} / {activeRankJob.total_keywords} keywords checked...
+              </div>
+            )}
 
             {keywordError && (
               <div style={errorAlertStyle}>
@@ -490,7 +577,7 @@ export const Dashboard: React.FC = () => {
                   No keywords tracked yet
                 </h4>
                 <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#6b7280', maxWidth: '420px' }}>
-                  Add search terms (e.g. "seo agency addis ababa") to monitor your ranking positions on Google Ethiopia.
+                  Add search terms (e.g. "best hotel in addis ababa" or "በአዲስ አበባ ምርጥ ሆቴል") to monitor your ranking positions on Google Ethiopia.
                 </p>
                 <button
                   id="empty-add-keyword-button"
@@ -506,8 +593,10 @@ export const Dashboard: React.FC = () => {
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
                       <th style={thStyle}>Keyword / Query</th>
-                      <th style={thStyle}>Search Engine</th>
-                      <th style={thStyle}>Location & Lang</th>
+                      <th style={thStyle}>Current</th>
+                      <th style={thStyle}>Previous</th>
+                      <th style={thStyle}>Change</th>
+                      <th style={thStyle}>Target (ET)</th>
                       <th style={thStyle}>Device</th>
                       <th style={thStyle}>Status</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
@@ -516,6 +605,12 @@ export const Dashboard: React.FC = () => {
                   <tbody>
                     {keywords.map((kw) => {
                       const isSelected = selectedKeyword?.id === kw.id;
+                      const summary = rankingSummaries[kw.id];
+                      const currPos = summary?.current_position;
+                      const prevPos = summary?.previous_position;
+                      const change = summary?.change;
+                      const changeStatus = summary?.change_status;
+
                       return (
                         <tr
                           key={kw.id}
@@ -539,13 +634,70 @@ export const Dashboard: React.FC = () => {
                             </div>
                           </td>
                           <td style={tdStyle}>
-                            <span style={engineBadgeStyle}>
-                              Google
-                            </span>
+                            {currPos !== undefined && currPos !== null ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '13px',
+                                  backgroundColor: currPos <= 3 ? '#fef3c7' : currPos <= 10 ? '#dbeafe' : '#f1f5f9',
+                                  color: currPos <= 3 ? '#92400e' : currPos <= 10 ? '#1e40af' : '#475569',
+                                }}
+                              >
+                                #{currPos}
+                              </span>
+                            ) : summary?.result_status === 'not_found' ? (
+                              <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 500 }}>&gt; 100</span>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {prevPos !== undefined && prevPos !== null ? (
+                              <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
+                                #{prevPos}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {change !== null && change !== undefined ? (
+                              change > 0 ? (
+                                <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '13px' }}>
+                                  ▲ +{change}
+                                </span>
+                              ) : change < 0 ? (
+                                <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '13px' }}>
+                                  ▼ {change}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#64748b', fontWeight: 500, fontSize: '13px' }}>
+                                  0
+                                </span>
+                              )
+                            ) : changeStatus === 'entered' ? (
+                              <span style={{ color: '#16a34a', fontSize: '12px', fontWeight: 600, backgroundColor: '#dcfce7', padding: '2px 6px', borderRadius: '4px' }}>
+                                ✨ In Top 100
+                              </span>
+                            ) : changeStatus === 'dropped' ? (
+                              <span style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600, backgroundColor: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                                🔻 Dropped
+                              </span>
+                            ) : changeStatus === 'new' ? (
+                              <span style={{ color: '#4f46e5', fontSize: '12px', fontWeight: 600, backgroundColor: '#e0e7ff', padding: '2px 6px', borderRadius: '4px' }}>
+                                ✦ New
+                              </span>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                            )}
                           </td>
                           <td style={tdStyle}>
                             <span style={countryBadgeStyle}>
-                              🇪🇹 {kw.country} · {kw.language.toUpperCase()}
+                              🇪🇹 ET · {kw.language.toUpperCase()}
                             </span>
                           </td>
                           <td style={tdStyle}>
@@ -563,6 +715,22 @@ export const Dashboard: React.FC = () => {
                           <td style={{ ...tdStyle, textAlign: 'right' }}>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', alignItems: 'center' }}>
                               <button
+                                id={`check-kw-${kw.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTriggerRankCheck(kw.id);
+                                }}
+                                disabled={isCheckingRankings}
+                                style={{
+                                  ...actionInlineBtnStyle,
+                                  color: '#059669',
+                                  fontWeight: 600,
+                                }}
+                                title="Run ranking check against google.com.et"
+                              >
+                                Check
+                              </button>
+                              <button
                                 id={`select-kw-${kw.id}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -574,7 +742,7 @@ export const Dashboard: React.FC = () => {
                                   fontWeight: isSelected ? 700 : 500,
                                 }}
                               >
-                                {isSelected ? 'Viewing Rankings' : 'Select'}
+                                {isSelected ? 'Viewing' : 'Select'}
                               </button>
                               <button
                                 id={`edit-kw-${kw.id}`}
@@ -615,7 +783,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '4px' }}>
-                    Rank Tracking
+                    Rank Tracking (google.com.et)
                   </span>
                   <span style={{ fontSize: '13px', color: '#6b7280' }}>
                     Project: <strong>{selectedProject.name}</strong>
@@ -625,16 +793,29 @@ export const Dashboard: React.FC = () => {
                   Ranking History for "{selectedKeyword.keyword}"
                 </h3>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-                  Target: Google ({selectedKeyword.country}) · {selectedKeyword.language.toUpperCase()} · {selectedKeyword.device}
+                  Target: Google Ethiopia (google.com.et) · {selectedKeyword.language.toUpperCase()} · {selectedKeyword.device}
                 </p>
               </div>
-              <button
-                id="record-ranking-button"
-                onClick={handleOpenCreateRankingModal}
-                style={primaryAddBtnStyle}
-              >
-                + Record Ranking
-              </button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  id="check-selected-keyword-button"
+                  onClick={() => handleTriggerRankCheck(selectedKeyword.id)}
+                  disabled={isCheckingRankings}
+                  style={{
+                    ...primaryAddBtnStyle,
+                    backgroundColor: '#10b981',
+                  }}
+                >
+                  ⚡ Check Now
+                </button>
+                <button
+                  id="record-ranking-button"
+                  onClick={handleOpenCreateRankingModal}
+                  style={primaryAddBtnStyle}
+                >
+                  + Record Ranking
+                </button>
+              </div>
             </div>
 
             {rankingError && (
@@ -654,15 +835,24 @@ export const Dashboard: React.FC = () => {
                   No ranking observations recorded yet
                 </h4>
                 <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#6b7280', maxWidth: '420px' }}>
-                  Record your website's position in search results for <strong>"{selectedKeyword.keyword}"</strong> to track historical progress.
+                  Run a live rank check against Google Ethiopia for <strong>"{selectedKeyword.keyword}"</strong> or record a manual observation.
                 </p>
-                <button
-                  id="empty-record-ranking-button"
-                  onClick={handleOpenCreateRankingModal}
-                  style={primaryAddBtnStyle}
-                >
-                  Record First Ranking
-                </button>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button
+                    id="empty-check-ranking-button"
+                    onClick={() => handleTriggerRankCheck(selectedKeyword.id)}
+                    style={{ ...primaryAddBtnStyle, backgroundColor: '#10b981' }}
+                  >
+                    ⚡ Check Now
+                  </button>
+                  <button
+                    id="empty-record-ranking-button"
+                    onClick={handleOpenCreateRankingModal}
+                    style={primaryAddBtnStyle}
+                  >
+                    Record Observation
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={tableContainerStyle}>
@@ -670,70 +860,107 @@ export const Dashboard: React.FC = () => {
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
                       <th style={thStyle}>Position</th>
-                      <th style={thStyle}>Ranking URL</th>
+                      <th style={thStyle}>Status</th>
+                      <th style={thStyle}>SERP Page & URL</th>
                       <th style={thStyle}>Engine</th>
-                      <th style={thStyle}>Location & Lang</th>
                       <th style={thStyle}>Device</th>
-                      <th style={thStyle}>Recorded Date</th>
+                      <th style={thStyle}>Checked Date</th>
                       <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rankings.map((ranking) => {
-                      const isTop3 = ranking.position <= 3;
-                      const isTop10 = ranking.position <= 10;
+                      const pos = ranking.position;
+                      const isTop3 = pos !== null && pos <= 3;
+                      const isTop10 = pos !== null && pos <= 10;
                       return (
                         <tr key={ranking.id} id={`ranking-row-${ranking.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={tdStyle}>
+                            {pos !== null ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '4px 10px',
+                                  borderRadius: '8px',
+                                  fontWeight: 800,
+                                  fontSize: '14px',
+                                  backgroundColor: isTop3 ? '#fef3c7' : isTop10 ? '#dbeafe' : '#f1f5f9',
+                                  color: isTop3 ? '#92400e' : isTop10 ? '#1e40af' : '#475569',
+                                  border: isTop3 ? '1px solid #fcd34d' : isTop10 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                }}
+                              >
+                                #{pos}
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 600,
+                                  fontSize: '12px',
+                                  backgroundColor: '#fee2e2',
+                                  color: '#b91c1c',
+                                }}
+                              >
+                                &gt; 100
+                              </span>
+                            )}
+                          </td>
                           <td style={tdStyle}>
                             <span
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '4px 10px',
-                                borderRadius: '8px',
-                                fontWeight: 800,
-                                fontSize: '14px',
-                                backgroundColor: isTop3 ? '#fef3c7' : isTop10 ? '#dbeafe' : '#f1f5f9',
-                                color: isTop3 ? '#92400e' : isTop10 ? '#1e40af' : '#475569',
-                                border: isTop3 ? '1px solid #fcd34d' : isTop10 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                textTransform: 'capitalize',
+                                backgroundColor: ranking.result_status === 'found' ? '#dcfce7' : ranking.result_status === 'error' ? '#fee2e2' : '#f1f5f9',
+                                color: ranking.result_status === 'found' ? '#15803d' : ranking.result_status === 'error' ? '#b91c1c' : '#64748b',
                               }}
                             >
-                              #{ranking.position}
+                              {ranking.result_status || (pos !== null ? 'found' : 'not_found')}
                             </span>
                           </td>
                           <td style={tdStyle}>
-                            {ranking.ranking_url ? (
-                              <a
-                                href={ranking.ranking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  fontSize: '13px',
-                                  display: 'inline-block',
-                                  maxWidth: '280px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={ranking.ranking_url}
-                              >
-                                🔗 {ranking.ranking_url}
-                              </a>
-                            ) : (
-                              <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
-                            )}
+                            <div>
+                              {ranking.title && (
+                                <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px', marginBottom: '2px', maxWidth: '340px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ranking.title}>
+                                  {ranking.title}
+                                </div>
+                              )}
+                              {ranking.ranking_url ? (
+                                <a
+                                  href={ranking.ranking_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    color: '#2563eb',
+                                    textDecoration: 'none',
+                                    fontSize: '12px',
+                                    display: 'inline-block',
+                                    maxWidth: '340px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={ranking.ranking_url}
+                                >
+                                  🔗 {ranking.ranking_url}
+                                </a>
+                              ) : (
+                                <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                              )}
+                            </div>
                           </td>
                           <td style={tdStyle}>
                             <span style={engineBadgeStyle}>
-                              Google
-                            </span>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={countryBadgeStyle}>
-                              🇪🇹 {ranking.country} · {ranking.language.toUpperCase()}
+                              google.com.et
                             </span>
                           </td>
                           <td style={tdStyle}>
@@ -742,8 +969,8 @@ export const Dashboard: React.FC = () => {
                             </span>
                           </td>
                           <td style={tdStyle}>
-                            <span style={{ fontSize: '13px', color: '#334155', fontWeight: 500 }}>
-                              {new Date(ranking.recorded_at).toLocaleString(undefined, {
+                            <span style={{ color: '#64748b', fontSize: '13px' }}>
+                              {new Date(ranking.recorded_at).toLocaleDateString(undefined, {
                                 year: 'numeric',
                                 month: 'short',
                                 day: 'numeric',

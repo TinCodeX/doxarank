@@ -20,6 +20,7 @@ from .models import (
     ExternalConnection, ExternalOperationRecord,
     StrategicObjective, LongTermSEOStrategy, StrategicInitiative, StrategyReviewRecord,
     CrawlJob, CrawlJobStatus, CrawlPage,
+    RankingResultStatus, RankCheckJob, RankCheckJobStatus,
 )
 from apps.projects.models import Project
 
@@ -43,6 +44,7 @@ class KeywordSerializer(serializers.ModelSerializer):
             'project_website_url',
             'keyword',
             'search_engine',
+            'search_domain',
             'country',
             'language',
             'device',
@@ -125,17 +127,23 @@ class KeywordRankingSerializer(serializers.ModelSerializer):
             'project_id',
             'project_name',
             'position',
+            'result_status',
             'ranking_url',
+            'title',
             'search_engine',
+            'search_domain',
             'country',
             'language',
             'device',
+            'error_message',
             'recorded_at',
             'created_at'
         )
         read_only_fields = ('id', 'keyword_name', 'project_id', 'project_name', 'created_at')
 
     def validate_position(self, value):
+        if value is None:
+            return None
         if value < 1:
             raise serializers.ValidationError("Position must be a positive integer greater than or equal to 1.")
         if value > 1000:
@@ -178,6 +186,42 @@ class KeywordRankingSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+
+class RankCheckJobSerializer(serializers.ModelSerializer):
+    """Serializer for RankCheckJob model representing async ranking checks."""
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = RankCheckJob
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'status',
+            'total_keywords',
+            'completed_keywords',
+            'failed_keywords',
+            'trigger',
+            'started_at',
+            'completed_at',
+            'error_message',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class LaunchRankCheckSerializer(serializers.Serializer):
+    """Serializer for launching manual or project-wide rank checks."""
+    keyword_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        if not attrs.get('keyword_id') and not attrs.get('project_id'):
+            raise serializers.ValidationError("Either keyword_id or project_id must be provided.")
+        return attrs
+
 
 
 class SiteAuditSerializer(serializers.ModelSerializer):
@@ -2089,6 +2133,8 @@ class PlatformOperatorActionRequestSerializer(serializers.Serializer):
     rationale = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+# =============================================================================
+# TECHNICAL SEO CRAWLER SERIALIZERS
 # =============================================================================
 
 class CrawlPageSerializer(serializers.ModelSerializer):

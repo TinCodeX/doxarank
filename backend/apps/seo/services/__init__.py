@@ -50,6 +50,12 @@ from .seo_audit_engine import (
     REDIRECT_CHAIN, REDIRECT_LOOP,
     CRAWL_ERROR, SLOW_RESPONSE, MISSING_STRUCTURED_DATA
 )
+from .rank_tracker import (
+    RankTrackerService,
+    GoogleEtSerpClient,
+    SerpParser,
+    SerpResult,
+)
 
 __all__ = [
     'SEOInvestigationService',
@@ -125,5 +131,9 @@ __all__ = [
     'SLOW_RESPONSE',
     'MISSING_STRUCTURED_DATA',
     'normalize_amharic_query',
-    'are_keywords_equivalent'
+    'are_keywords_equivalent',
+    'RankTrackerService',
+    'GoogleEtSerpClient',
+    'SerpParser',
+    'SerpResult',
 ]

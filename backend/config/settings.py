@@ -226,6 +226,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.seo.tasks.compact_platform_data_task',
         'schedule': 86400.0,  # Compact ephemeral idempotency/alerts daily
     },
+    'daily-rank-tracker-checks': {
+        'task': 'apps.seo.tasks.run_daily_rank_checks',
+        'schedule': 86400.0,  # Run daily google.com.et rank tracking checks
+    },
 }
 
 

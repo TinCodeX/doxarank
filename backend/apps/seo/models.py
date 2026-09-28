@@ -62,6 +62,11 @@ class Keyword(models.Model):
         default=Device.DESKTOP,
         help_text='Target device type (desktop or mobile).'
     )
+    search_domain = models.CharField(
+        max_length=100,
+        default='google.com.et',
+        help_text='Target search engine domain (e.g. "google.com.et").'
+    )
     is_active = models.BooleanField(
         default=True,
         help_text='Whether rank tracking is active for this keyword.'
@@ -93,6 +98,11 @@ class Keyword(models.Model):
         return self.keyword.strip().lower()
 
 
+class RankingResultStatus(models.TextChoices):
+    FOUND = 'found', 'Found in Top 100'
+    NOT_FOUND = 'not_found', 'Not in Top 100'
+    ERROR = 'error', 'Error / Blocked'
+
 
 class KeywordRanking(models.Model):
     """
@@ -107,7 +117,16 @@ class KeywordRanking(models.Model):
         help_text='The tracked keyword this ranking observation belongs to.'
     )
     position = models.PositiveIntegerField(
-        help_text='Observed ranking position in search results (e.g. 1 for rank #1).'
+        null=True,
+        blank=True,
+        help_text='Observed ranking position in search results (e.g. 1 for rank #1), or null if not found in top 100.'
+    )
+    result_status = models.CharField(
+        max_length=30,
+        choices=RankingResultStatus.choices,
+        default=RankingResultStatus.FOUND,
+        db_index=True,
+        help_text='Status of the ranking observation (found, not_found, error).'
     )
     ranking_url = models.URLField(
         max_length=500,
@@ -115,11 +134,22 @@ class KeywordRanking(models.Model):
         null=True,
         help_text='The exact landing page URL found ranking on the search engine.'
     )
+    title = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Page title found in SERP snippet.'
+    )
     search_engine = models.CharField(
         max_length=50,
         choices=SearchEngine.choices,
         default=SearchEngine.GOOGLE,
         help_text='Target search engine.'
+    )
+    search_domain = models.CharField(
+        max_length=100,
+        default='google.com.et',
+        help_text='Target search domain (e.g. "google.com.et").'
     )
     country = models.CharField(
         max_length=10,
@@ -139,6 +169,11 @@ class KeywordRanking(models.Model):
         default=Device.DESKTOP,
         help_text='Target device type.'
     )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Diagnostic error message if ranking check failed.'
+    )
     recorded_at = models.DateTimeField(
         help_text='Timestamp when the ranking observation occurred.'
     )
@@ -155,9 +190,98 @@ class KeywordRanking(models.Model):
                 name='unique_ranking_observation_per_time'
             )
         ]
+        indexes = [
+            models.Index(fields=['keyword', '-recorded_at'], name='seo_kw_rk_kw_rec_idx'),
+            models.Index(fields=['result_status', '-recorded_at'], name='seo_kw_rk_stat_rec_idx'),
+        ]
 
     def __str__(self):
-        return f"{self.keyword.keyword} - Pos #{self.position} ({self.recorded_at})"
+        pos_str = f"#{self.position}" if self.position is not None else "Not Found"
+        return f"{self.keyword.keyword} - Pos {pos_str} ({self.recorded_at})"
+
+
+# Model aliases adhering to SRS specification
+TrackedKeyword = Keyword
+RankingSnapshot = KeywordRanking
+
+
+# =============================================================================
+# RANK TRACKER MVP — RankCheckJob
+# =============================================================================
+
+class RankCheckJobStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    RUNNING = 'running', 'Running'
+    COMPLETED = 'completed', 'Completed'
+    FAILED = 'failed', 'Failed'
+    PARTIAL_FAILURE = 'partial_failure', 'Partial Failure'
+
+
+class RankCheckJob(models.Model):
+    """
+    RankCheckJob model representing an asynchronous rank check batch or single-keyword check.
+    Relationship: Project 1 ─────── * RankCheckJob
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='rank_check_jobs',
+        help_text='The project website this ranking check job belongs to.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RankCheckJobStatus.choices,
+        default=RankCheckJobStatus.PENDING,
+        db_index=True,
+        help_text='Current execution status of the rank check job.'
+    )
+    total_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Total number of keywords to check in this job.'
+    )
+    completed_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of keywords successfully checked.'
+    )
+    failed_keywords = models.PositiveIntegerField(
+        default=0,
+        help_text='Number of keyword checks that failed.'
+    )
+    trigger = models.CharField(
+        max_length=50,
+        default='manual',
+        help_text='Origin trigger: "manual", "single_keyword", "scheduled_daily".'
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the ranking check began.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when the ranking check completed.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error details if the job failed.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_rank_check_jobs'
+        verbose_name = 'rank check job'
+        verbose_name_plural = 'rank check jobs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', '-created_at'], name='seo_rk_job_proj_idx'),
+            models.Index(fields=['status'], name='seo_rk_job_stat_idx'),
+        ]
+
+    def __str__(self):
+        return f"RankCheckJob #{self.id} [{self.status.upper()}] - {self.project.name} ({self.completed_keywords}/{self.total_keywords})"
 
 
 class AuditStatus(models.TextChoices):
@@ -295,6 +419,10 @@ class AuditIssue(models.Model):
     def __str__(self):
         return f"[{self.severity.upper()}] {self.title} (Audit #{self.audit_id})"
 
+
+# =============================================================================
+# TECHNICAL SEO CRAWLER — CrawlJob
+# =============================================================================
 
 class CrawlJobStatus(models.TextChoices):
     PENDING = 'pending', 'Pending'

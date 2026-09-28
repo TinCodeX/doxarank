@@ -44,7 +44,7 @@ export const RankingFormModal: React.FC<RankingFormModalProps> = ({
 
   useEffect(() => {
     if (rankingToEdit) {
-      setPosition(rankingToEdit.position);
+      setPosition(rankingToEdit.position ?? '');
       setRankingUrl(rankingToEdit.ranking_url || '');
       setSearchEngine(rankingToEdit.search_engine);
       setCountry(rankingToEdit.country);

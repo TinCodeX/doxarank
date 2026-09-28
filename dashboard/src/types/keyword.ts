@@ -10,6 +10,7 @@ export interface Keyword {
   project_website_url: string;
   keyword: string;
   search_engine: SearchEngine;
+  search_domain?: string;
   country: CountryCode;
   language: LanguageCode;
   device: DeviceType;
@@ -22,6 +23,7 @@ export interface CreateKeywordPayload {
   project: number;
   keyword: string;
   search_engine?: SearchEngine;
+  search_domain?: string;
   country?: CountryCode;
   language?: LanguageCode;
   device?: DeviceType;
@@ -31,6 +33,7 @@ export interface CreateKeywordPayload {
 export interface UpdateKeywordPayload {
   keyword?: string;
   search_engine?: SearchEngine;
+  search_domain?: string;
   country?: CountryCode;
   language?: LanguageCode;
   device?: DeviceType;

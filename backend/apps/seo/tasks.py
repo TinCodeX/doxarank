@@ -16,12 +16,14 @@ from apps.seo.models import (
     SEOAction, ActionStatus,
     SiteAudit, AuditStatus, AuditIssue,
     CrawlJob, CrawlJobStatus, CrawlPage,
+    Keyword, KeywordRanking, RankingResultStatus, RankCheckJob, RankCheckJobStatus,
 )
 from apps.seo.services.agent_orchestrator import AgentOrchestrator
 from apps.seo.services.action_executors import get_action_executor
 from apps.seo.services.live_site_crawler import LiveSiteCrawlerService
 from apps.seo.services.technical_crawler import TechnicalCrawlerService
 from apps.seo.services.seo_audit_engine import SEOAuditEngine
+from apps.seo.services.rank_tracker import RankTrackerService
 
 logger = logging.getLogger(__name__)
 
@@ -999,6 +1001,8 @@ def compact_platform_data_task(older_than_days: int = 30) -> Dict[str, int]:
 
 
 # =============================================================================
+# TECHNICAL SEO CRAWLER TASK
+# =============================================================================
 
 @shared_task(
     bind=True,
@@ -1163,3 +1167,168 @@ def _mark_crawl_job_failed(crawl_job: CrawlJob, error_message: str) -> None:
 
 # =============================================================================
 # RANK TRACKER MVP — Celery Tasks
+# =============================================================================
+
+def _mark_rank_check_job_failed(job: RankCheckJob, error_message: str) -> None:
+    """Helper to safely transition a RankCheckJob to terminal FAILED state."""
+    try:
+        job.refresh_from_db()
+        job.status = RankCheckJobStatus.FAILED
+        job.error_message = error_message[:1000]
+        job.completed_at = timezone.now()
+        job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+    except Exception as e:
+        logger.error(f"Failed to transition RankCheckJob #{job.id} to FAILED: {e}")
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.check_keyword_ranking'
+)
+def check_keyword_ranking(self, keyword_id: int) -> Optional[int]:
+    """
+    Asynchronously perform a ranking check for a single keyword against google.com.et.
+    Enforces FeatureCode.RANK_TRACKING subscription entitlement.
+    """
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+
+    try:
+        keyword = Keyword.objects.select_related('project', 'project__owner').get(id=keyword_id)
+    except Keyword.DoesNotExist:
+        logger.error(f"[RankTrackerTask] Keyword #{keyword_id} does not exist.")
+        return None
+
+    # Check subscription entitlement
+    if not PlanEntitlementService.can_use_feature(keyword.project.owner, FeatureCode.RANK_TRACKING):
+        logger.warning(
+            f"[RankTrackerTask] User {keyword.project.owner.email} does not have RANK_TRACKING entitlement. Skipping."
+        )
+        return None
+
+    service = RankTrackerService()
+    snapshot = service.check_keyword(keyword)
+    logger.info(
+        f"[RankTrackerTask] Keyword #{keyword.id} ('{keyword.keyword}') checked: "
+        f"Pos #{snapshot.position} ({snapshot.result_status})."
+    )
+    return snapshot.id
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.run_project_rank_check'
+)
+def run_project_rank_check(self, project_id: int, job_id: Optional[int] = None) -> Optional[int]:
+    """
+    Asynchronously run rank checks for all active keywords of a project.
+    Updates RankCheckJob progress and transitions cleanly on completion or failure.
+    """
+    from apps.projects.models import Project
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+
+    try:
+        project = Project.objects.select_related('owner').get(id=project_id)
+    except Project.DoesNotExist:
+        logger.error(f"[RankTrackerTask] Project #{project_id} does not exist.")
+        return None
+
+    job = None
+    if job_id:
+        try:
+            job = RankCheckJob.objects.select_for_update().get(id=job_id)
+        except RankCheckJob.DoesNotExist:
+            logger.warning(f"[RankTrackerTask] RankCheckJob #{job_id} not found.")
+
+    # Entitlement verification
+    if not PlanEntitlementService.can_use_feature(project.owner, FeatureCode.RANK_TRACKING):
+        msg = f"User {project.owner.email} is not entitled to FeatureCode.RANK_TRACKING."
+        logger.warning(f"[RankTrackerTask] {msg}")
+        if job:
+            _mark_rank_check_job_failed(job, msg)
+        return None
+
+    try:
+        service = RankTrackerService()
+        snapshots = service.check_project_keywords(project=project, job=job)
+        logger.info(
+            f"[RankTrackerTask] Completed project #{project.id} rank check: {len(snapshots)} keywords processed."
+        )
+        return job.id if job else len(snapshots)
+    except Exception as exc:
+        logger.exception(f"[RankTrackerTask] Fatal error in project #{project_id} rank check: {exc}")
+        if job:
+            _mark_rank_check_job_failed(job, f"Rank check failed: {exc}")
+        return None
+
+
+@shared_task(
+    name='apps.seo.tasks.run_daily_rank_checks'
+)
+def run_daily_rank_checks() -> Dict[str, Any]:
+    """
+    Periodic task (Celery Beat) executing daily google.com.et SERP rank checks for all active keywords.
+    - Scans active keywords for Starter and Agency users (Free users skipped).
+    - Idempotency: skips keywords that already have a ranking snapshot recorded today.
+    - Error isolation: failures on one keyword do not abort remaining keywords.
+    """
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+
+    today = timezone.localdate()
+    active_keywords = (
+        Keyword.objects.filter(is_active=True)
+        .select_related('project', 'project__owner')
+        .order_by('project_id', 'id')
+    )
+
+    total_count = active_keywords.count()
+    checked_count = 0
+    skipped_count = 0
+    failed_count = 0
+
+    service = RankTrackerService()
+
+    logger.info(f"[DailyRankTracker] Starting daily rank checks for {total_count} active keywords.")
+
+    for kw in active_keywords:
+        # Check plan entitlement
+        if not PlanEntitlementService.can_use_feature(kw.project.owner, FeatureCode.RANK_TRACKING):
+            skipped_count += 1
+            continue
+
+        # Idempotency check: skip if already checked today
+        already_checked_today = KeywordRanking.objects.filter(
+            keyword=kw,
+            recorded_at__date=today
+        ).exists()
+
+        if already_checked_today:
+            skipped_count += 1
+            continue
+
+        try:
+            snapshot = service.check_keyword(kw)
+            if snapshot.result_status == RankingResultStatus.ERROR:
+                failed_count += 1
+            else:
+                checked_count += 1
+        except Exception as e:
+            logger.error(f"[DailyRankTracker] Keyword #{kw.id} failed: {e}")
+            failed_count += 1
+
+    summary = {
+        'date': str(today),
+        'total': total_count,
+        'checked': checked_count,
+        'skipped': skipped_count,
+        'failed': failed_count,
+    }
+    logger.info(f"[DailyRankTracker] Daily check completed: {summary}")
+    return summary
+
