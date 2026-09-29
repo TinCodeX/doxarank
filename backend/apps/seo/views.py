@@ -1,7 +1,10 @@
+import logging
 from django.db import transaction
 from django.db.models import Sum, Avg, Count, F
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 from rest_framework import viewsets, permissions, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
@@ -28,6 +31,7 @@ from .models import (
     RankCheckJob, RankCheckJobStatus,
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
     Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
+    SEOReport, ReportStatus,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
@@ -54,6 +58,7 @@ from .serializers import (
     StrategicObjectiveSerializer, StrategicInitiativeSerializer,
     LongTermSEOStrategySerializer, StrategyReviewRecordSerializer,
     CrawlJobSerializer, CrawlPageSerializer, LaunchCrawlRequestSerializer,
+    SEOReportSerializer, GenerateSEOReportInputSerializer,
 )
 from .services.search_console import GoogleSearchConsoleService
 from .services.google_oauth import (
@@ -3983,6 +3988,135 @@ class RecommendationViewSet(viewsets.ModelViewSet):
         rec.resolved_at = timezone.now()
         rec.save(update_fields=['status', 'resolved_at', 'updated_at'])
         return Response(RecommendationSerializer(rec).data, status=status.HTTP_200_OK)
+
+
+# =============================================================================
+# WHITE-LABEL REPORT VIEWSET (Original SRS: Agency White-Label Reports)
+# =============================================================================
+
+class SEOReportViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing, generating, inspecting, and downloading White-Label SEO Reports.
+    Strictly gates access to Agency plan subscribers (FeatureCode.WHITE_LABEL_REPORTS).
+    Enforces multi-tenant isolation via project ownership (project.owner == request.user).
+    """
+    serializer_class = SEOReportSerializer
+
+    def get_permissions(self):
+        from apps.subscriptions.permissions import CanAccessWhiteLabelReports
+        return [permissions.IsAuthenticated(), CanAccessWhiteLabelReports()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return SEOReport.objects.none()
+        qs = SEOReport.objects.filter(project__owner=user).select_related('project')
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except (ValueError, TypeError):
+                pass
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        Trigger asynchronous or synchronous generation of a white-label SEO report.
+        POST /api/seo/reports/generate/
+        Body: { "project_id": <id>, "client_name": "...", "title": "..." }
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.seo.services.reports import SEOReportService
+        from apps.seo.tasks import generate_seo_report_task
+        from django.conf import settings
+
+        serializer = GenerateSEOReportInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        project_id = serializer.validated_data['project_id']
+        client_name = serializer.validated_data.get('client_name', '')
+        title = serializer.validated_data.get('title', '')
+
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response(
+                {'detail': f"Project #{project_id} not found or you do not have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Plan entitlement check (raises FeatureNotEntitledException if not Agency)
+        PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.WHITE_LABEL_REPORTS)
+
+        # Create report record
+        report = SEOReportService.create_report(
+            project=project,
+            user=request.user,
+            client_name=client_name,
+            title=title
+        )
+
+        run_async = request.data.get('async', True)
+        if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False) or not run_async:
+            try:
+                SEOReportService.execute_report_generation(report.id)
+                report.refresh_from_db()
+            except Exception as exc:
+                logger.error(f"[ReportViewSet] Report #{report.id} generation failed: {exc}")
+                report.refresh_from_db()
+        else:
+            task = generate_seo_report_task.delay(report.id)
+            report.celery_task_id = str(task.id)
+            report.save(update_fields=['celery_task_id'])
+
+        return Response(SEOReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request, pk=None):
+        """
+        Download the completed white-label PDF report.
+        Enforces tenant authorization and prevents path traversal.
+        GET /api/seo/reports/<id>/download/
+        """
+        import os
+        from django.utils.text import slugify
+        from django.conf import settings
+
+        report = self.get_object()
+
+        if report.status != ReportStatus.COMPLETED or not report.file_path:
+            return Response(
+                {'detail': f"Report #{report.id} is {report.status}. Download unavailable until COMPLETED."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        full_path = os.path.abspath(os.path.join(settings.MEDIA_ROOT, report.file_path))
+        media_root_abs = os.path.abspath(str(settings.MEDIA_ROOT))
+
+        # Path traversal guard: verify file is strictly inside MEDIA_ROOT
+        try:
+            common = os.path.commonpath([media_root_abs, full_path])
+        except ValueError:
+            common = ""
+
+        if common != media_root_abs:
+            logger.warning(f"[Security] Potential path traversal attempt on report #{report.id}: {report.file_path}")
+            return Response({'detail': "Invalid file path."}, status=status.HTTP_403_FORBIDDEN)
+
+        if not os.path.exists(full_path):
+            logger.error(f"[ReportDownload] File not found on disk: {full_path}")
+            return Response({'detail': "Report file not found on disk."}, status=status.HTTP_404_NOT_FOUND)
+
+        safe_slug = slugify(report.project.name)[:30] or "project"
+        safe_filename = f"seo_report_{safe_slug}_{report.id}.pdf"
+
+        return FileResponse(
+            open(full_path, 'rb'),
+            content_type='application/pdf',
+            as_attachment=True,
+            filename=safe_filename
+        )
 
 
 

@@ -29,6 +29,7 @@ from .views import (
     CrawlJobViewSet, CrawlPageViewSet,
     CompetitorViewSet, CompetitorSnapshotViewSet, CompetitorSnapshotJobViewSet,
     RecommendationViewSet,
+    SEOReportViewSet,
 )
 
 app_name = 'seo'
@@ -62,6 +63,7 @@ router.register('competitors', CompetitorViewSet, basename='competitor')
 router.register('competitor-snapshots', CompetitorSnapshotViewSet, basename='competitor-snapshot')
 router.register('competitor-snapshot-jobs', CompetitorSnapshotJobViewSet, basename='competitor-snapshot-job')
 router.register('recommendations', RecommendationViewSet, basename='project-recommendation')
+router.register('reports', SEOReportViewSet, basename='seo-report')
 
 
 

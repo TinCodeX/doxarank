@@ -29,6 +29,7 @@ import { SEOToolsPanel } from '../components/SEOToolsPanel';
 import { TechnicalCrawlerPanel } from '../components/TechnicalCrawlerPanel';
 import { CompetitorSnapshotsPanel } from '../components/CompetitorSnapshotsPanel';
 import { SEORecommendationsPanel } from '../components/SEORecommendationsPanel';
+import { WhiteLabelReportsPanel } from '../components/WhiteLabelReportsPanel';
 import type { SearchConsoleConnection } from '../types/searchConsole';
 
 import { getUserSubscription } from '../api/subscriptions';
@@ -1060,6 +1061,17 @@ export const Dashboard: React.FC = () => {
         {selectedProject && (
           <SEORecommendationsPanel
             project={selectedProject}
+          />
+        )}
+
+        {/* SECTION 3.8: WHITE-LABEL PDF REPORTS (Agency Plan) */}
+        {selectedProject && (
+          <WhiteLabelReportsPanel
+            project={selectedProject}
+            hasReportsEntitlement={
+              !!(subscriptionSummary?.plan?.features ?? []).includes('WHITE_LABEL_REPORTS')
+            }
+            onUpgrade={() => setIsSubscriptionModalOpen(true)}
           />
         )}
 

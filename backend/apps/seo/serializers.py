@@ -1,4 +1,5 @@
 import re
+from typing import Optional, List, Dict, Any
 from django.utils import timezone
 from rest_framework import serializers
 from .models import (
@@ -23,6 +24,7 @@ from .models import (
     RankingResultStatus, RankCheckJob, RankCheckJobStatus,
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
     Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
+    SEOReport, ReportStatus,
 )
 from apps.projects.models import Project
 
@@ -2489,6 +2491,69 @@ class GenerateRecommendationsSerializer(serializers.Serializer):
     project_id = serializers.IntegerField(
         required=True,
         help_text='ID of the project to generate recommendations for.'
+    )
+
+
+# =============================================================================
+# WHITE-LABEL REPORT SERIALIZERS (Original SRS: Agency White-Label Reports)
+# =============================================================================
+
+class SEOReportSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SEOReport model.
+    Never exposes internal filesystem paths (file_path).
+    Exposes safe download URL and project metadata.
+    """
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SEOReport
+        fields = (
+            'id',
+            'project',
+            'project_name',
+            'project_website_url',
+            'title',
+            'client_name',
+            'status',
+            'file_size_bytes',
+            'download_url',
+            'summary_data',
+            'error_message',
+            'created_at',
+            'completed_at',
+        )
+        read_only_fields = fields
+
+    def get_download_url(self, obj: SEOReport) -> Optional[str]:
+        if obj.status == ReportStatus.COMPLETED and obj.file_size_bytes > 0:
+            return f"/api/seo/reports/{obj.id}/download/"
+        return None
+
+
+class GenerateSEOReportInputSerializer(serializers.Serializer):
+    """
+    Input serializer for requesting white-label report generation.
+    """
+    project_id = serializers.IntegerField(
+        required=True,
+        help_text='ID of the project to generate an executive SEO report for.'
+    )
+    client_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        default='',
+        help_text='Optional client or company name for white-label branding.'
+    )
+    title = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        default='SEO Performance & Technical Audit Report',
+        help_text='Report title heading.'
     )
 
 

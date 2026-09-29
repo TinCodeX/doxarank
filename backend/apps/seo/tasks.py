@@ -1517,3 +1517,47 @@ def generate_project_recommendations_task(self, project_id: int) -> Dict[str, An
         return {'status': 'failed', 'error': str(exc), 'project_id': project_id}
 
 
+# =============================================================================
+# WHITE-LABEL REPORT ASYNC TASK (Original SRS: Agency White-Label Reports)
+# =============================================================================
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=10,
+    name='apps.seo.tasks.generate_seo_report_task'
+)
+def generate_seo_report_task(self, report_id: int) -> Optional[int]:
+    """
+    Celery background worker task for generating an executive White-Label PDF report.
+    Loads the SEOReport record, verifies multi-tenant integrity, executes PDF compilation,
+    and updates report status to COMPLETED or FAILED safely.
+    """
+    from apps.seo.models import SEOReport
+    from apps.seo.services.reports import SEOReportService
+
+    try:
+        report = SEOReport.objects.select_related('project', 'project__owner').get(id=report_id)
+    except SEOReport.DoesNotExist:
+        logger.error(f"[ReportTask] SEOReport #{report_id} does not exist. Aborting task.")
+        return None
+
+    # Update celery task id if available
+    task_id = getattr(getattr(self, 'request', None), 'id', None)
+    if task_id and not report.celery_task_id:
+        report.celery_task_id = task_id
+        report.save(update_fields=['celery_task_id'])
+
+    try:
+        SEOReportService.execute_report_generation(report_id)
+        logger.info(f"[ReportTask] Successfully completed generation for SEOReport #{report_id}.")
+        return report.id
+    except Exception as exc:
+        logger.error(f"[ReportTask] Error generating SEOReport #{report_id}: {exc}", exc_info=True)
+        retries = getattr(getattr(self, 'request', None), 'retries', 0)
+        max_retries = getattr(self, 'max_retries', 2)
+        if retries < max_retries and hasattr(self, 'retry'):
+            raise self.retry(exc=exc, countdown=10 * (retries + 1))
+        return None
+
+

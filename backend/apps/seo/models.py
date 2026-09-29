@@ -4568,3 +4568,101 @@ class Recommendation(models.Model):
 ProjectRecommendation = Recommendation
 
 
+class ReportStatus(models.TextChoices):
+    PENDING = 'PENDING', 'Pending'
+    RUNNING = 'RUNNING', 'Running'
+    COMPLETED = 'COMPLETED', 'Completed'
+    FAILED = 'FAILED', 'Failed'
+
+
+class SEOReport(models.Model):
+    """
+    SEOReport model representing an executive White-Label PDF report for a project.
+    Gated strictly to Agency plan users (FeatureCode.WHITE_LABEL_REPORTS).
+    White-label guarantee: contains NO DoxaRank branding, logos, or promotional text.
+    Relationship: Project 1 ─────── * SEOReport
+    Ownership follows: report.project -> project.owner
+    """
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='reports',
+        help_text='The project/website this SEO report was generated for.'
+    )
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='generated_seo_reports',
+        help_text='The user who requested/generated this report.'
+    )
+    title = models.CharField(
+        max_length=255,
+        default='SEO Performance & Technical Audit Report',
+        help_text='Report title heading (e.g. "Monthly Executive SEO Report").'
+    )
+    client_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Optional client or company name for white-label branding.'
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ReportStatus.choices,
+        default=ReportStatus.PENDING,
+        db_index=True,
+        help_text='Execution status of the PDF generation.'
+    )
+    file_path = models.CharField(
+        max_length=512,
+        blank=True,
+        default='',
+        help_text='Internal relative path to the generated PDF artifact (never exposed to API).'
+    )
+    file_size_bytes = models.PositiveIntegerField(
+        default=0,
+        help_text='Size of the generated PDF in bytes.'
+    )
+    celery_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Celery task ID tracking the background PDF generation job.'
+    )
+    summary_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Normalized snapshot summary of the report metrics at time of generation.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error details if the report generation failed.'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text='Timestamp when the report generation was requested.'
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when PDF generation finished successfully.'
+    )
+
+    class Meta:
+        db_table = 'seo_reports'
+        verbose_name = 'SEO report'
+        verbose_name_plural = 'SEO reports'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['project', '-created_at'], name='seo_rep_proj_created_idx'),
+            models.Index(fields=['status'], name='seo_rep_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"SEOReport #{self.id} - {self.project.name} [{self.status}]"
+
+
