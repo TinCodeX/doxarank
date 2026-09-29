@@ -1561,3 +1561,89 @@ def generate_seo_report_task(self, report_id: int) -> Optional[int]:
         return None
 
 
+# =============================================================================
+# KEYWORD INTELLIGENCE ASYNC TASKS (Original SRS: Search Volume & CPC)
+# =============================================================================
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=5,
+    name='apps.seo.tasks.refresh_keyword_intelligence_task'
+)
+def refresh_keyword_intelligence_task(self, keyword_id: int, force: bool = False) -> Optional[int]:
+    """
+    Celery background worker task for refreshing keyword intelligence metrics (volume, CPC, competition).
+    Enforces FeatureCode.RANK_TRACKING subscription entitlement and project owner isolation.
+    """
+    from apps.seo.models import Keyword
+    from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+
+    try:
+        keyword = Keyword.objects.select_related('project', 'project__owner').get(id=keyword_id)
+    except Keyword.DoesNotExist:
+        logger.error(f"[KeywordIntelTask] Keyword #{keyword_id} does not exist. Aborting.")
+        return None
+
+    # Check subscription entitlement
+    if not PlanEntitlementService.can_use_feature(keyword.project.owner, FeatureCode.RANK_TRACKING):
+        logger.warning(
+            f"[KeywordIntelTask] User {keyword.project.owner.email} lacks RANK_TRACKING entitlement. Skipping."
+        )
+        return None
+
+    try:
+        intel = KeywordIntelligenceService.refresh_keyword_intelligence(keyword.id, force=force)
+        logger.info(f"[KeywordIntelTask] Successfully refreshed intelligence for Keyword #{keyword.id} ('{keyword.keyword}').")
+        return intel.id
+    except Exception as exc:
+        logger.error(f"[KeywordIntelTask] Error refreshing intelligence for Keyword #{keyword.id}: {exc}", exc_info=True)
+        retries = getattr(getattr(self, 'request', None), 'retries', 0)
+        max_retries = getattr(self, 'max_retries', 2)
+        if retries < max_retries and hasattr(self, 'retry'):
+            raise self.retry(exc=exc, countdown=5 * (retries + 1))
+        return None
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=10,
+    name='apps.seo.tasks.bulk_refresh_project_keywords_intelligence_task'
+)
+def bulk_refresh_project_keywords_intelligence_task(self, project_id: int, force: bool = False) -> Dict[str, Any]:
+    """
+    Celery background task for refreshing all active keywords for a given project.
+    """
+    from apps.projects.models import Project
+    from apps.seo.models import Keyword
+    from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+    from apps.subscriptions.services import PlanEntitlementService
+    from apps.subscriptions.models import FeatureCode
+
+    try:
+        project = Project.objects.select_related('owner').get(id=project_id)
+    except Project.DoesNotExist:
+        logger.error(f"[KeywordIntelTask] Project #{project_id} does not exist. Aborting.")
+        return {'status': 'failed', 'error': 'Project does not exist'}
+
+    if not PlanEntitlementService.can_use_feature(project.owner, FeatureCode.RANK_TRACKING):
+        logger.warning(f"[KeywordIntelTask] User {project.owner.email} lacks RANK_TRACKING entitlement. Skipping.")
+        return {'status': 'failed', 'error': 'Feature not entitled'}
+
+    keywords = Keyword.objects.filter(project=project, is_active=True).values_list('id', flat=True)
+    count = 0
+    for kw_id in keywords:
+        try:
+            KeywordIntelligenceService.refresh_keyword_intelligence(kw_id, force=force)
+            count += 1
+        except Exception as e:
+            logger.error(f"[KeywordIntelTask] Error in bulk refresh for kw #{kw_id}: {e}")
+
+    logger.info(f"[KeywordIntelTask] Bulk refreshed {count}/{len(keywords)} keywords for Project #{project_id}.")
+    return {'status': 'completed', 'project_id': project_id, 'refreshed_count': count, 'total_keywords': len(keywords)}
+
+
+

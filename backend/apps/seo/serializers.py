@@ -25,10 +25,74 @@ from .models import (
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
     Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
     SEOReport, ReportStatus,
+    KeywordIntelligence, KeywordIntelligenceSnapshot,
+    IntelligenceStatus, CompetitionLevel, SearchIntent,
 )
 from apps.projects.models import Project
 
 
+class KeywordIntelligenceSnapshotSerializer(serializers.ModelSerializer):
+    """
+    Serializer for historical keyword intelligence snapshot records.
+    """
+    class Meta:
+        model = KeywordIntelligenceSnapshot
+        fields = (
+            'id',
+            'keyword',
+            'search_volume',
+            'cpc',
+            'currency',
+            'competition',
+            'competition_index',
+            'difficulty',
+            'intent',
+            'source',
+            'recorded_at',
+        )
+        read_only_fields = fields
+
+
+class KeywordIntelligenceSerializer(serializers.ModelSerializer):
+    """
+    Serializer for current cached keyword intelligence metrics.
+    """
+    keyword_name = serializers.CharField(source='keyword.keyword', read_only=True)
+    is_fresh = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = KeywordIntelligence
+        fields = (
+            'id',
+            'keyword',
+            'keyword_name',
+            'search_volume',
+            'cpc',
+            'currency',
+            'competition',
+            'competition_index',
+            'difficulty',
+            'intent',
+            'source',
+            'status',
+            'error_message',
+            'last_refreshed_at',
+            'is_fresh',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = (
+            'id',
+            'keyword',
+            'keyword_name',
+            'is_fresh',
+            'source',
+            'status',
+            'error_message',
+            'last_refreshed_at',
+            'created_at',
+            'updated_at',
+        )
 
 
 class KeywordSerializer(serializers.ModelSerializer):
@@ -38,6 +102,7 @@ class KeywordSerializer(serializers.ModelSerializer):
     """
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_website_url = serializers.CharField(source='project.website_url', read_only=True)
+    intelligence = KeywordIntelligenceSerializer(read_only=True)
 
     class Meta:
         model = Keyword
@@ -53,10 +118,12 @@ class KeywordSerializer(serializers.ModelSerializer):
             'language',
             'device',
             'is_active',
+            'intelligence',
             'created_at',
             'updated_at'
         )
-        read_only_fields = ('id', 'project_name', 'project_website_url', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'project_name', 'project_website_url', 'intelligence', 'created_at', 'updated_at')
+
 
     def validate_keyword(self, value):
         trimmed = value.strip()

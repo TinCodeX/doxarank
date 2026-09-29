@@ -32,9 +32,11 @@ from .models import (
     Competitor, CompetitorSnapshot, CompetitorSnapshotJob, CompetitorSnapshotJobStatus,
     Recommendation, RecommendationState, RecommendationSeverity, RecommendationCategory, RecommendationSource,
     SEOReport, ReportStatus,
+    KeywordIntelligence, KeywordIntelligenceSnapshot, IntelligenceStatus,
 )
 from .serializers import (
     KeywordSerializer, KeywordRankingSerializer,
+    KeywordIntelligenceSerializer, KeywordIntelligenceSnapshotSerializer,
     RankCheckJobSerializer, LaunchRankCheckSerializer,
     CompetitorSerializer, CompetitorSnapshotSerializer,
     CompetitorSnapshotJobSerializer, LaunchCompetitorSnapshotSerializer,
@@ -147,6 +149,46 @@ class KeywordViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK
         )
+
+    @action(detail=True, methods=['get'], url_path='intelligence')
+    def get_intelligence(self, request, pk=None):
+        """
+        Retrieve cached or initialized keyword intelligence (volume, CPC, competition, intent) for this keyword.
+        GET /api/seo/keywords/<id>/intelligence/
+        """
+        keyword = self.get_object()
+        from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+        intel = KeywordIntelligenceService.get_or_create_intelligence(keyword)
+        serializer = KeywordIntelligenceSerializer(intel)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='intelligence/refresh')
+    def refresh_intelligence(self, request, pk=None):
+        """
+        Request fresh keyword intelligence from the provider layer.
+        POST /api/seo/keywords/<id>/intelligence/refresh/
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+
+        keyword = self.get_object()
+
+        # Enforce subscription entitlement
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.RANK_TRACKING)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your current plan does not include Keyword Intelligence & Rank Tracking. Please upgrade to Starter or Agency.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        force = request.data.get('force', False)
+        intel = KeywordIntelligenceService.refresh_keyword_intelligence(keyword.id, force=bool(force))
+        serializer = KeywordIntelligenceSerializer(intel)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 class KeywordRankingViewSet(viewsets.ModelViewSet):
@@ -330,6 +372,107 @@ class KeywordRankingViewSet(viewsets.ModelViewSet):
             )
 
         serializer = RankCheckJobSerializer(job)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class KeywordIntelligenceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Keyword Intelligence metrics, refreshes, and history.
+    
+    Security & Ownership:
+    1. Requires authentication on all actions.
+    2. Queryset strictly filtered by `keyword__project__owner == request.user`.
+    3. Cross-user access returns 404 Not Found.
+    4. Supports `project_id`, `keyword_id`, `status` filtering.
+    """
+    serializer_class = KeywordIntelligenceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = KeywordIntelligence.objects.filter(
+            keyword__project__owner=self.request.user
+        ).select_related('keyword', 'keyword__project')
+
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            queryset = queryset.filter(keyword__project_id=project_id)
+
+        keyword_id = self.request.query_params.get('keyword_id')
+        if keyword_id:
+            queryset = queryset.filter(keyword_id=keyword_id)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param.upper())
+
+        return queryset
+
+    @action(detail=True, methods=['post'], url_path='refresh')
+    def refresh_single(self, request, pk=None):
+        """
+        Refresh metrics for this keyword intelligence record.
+        POST /api/seo/keyword-intelligence/<id>/refresh/
+        """
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+
+        intel = self.get_object()
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.RANK_TRACKING)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your current plan does not include Keyword Intelligence. Please upgrade to Starter or Agency.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        force = request.data.get('force', False)
+        updated_intel = KeywordIntelligenceService.refresh_keyword_intelligence(intel.keyword_id, force=bool(force))
+        return Response(KeywordIntelligenceSerializer(updated_intel).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='refresh')
+    def bulk_refresh(self, request):
+        """
+        Bulk refresh keyword intelligence for all active keywords in a project.
+        POST /api/seo/keyword-intelligence/refresh/
+        Body: { "project_id": 123, "force": false }
+        """
+        project_id = request.data.get('project_id')
+        if not project_id:
+            return Response({'error': 'project_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.projects.models import Project
+        try:
+            project = Project.objects.get(id=project_id, owner=request.user)
+        except Project.DoesNotExist:
+            return Response({'error': 'Project not found or not owned by authenticated user.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.subscriptions.services import PlanEntitlementService
+        from apps.subscriptions.models import FeatureCode
+        from apps.subscriptions.exceptions import FeatureNotEntitledException
+        try:
+            PlanEntitlementService.check_can_use_feature(request.user, FeatureCode.RANK_TRACKING)
+        except FeatureNotEntitledException:
+            return Response(
+                {'error': 'Your current plan does not include Keyword Intelligence bulk refresh.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from apps.seo.services.keyword_intelligence import KeywordIntelligenceService
+        force = request.data.get('force', False)
+        result = KeywordIntelligenceService.bulk_refresh_project_keywords(project.id, request.user, force=bool(force))
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='history')
+    def snapshot_history(self, request, pk=None):
+        """
+        Retrieve historical snapshots for this keyword intelligence record.
+        GET /api/seo/keyword-intelligence/<id>/history/
+        """
+        intel = self.get_object()
+        snapshots = KeywordIntelligenceSnapshot.objects.filter(keyword_id=intel.keyword_id).order_by('-recorded_at')[:50]
+        serializer = KeywordIntelligenceSnapshotSerializer(snapshots, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

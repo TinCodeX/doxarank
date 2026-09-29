@@ -146,4 +146,15 @@ __all__ = [
 ]
 
 from .recommendations import RecommendationEngine, calculate_recommendation_priority
+from .keyword_intelligence import (
+    KeywordIntelligenceService,
+    BaseKeywordIntelligenceProvider,
+    KeywordMetricsResult,
+    UnconfiguredProvider,
+    MockKeywordIntelligenceProvider,
+    DataForSEOProvider,
+    get_keyword_intelligence_provider,
+    classify_search_intent,
+)
+
 

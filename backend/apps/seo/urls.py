@@ -30,6 +30,7 @@ from .views import (
     CompetitorViewSet, CompetitorSnapshotViewSet, CompetitorSnapshotJobViewSet,
     RecommendationViewSet,
     SEOReportViewSet,
+    KeywordIntelligenceViewSet,
 )
 
 app_name = 'seo'
@@ -37,6 +38,7 @@ app_name = 'seo'
 router = DefaultRouter()
 router.register('keywords', KeywordViewSet, basename='keyword')
 router.register('rankings', KeywordRankingViewSet, basename='ranking')
+router.register('keyword-intelligence', KeywordIntelligenceViewSet, basename='keyword-intelligence')
 router.register('audits', SiteAuditViewSet, basename='siteaudit')
 router.register('issues', AuditIssueViewSet, basename='auditissue')
 router.register('search-console', SearchConsoleConnectionViewSet, basename='search-console')

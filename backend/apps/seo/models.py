@@ -16,6 +16,28 @@ class Country(models.TextChoices):
 class Language(models.TextChoices):
     EN = 'en', 'English'
     AM = 'am', 'Amharic'
+    OM = 'om', 'Oromo'
+
+
+class CompetitionLevel(models.TextChoices):
+    LOW = 'LOW', 'Low'
+    MEDIUM = 'MEDIUM', 'Medium'
+    HIGH = 'HIGH', 'High'
+
+
+class SearchIntent(models.TextChoices):
+    INFORMATIONAL = 'informational', 'Informational'
+    COMMERCIAL = 'commercial', 'Commercial'
+    TRANSACTIONAL = 'transactional', 'Transactional'
+    NAVIGATIONAL = 'navigational', 'Navigational'
+
+
+class IntelligenceStatus(models.TextChoices):
+    FRESH = 'FRESH', 'Fresh'
+    STALE = 'STALE', 'Stale'
+    REFRESHING = 'REFRESHING', 'Refreshing'
+    UNAVAILABLE = 'UNAVAILABLE', 'Unavailable'
+    ERROR = 'ERROR', 'Error'
 
 
 class Device(models.TextChoices):
@@ -4664,5 +4686,192 @@ class SEOReport(models.Model):
 
     def __str__(self):
         return f"SEOReport #{self.id} - {self.project.name} [{self.status}]"
+
+
+class KeywordIntelligence(models.Model):
+    """
+    Current cached search volume, CPC, competition, difficulty, and intent metrics
+    for a tracked keyword.
+    Relationship: Keyword 1 ─────── 1 KeywordIntelligence
+    """
+    keyword = models.OneToOneField(
+        Keyword,
+        on_delete=models.CASCADE,
+        related_name='intelligence',
+        help_text='The tracked keyword these metrics belong to.'
+    )
+    search_volume = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Estimated average monthly search volume in target country/language.'
+    )
+    cpc = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text='Estimated average Cost Per Click in target country/currency.'
+    )
+    currency = models.CharField(
+        max_length=10,
+        default='USD',
+        help_text='Currency symbol/code for CPC (e.g. USD, ETB).'
+    )
+    competition = models.CharField(
+        max_length=20,
+        choices=CompetitionLevel.choices,
+        null=True,
+        blank=True,
+        help_text='Categorical advertiser competition level (Low, Medium, High).'
+    )
+    competition_index = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Relative competition index score between 0.0 and 1.0.'
+    )
+    difficulty = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text='Organic SEO difficulty estimate between 0 and 100.'
+    )
+    intent = models.CharField(
+        max_length=30,
+        choices=SearchIntent.choices,
+        null=True,
+        blank=True,
+        help_text='Deterministic or provider-sourced search intent classification.'
+    )
+    source = models.CharField(
+        max_length=50,
+        default='unconfigured',
+        help_text='Provider or source mechanism (e.g. dataforseo, mock, internal, unconfigured).'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=IntelligenceStatus.choices,
+        default=IntelligenceStatus.UNAVAILABLE,
+        db_index=True,
+        help_text='Data freshness and availability status.'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Error message from the last provider call, if any.'
+    )
+    last_refreshed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the most recent successful or attempted intelligence refresh.'
+    )
+    raw_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Raw metadata, provider attributes, and breakdown numbers.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'seo_keyword_intelligence'
+        verbose_name = 'keyword intelligence'
+        verbose_name_plural = 'keyword intelligence'
+        indexes = [
+            models.Index(fields=['status', '-last_refreshed_at'], name='kw_intel_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"Intelligence for '{self.keyword.keyword}' [{self.status}]"
+
+    @property
+    def is_fresh(self) -> bool:
+        """Return True if intelligence was refreshed within configured cache TTL (default 7 days)."""
+        if self.status != IntelligenceStatus.FRESH or not self.last_refreshed_at:
+            return False
+        from django.conf import settings
+        cache_days = getattr(settings, 'KEYWORD_INTELLIGENCE_CACHE_DAYS', 7)
+        return (timezone.now() - self.last_refreshed_at).total_seconds() < (cache_days * 86400)
+
+
+class KeywordIntelligenceSnapshot(models.Model):
+    """
+    Historical point-in-time snapshot of keyword intelligence metrics.
+    Relationship: Keyword 1 ─────── * KeywordIntelligenceSnapshot
+    """
+    keyword = models.ForeignKey(
+        Keyword,
+        on_delete=models.CASCADE,
+        related_name='intelligence_snapshots',
+        help_text='The keyword this snapshot measurement belongs to.'
+    )
+    search_volume = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Estimated average monthly search volume at time of snapshot.'
+    )
+    cpc = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text='Estimated Cost Per Click at time of snapshot.'
+    )
+    currency = models.CharField(
+        max_length=10,
+        default='USD',
+        help_text='Currency symbol/code for CPC.'
+    )
+    competition = models.CharField(
+        max_length=20,
+        choices=CompetitionLevel.choices,
+        null=True,
+        blank=True,
+        help_text='Advertiser competition level.'
+    )
+    competition_index = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Relative competition index (0.0 - 1.0).'
+    )
+    difficulty = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text='Organic keyword difficulty score (0-100).'
+    )
+    intent = models.CharField(
+        max_length=30,
+        choices=SearchIntent.choices,
+        null=True,
+        blank=True,
+        help_text='Search intent.'
+    )
+    source = models.CharField(
+        max_length=50,
+        default='unconfigured',
+        help_text='Provider data source.'
+    )
+    recorded_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        help_text='Timestamp when the snapshot was recorded.'
+    )
+    raw_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Raw snapshot data.'
+    )
+
+    class Meta:
+        db_table = 'seo_keyword_intelligence_snapshots'
+        verbose_name = 'keyword intelligence snapshot'
+        verbose_name_plural = 'keyword intelligence snapshots'
+        ordering = ['-recorded_at']
+        indexes = [
+            models.Index(fields=['keyword', '-recorded_at'], name='kw_intel_snap_kw_rec_idx'),
+        ]
+
+    def __str__(self):
+        return f"Snapshot #{self.id} for '{self.keyword.keyword}' ({self.recorded_at.date()})"
+
 
 

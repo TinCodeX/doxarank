@@ -189,6 +189,7 @@ export const KeywordFormModal: React.FC<KeywordFormModalProps> = ({
               >
                 <option value="en">English (en)</option>
                 <option value="am">Amharic (am)</option>
+                <option value="om">Oromo (om)</option>
               </select>
             </div>
 

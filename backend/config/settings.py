@@ -312,3 +312,14 @@ DOXA_PAYMENTS_BASE_URL = config('DOXA_PAYMENTS_BASE_URL', default='')
 DOXA_PAYMENTS_API_KEY = config('DOXA_PAYMENTS_API_KEY', default='')
 DOXA_PAYMENTS_WEBHOOK_SECRET = config('DOXA_PAYMENTS_WEBHOOK_SECRET', default='')
 DOXA_PAYMENTS_ENVIRONMENT = config('DOXA_PAYMENTS_ENVIRONMENT', default='sandbox')
+
+# ==============================================================================
+# Keyword Intelligence Provider Configuration (Original SRS: Search Volume & CPC)
+# ==============================================================================
+KEYWORD_INTELLIGENCE_PROVIDER = config('KEYWORD_INTELLIGENCE_PROVIDER', default='unconfigured')
+KEYWORD_INTELLIGENCE_CACHE_DAYS = config('KEYWORD_INTELLIGENCE_CACHE_DAYS', default=7, cast=int)
+KEYWORD_INTELLIGENCE_REFRESH_COOLDOWN_SECONDS = config('KEYWORD_INTELLIGENCE_REFRESH_COOLDOWN_SECONDS', default=60, cast=int)
+DATAFORSEO_LOGIN = config('DATAFORSEO_LOGIN', default='')
+DATAFORSEO_PASSWORD = config('DATAFORSEO_PASSWORD', default='')
+DATAFORSEO_API_URL = config('DATAFORSEO_API_URL', default='https://api.dataforseo.com/v3')
+

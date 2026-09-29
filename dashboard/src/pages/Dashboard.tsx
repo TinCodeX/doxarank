@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, createProject, updateProject, deleteProject } from '../api/projects';
-import { getKeywords, createKeyword, updateKeyword, deleteKeyword } from '../api/keywords';
+import { getKeywords, createKeyword, updateKeyword, deleteKeyword, refreshKeywordIntelligence, bulkRefreshKeywordIntelligence } from '../api/keywords';
 import { getRankings, createRanking, updateRanking, deleteRanking, triggerRankCheck, getRankingSummary, getRankCheckJobs } from '../api/rankings';
 import type { Project, CreateProjectPayload } from '../types/project';
 import type { Keyword, CreateKeywordPayload, UpdateKeywordPayload } from '../types/keyword';
@@ -84,6 +84,11 @@ export const Dashboard: React.FC = () => {
   const [activeRankJob, setActiveRankJob] = useState<RankCheckJob | null>(null);
   const [isCheckingRankings, setIsCheckingRankings] = useState<boolean>(false);
   const [rankCheckNotice, setRankCheckNotice] = useState<string | null>(null);
+
+  // Keyword Intelligence state (Original SRS: Search Volume & CPC)
+  const [refreshingIntelId, setRefreshingIntelId] = useState<number | null>(null);
+  const [isBulkRefreshingIntel, setIsBulkRefreshingIntel] = useState<boolean>(false);
+  const [intelNotice, setIntelNotice] = useState<string | null>(null);
 
   // Content Brief state
   const [briefTargetRecId, setBriefTargetRecId] = useState<number | null>(null);
@@ -182,6 +187,43 @@ export const Dashboard: React.FC = () => {
       setRankCheckNotice(`Notice: ${msg}`);
     } finally {
       setIsCheckingRankings(false);
+    }
+  };
+
+  const handleRefreshKeywordIntelligence = async (kwId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRefreshingIntelId(kwId);
+    try {
+      const updatedIntel = await refreshKeywordIntelligence(kwId, true);
+      setKeywords(prev => prev.map(k => k.id === kwId ? { ...k, intelligence: updatedIntel } : k));
+      if (selectedKeyword && selectedKeyword.id === kwId) {
+        setSelectedKeyword(prev => prev ? { ...prev, intelligence: updatedIntel } : null);
+      }
+      setIntelNotice(`Intelligence refreshed for keyword #${kwId}.`);
+      setTimeout(() => setIntelNotice(null), 4000);
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.data?.detail || err?.message || 'Failed to refresh keyword intelligence.';
+      alert(msg);
+    } finally {
+      setRefreshingIntelId(null);
+    }
+  };
+
+  const handleBulkRefreshIntelligence = async () => {
+    if (!selectedProject) return;
+    setIsBulkRefreshingIntel(true);
+    try {
+      const res = await bulkRefreshKeywordIntelligence(selectedProject.id, true);
+      setIntelNotice(`Bulk intelligence refresh queued for ${res.queued_keywords_count ?? 'all'} keywords.`);
+      setTimeout(() => setIntelNotice(null), 5000);
+      setTimeout(() => {
+        if (selectedProject) fetchProjectKeywords(selectedProject.id);
+      }, 2000);
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.data?.detail || err?.message || 'Failed to execute bulk intelligence refresh.';
+      alert(msg);
+    } finally {
+      setIsBulkRefreshingIntel(false);
     }
   };
 
@@ -565,6 +607,19 @@ export const Dashboard: React.FC = () => {
                   {isCheckingRankings ? 'Checking...' : '⚡ Check All Rankings'}
                 </button>
                 <button
+                  id="bulk-refresh-intel-button"
+                  onClick={handleBulkRefreshIntelligence}
+                  disabled={isBulkRefreshingIntel || keywords.length === 0}
+                  style={{
+                    ...primaryAddBtnStyle,
+                    backgroundColor: isBulkRefreshingIntel ? '#9ca3af' : '#6366f1',
+                    cursor: isBulkRefreshingIntel || keywords.length === 0 ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Bulk refresh search volume and CPC intelligence for all keywords in this project"
+                >
+                  {isBulkRefreshingIntel ? 'Refreshing...' : '📊 Refresh All Intel'}
+                </button>
+                <button
                   id="add-keyword-button"
                   onClick={handleOpenCreateKeywordModal}
                   style={primaryAddBtnStyle}
@@ -578,6 +633,13 @@ export const Dashboard: React.FC = () => {
               <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{rankCheckNotice}</span>
                 <button onClick={() => setRankCheckNotice(null)} style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+              </div>
+            )}
+
+            {intelNotice && (
+              <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>💡 {intelNotice}</span>
+                <button onClick={() => setIntelNotice(null)} style={{ background: 'none', border: 'none', color: '#3730a3', cursor: 'pointer', fontWeight: 700 }}>✕</button>
               </div>
             )}
 
@@ -621,8 +683,9 @@ export const Dashboard: React.FC = () => {
                     <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
                       <th style={thStyle}>Keyword / Query</th>
                       <th style={thStyle}>Current</th>
-                      <th style={thStyle}>Previous</th>
                       <th style={thStyle}>Change</th>
+                      <th style={thStyle}>Search Vol</th>
+                      <th style={thStyle}>CPC</th>
                       <th style={thStyle}>Target (ET)</th>
                       <th style={thStyle}>Device</th>
                       <th style={thStyle}>Status</th>
@@ -634,9 +697,9 @@ export const Dashboard: React.FC = () => {
                       const isSelected = selectedKeyword?.id === kw.id;
                       const summary = rankingSummaries[kw.id];
                       const currPos = summary?.current_position;
-                      const prevPos = summary?.previous_position;
                       const change = summary?.change;
                       const changeStatus = summary?.change_status;
+                      const intel = kw.intelligence;
 
                       return (
                         <tr
@@ -683,12 +746,52 @@ export const Dashboard: React.FC = () => {
                             )}
                           </td>
                           <td style={tdStyle}>
-                            {prevPos !== undefined && prevPos !== null ? (
-                              <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 500 }}>
-                                #{prevPos}
+                            {change !== null && change !== undefined ? (
+                              change > 0 ? (
+                                <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '13px' }}>
+                                  ▲ +{change}
+                                </span>
+                              ) : change < 0 ? (
+                                <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '13px' }}>
+                                  ▼ {change}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#64748b', fontWeight: 500, fontSize: '13px' }}>
+                                  0
+                                </span>
+                              )
+                            ) : changeStatus === 'entered' ? (
+                              <span style={{ color: '#16a34a', fontSize: '12px', fontWeight: 600, backgroundColor: '#dcfce7', padding: '2px 6px', borderRadius: '4px' }}>
+                                ✨ In Top 100
+                              </span>
+                            ) : changeStatus === 'dropped' ? (
+                              <span style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600, backgroundColor: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                                🔻 Dropped
+                              </span>
+                            ) : changeStatus === 'new' ? (
+                              <span style={{ color: '#4f46e5', fontSize: '12px', fontWeight: 600, backgroundColor: '#e0e7ff', padding: '2px 6px', borderRadius: '4px' }}>
+                                ✦ New
                               </span>
                             ) : (
                               <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {intel?.search_volume !== null && intel?.search_volume !== undefined ? (
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                                {intel.search_volume.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '12px' }}>Not available</span>
+                            )}
+                          </td>
+                          <td style={tdStyle}>
+                            {intel?.cpc ? (
+                              <span style={{ fontWeight: 600, color: '#059669' }}>
+                                ${intel.cpc}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>
                             )}
                           </td>
                           <td style={tdStyle}>
@@ -756,6 +859,19 @@ export const Dashboard: React.FC = () => {
                                 title="Run ranking check against google.com.et"
                               >
                                 Check
+                              </button>
+                              <button
+                                id={`refresh-kw-intel-${kw.id}`}
+                                onClick={(e) => handleRefreshKeywordIntelligence(kw.id, e)}
+                                disabled={refreshingIntelId === kw.id}
+                                style={{
+                                  ...actionInlineBtnStyle,
+                                  color: '#6366f1',
+                                  fontWeight: 600,
+                                }}
+                                title="Refresh search volume, CPC, and competition metrics"
+                              >
+                                {refreshingIntelId === kw.id ? '...' : 'Intel'}
                               </button>
                               <button
                                 id={`select-kw-${kw.id}`}
@@ -843,6 +959,160 @@ export const Dashboard: React.FC = () => {
                   + Record Ranking
                 </button>
               </div>
+            </div>
+
+            {/* KEYWORD INTELLIGENCE & SERP ECONOMICS (Original DoxaRank SRS) */}
+            <div style={{
+              marginBottom: '24px',
+              padding: '20px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid #e2e8f0',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '18px' }}>💡</span>
+                  <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                    Keyword Intelligence &amp; Search Economics
+                  </h4>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    backgroundColor:
+                      selectedKeyword.intelligence?.status === 'FRESH' ? '#dcfce7' :
+                      selectedKeyword.intelligence?.status === 'REFRESHING' ? '#e0e7ff' :
+                      selectedKeyword.intelligence?.status === 'ERROR' ? '#fee2e2' : '#f1f5f9',
+                    color:
+                      selectedKeyword.intelligence?.status === 'FRESH' ? '#166534' :
+                      selectedKeyword.intelligence?.status === 'REFRESHING' ? '#3730a3' :
+                      selectedKeyword.intelligence?.status === 'ERROR' ? '#991b1b' : '#64748b'
+                  }}>
+                    ● {selectedKeyword.intelligence?.status || 'UNAVAILABLE'}
+                  </span>
+                  {selectedKeyword.intelligence?.source && (
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      Provider: <strong>{selectedKeyword.intelligence.source}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  id={`refresh-intel-card-btn-${selectedKeyword.id}`}
+                  onClick={(e) => handleRefreshKeywordIntelligence(selectedKeyword.id, e)}
+                  disabled={refreshingIntelId === selectedKeyword.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    backgroundColor: '#4f46e5',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: refreshingIntelId === selectedKeyword.id ? 'not-allowed' : 'pointer',
+                    opacity: refreshingIntelId === selectedKeyword.id ? 0.7 : 1,
+                  }}
+                >
+                  {refreshingIntelId === selectedKeyword.id ? '⏳ Refreshing...' : '🔄 Refresh Intelligence'}
+                </button>
+              </div>
+
+              {/* Intelligence Metrics 4-Col Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
+                {/* Search Volume */}
+                <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Search Volume</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
+                    {selectedKeyword.intelligence?.search_volume !== null && selectedKeyword.intelligence?.search_volume !== undefined
+                      ? selectedKeyword.intelligence.search_volume.toLocaleString()
+                      : <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>Not available</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Google Ethiopia (google.com.et)</div>
+                </div>
+
+                {/* CPC */}
+                <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Cost Per Click (CPC)</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
+                    {selectedKeyword.intelligence?.cpc
+                      ? `$${selectedKeyword.intelligence.cpc} ${selectedKeyword.intelligence.currency || 'USD'}`
+                      : <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>Not available</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Advertiser average bid</div>
+                </div>
+
+                {/* Competition */}
+                <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Competition</div>
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                    {selectedKeyword.intelligence?.competition ? (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        backgroundColor:
+                          selectedKeyword.intelligence.competition === 'LOW' ? '#dcfce7' :
+                          selectedKeyword.intelligence.competition === 'MEDIUM' ? '#fef3c7' : '#fee2e2',
+                        color:
+                          selectedKeyword.intelligence.competition === 'LOW' ? '#166534' :
+                          selectedKeyword.intelligence.competition === 'MEDIUM' ? '#92400e' : '#991b1b',
+                      }}>
+                        {selectedKeyword.intelligence.competition}
+                        {selectedKeyword.intelligence.competition_index !== null && selectedKeyword.intelligence.competition_index !== undefined
+                          ? ` (${selectedKeyword.intelligence.competition_index})` : ''}
+                      </span>
+                    ) : <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>Not available</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>PPC competition index</div>
+                </div>
+
+                {/* Intent */}
+                <div style={{ backgroundColor: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>Search Intent</div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#2563eb', textTransform: 'capitalize' }}>
+                    {selectedKeyword.intelligence?.intent ? (
+                      <span>
+                        {selectedKeyword.intelligence.intent === 'transactional' && '🛒 '}
+                        {selectedKeyword.intelligence.intent === 'commercial' && '🔍 '}
+                        {selectedKeyword.intelligence.intent === 'informational' && '📖 '}
+                        {selectedKeyword.intelligence.intent === 'navigational' && '🧭 '}
+                        {selectedKeyword.intelligence.intent}
+                      </span>
+                    ) : <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>Not classified</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Deterministic query intent</div>
+                </div>
+              </div>
+
+              {/* Metadata & Timestamp footer */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '12px', color: '#64748b', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  Language: <strong>{selectedKeyword.language === 'am' ? 'Amharic' : selectedKeyword.language === 'om' ? 'Oromo' : 'English'}</strong> · Country: <strong>Ethiopia</strong> · Engine: <strong>Google Ethiopia</strong>
+                </div>
+                <div>
+                  Last updated:{' '}
+                  <strong>
+                    {selectedKeyword.intelligence?.last_refreshed_at
+                      ? new Date(selectedKeyword.intelligence.last_refreshed_at).toLocaleString()
+                      : 'Never'}
+                  </strong>
+                  {selectedKeyword.intelligence?.is_fresh && (
+                    <span style={{ marginLeft: '6px', color: '#16a34a', fontWeight: 600 }}>✓ Cached (Fresh)</span>
+                  )}
+                </div>
+              </div>
+
+              {selectedKeyword.intelligence?.error_message && (
+                <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '12px' }}>
+                  ⚠️ {selectedKeyword.intelligence.error_message}
+                </div>
+              )}
             </div>
 
             {rankingError && (

@@ -52,3 +52,50 @@ export async function deleteKeyword(id: number): Promise<void> {
     method: 'DELETE',
   });
 }
+
+/**
+ * Fetch keyword intelligence metrics for a single keyword.
+ * (GET /api/seo/keywords/<id>/intelligence/)
+ */
+export async function getKeywordIntelligence(keywordId: number): Promise<import('../types/keyword').KeywordIntelligence> {
+  return apiFetch<import('../types/keyword').KeywordIntelligence>(`/api/seo/keywords/${keywordId}/intelligence/`);
+}
+
+/**
+ * Request fresh keyword intelligence for a single keyword.
+ * (POST /api/seo/keywords/<id>/intelligence/refresh/)
+ */
+export async function refreshKeywordIntelligence(
+  keywordId: number,
+  force: boolean = false
+): Promise<import('../types/keyword').KeywordIntelligence> {
+  return apiFetch<import('../types/keyword').KeywordIntelligence>(`/api/seo/keywords/${keywordId}/intelligence/refresh/`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  });
+}
+
+/**
+ * Bulk refresh keyword intelligence for all active keywords of a project.
+ * (POST /api/seo/keyword-intelligence/refresh/)
+ */
+export async function bulkRefreshKeywordIntelligence(
+  projectId: number,
+  force: boolean = false
+): Promise<{ status: string; total_keywords: number; queued_keywords_count: number }> {
+  return apiFetch('/api/seo/keyword-intelligence/refresh/', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, force }),
+  });
+}
+
+/**
+ * Fetch snapshot history for a keyword intelligence record.
+ * (GET /api/seo/keyword-intelligence/<id>/history/)
+ */
+export async function getKeywordIntelligenceHistory(
+  intelId: number
+): Promise<import('../types/keyword').KeywordIntelligenceSnapshot[]> {
+  return apiFetch<import('../types/keyword').KeywordIntelligenceSnapshot[]>(`/api/seo/keyword-intelligence/${intelId}/history/`);
+}
+
