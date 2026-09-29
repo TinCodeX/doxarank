@@ -1,0 +1,94 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const articles = [
+  {
+    title: 'How Google Ethiopia (google.com.et) Differs from Global Search',
+    date: 'September 2026',
+    category: 'Local Search',
+    excerpt: 'An in-depth look at localized SERP features, geo-targeting signals, and why IP routing determines true search visibility in Ethiopia.',
+    readTime: '6 min read',
+  },
+  {
+    title: 'Amharic Fidel Normalization: Overcoming Ethiopic Orthographic Variations in SEO',
+    date: 'August 2026',
+    category: 'Keyword Intelligence',
+    excerpt: 'Why search engines struggle with homophones like ሀ/ሐ/ኀ and how to normalize keyword clusters to capture high-intent Ethiopian queries.',
+    readTime: '8 min read',
+  },
+  {
+    title: 'Technical SEO Checklist for .et and Ethiopian Commercial Websites',
+    date: 'August 2026',
+    category: 'Technical Auditing',
+    excerpt: 'Key crawling pitfalls, international targeting tags, canonical structures, and DNS latency considerations for Ethiopian domains.',
+    readTime: '7 min read',
+  },
+];
+---
+
+<Layout title="SEO Insights & Resources — DoxaRank Blog" description="Actionable guides, search intelligence insights, and technical advice for ranking websites on Google Ethiopia.">
+  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+    <!-- Header -->
+    <div class="text-center max-w-3xl mx-auto mb-16">
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
+        Knowledge Base
+      </div>
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
+        Ethiopia SEO Insights & Engineering
+      </h1>
+      <p class="text-lg text-slate-600">
+        Practical research, technical guides, and SERP analysis curated by search practitioners in Addis Ababa.
+      </p>
+    </div>
+
+    <!-- Articles List -->
+    <div class="space-y-8 mb-16">
+      {articles.map((post) => (
+        <article class="bg-white border border-slate-200/80 rounded-3xl p-8 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3 text-xs text-slate-500 mb-3">
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200/60">
+              {post.category}
+            </span>
+            <span>&bull;</span>
+            <span>{post.date}</span>
+            <span>&bull;</span>
+            <span>{post.readTime}</span>
+          </div>
+
+          <h2 class="text-2xl font-bold tracking-tight text-slate-900 mb-3 hover:text-emerald-700 transition-colors cursor-pointer">
+            {post.title}
+          </h2>
+
+          <p class="text-slate-600 text-sm leading-relaxed mb-6">
+            {post.excerpt}
+          </p>
+
+          <div class="flex items-center gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800">
+            <span>Read complete guide</span>
+            <span>&rarr;</span>
+          </div>
+        </article>
+      ))}
+    </div>
+
+    <!-- Newsletter CTA -->
+    <div class="bg-slate-50 border border-slate-200/80 rounded-3xl p-8 text-center">
+      <h3 class="text-xl font-bold text-slate-900 mb-2">Subscribe to Ethiopian SERP Updates</h3>
+      <p class="text-sm text-slate-600 mb-6 max-w-md mx-auto">Get monthly analysis of Google algorithm updates and search patterns across Ethiopia.</p>
+      <form class="flex flex-col sm:flex-row gap-3 max-w-md mx-auto" onsubmit="event.preventDefault(); alert('Subscribed to SERP updates.');">
+        <input 
+          type="email" 
+          placeholder="Enter your email" 
+          required 
+          class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <button 
+          type="submit" 
+          class="px-5 py-2.5 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-500 text-sm transition-colors"
+        >
+          Subscribe
+        </button>
+      </form>
+    </div>
+  </div>
+</Layout>

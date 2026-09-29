@@ -1,11 +1,189 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+const plans = [
+  {
+    name: 'Free',
+    price: 'ETB 0',
+    period: 'forever',
+    description: 'Essential rank tracking and health auditing for small websites and personal projects.',
+    badge: null,
+    cta: 'Start Free',
+    ctaLink: '/signup',
+    featured: false,
+    features: [
+      '1 Website project',
+      '10 Keywords tracked',
+      'Daily Google Ethiopia (google.com.et) updates',
+      'Weekly automated technical crawls (up to 250 URLs)',
+      'Basic Amharic & English SERP checks',
+      'Google Search Console integration',
+      'Google Analytics 4 integration',
+      'Standard email support',
+    ],
+  },
+  {
+    name: 'Starter',
+    price: 'ETB 1,500',
+    period: 'per month',
+    description: 'Complete SEO suite for growing Ethiopian businesses, e-commerce, and startups.',
+    badge: 'Most Popular',
+    cta: 'Get Started with Starter',
+    ctaLink: '/signup?plan=starter',
+    featured: true,
+    features: [
+      '5 Website projects',
+      '100 Keywords tracked',
+      'Daily google.com.et & regional tracking',
+      'Amharic Fidel normalization & Oromo intelligence',
+      'On-demand technical SEO crawler (up to 2,500 URLs)',
+      'Competitor SERP snapshots (up to 5 competitors/project)',
+      'Rule-based prioritized recommendation feed',
+      'GSC, GA4, Clarity & GTM integrations',
+      'Automated email weekly digest',
+      'Priority support',
+    ],
+  },
+  {
+    name: 'Agency',
+    price: 'ETB 6,000',
+    period: 'per month',
+    description: 'Designed for marketing agencies, large teams, and consultants managing multi-client portfolios.',
+    badge: 'Agency Pro',
+    cta: 'Get Started with Agency',
+    ctaLink: '/signup?plan=agency',
+    featured: false,
+    features: [
+      'Unlimited projects (subject to fair use)',
+      '500 Keywords tracked with SERP histories',
+      'Deep site audits with custom crawl configurations',
+      'White-label executive PDF reports with custom logos',
+      'Multi-competitor head-to-head comparisons',
+      'Search demand & CPC keyword intelligence',
+      'Dedicated integration tokens & multi-user access',
+      'Audit log & compliance tracking',
+      'Dedicated onboarding & priority SLA',
+    ],
+  },
+];
+
+const faqs = [
+  {
+    q: 'How does payment work for Ethiopian businesses?',
+    a: 'We support local Ethiopian payment methods including Telebirr and local bank transfers via Doxa Payments, alongside international debit/credit cards. Billing is denominated directly in Ethiopian Birr (ETB) with no foreign currency conversion fees.',
+  },
+  {
+    q: 'Are there hidden setup fees or minimum contracts?',
+    a: 'No. All paid plans are billed on a month-to-month basis. You can upgrade, downgrade, or cancel your subscription at any time without penalties.',
+  },
+  {
+    q: 'Does DoxaRank track Google Ethiopia accurately?',
+    a: 'Yes. Our crawlers query google.com.et with localized IP routing, geolocation headers, and language headers to deliver true ranking positions as seen by real users in Addis Ababa and across Ethiopia.',
+  },
+  {
+    q: 'What is white-label reporting in the Agency plan?',
+    a: 'Agency subscribers can generate branded PDF audit and rank reports featuring their own agency name, logo, custom header colors, and executive summaries for distribution to their clients.',
+  },
+];
 ---
 
-<Layout title="DoxaRank Pricing">
-  <main class="min-h-screen p-10">
-    <h1 class="text-4xl font-bold">
-      Pricing
-    </h1>
-  </main>
+<Layout title="Pricing Plans — DoxaRank | Ethiopia SEO SaaS" description="Transparent pricing for DoxaRank. Free (ETB 0), Starter (ETB 1,500/mo), and Agency (ETB 6,000/mo). Local ETB payments supported.">
+  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="text-center max-w-3xl mx-auto mb-16">
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
+        Predictable ETB Pricing
+      </div>
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
+        Simple, transparent plans for every stage of growth
+      </h1>
+      <p class="text-lg text-slate-600">
+        Choose the plan that fits your business. Start free, upgrade anytime, and pay locally with Telebirr or Ethiopian bank transfer.
+      </p>
+    </div>
+
+    <!-- Pricing Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch mb-24">
+      {plans.map((plan) => (
+        <div class={`relative rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 ${
+          plan.featured 
+            ? 'bg-slate-900 text-white shadow-2xl shadow-emerald-950/20 ring-2 ring-emerald-500 md:-translate-y-2' 
+            : 'bg-white text-slate-900 border border-slate-200 shadow-sm hover:shadow-md'
+        }`}>
+          {plan.badge && (
+            <div class="absolute -top-3.5 left-1/2 -translate-x-1/2">
+              <span class={`px-4 py-1 rounded-full text-xs font-bold tracking-wide uppercase shadow-sm ${
+                plan.featured ? 'bg-emerald-500 text-slate-950' : 'bg-slate-100 text-slate-700 border border-slate-200'
+              }`}>
+                {plan.badge}
+              </span>
+            </div>
+          )}
+
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-xl font-bold tracking-tight">{plan.name}</h3>
+            </div>
+            
+            <p class={`text-sm mb-6 ${plan.featured ? 'text-slate-300' : 'text-slate-600'}`}>
+              {plan.description}
+            </p>
+
+            <div class="mb-8 pb-6 border-b border-dashed ${plan.featured ? 'border-slate-800' : 'border-slate-200'}">
+              <span class="text-4xl sm:text-5xl font-extrabold tracking-tight">{plan.price}</span>
+              <span class={`text-sm ml-2 font-medium ${plan.featured ? 'text-slate-400' : 'text-slate-500'}`}>
+                /{plan.period}
+              </span>
+            </div>
+
+            <ul class="space-y-3.5 mb-8 text-sm">
+              {plan.features.map((feature) => (
+                <li class="flex items-start gap-3">
+                  <svg class={`w-5 h-5 shrink-0 mt-0.5 ${plan.featured ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span class={plan.featured ? 'text-slate-200' : 'text-slate-700'}>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <a
+              href={plan.ctaLink}
+              class={`w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 ${
+                plan.featured
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 active:scale-[0.99]'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-sm active:scale-[0.99]'
+              }`}
+            >
+              <span>{plan.cta}</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="max-w-3xl mx-auto border-t border-slate-200 pt-16">
+      <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-10">
+        Frequently Asked Questions
+      </h2>
+      <div class="space-y-6">
+        {faqs.map((faq) => (
+          <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-6">
+            <h3 class="text-base font-bold text-slate-900 mb-2">
+              {faq.q}
+            </h3>
+            <p class="text-sm text-slate-600 leading-relaxed">
+              {faq.a}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
 </Layout>

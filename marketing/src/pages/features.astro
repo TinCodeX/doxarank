@@ -1,15 +1,152 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+const featureGroups = [
+  {
+    title: 'Ethiopian SERP Rank Tracker',
+    tag: 'google.com.et',
+    description: 'Track daily ranking positions accurately on Google Ethiopia. Monitor target keywords in Amharic, Afaan Oromoo, and English.',
+    bullets: [
+      'Daily position tracking across desktop and mobile devices in Ethiopia',
+      'Fidel normalization for Amharic spelling variations (ሀ/ሃ/ኃ, ሰ/ሠ, አ/ዐ, ጸ/ፀ)',
+      'Historical rank movement charts with day-over-day and week-over-week deltas',
+      'Target URL mapping and ranking cannibalization alerts',
+    ],
+  },
+  {
+    title: 'Technical SEO Site Crawler',
+    tag: 'Automated Auditing',
+    description: 'Deep crawl your .et or global domain to detect technical issues before they hurt search visibility.',
+    bullets: [
+      'Comprehensive checks for HTTP 404s, redirect chains, and server 5xx errors',
+      'Title tag, meta description, and heading hierarchy verification (H1-H6)',
+      'Canonical URL validation, noindex detection, and robots.txt analysis',
+      'XML sitemap validation and indexing status reconciliation',
+    ],
+  },
+  {
+    title: 'Competitor SERP Snapshots',
+    tag: 'Market Intelligence',
+    description: 'Understand who is competing for your commercial keywords on Google Ethiopia and track their movements.',
+    bullets: [
+      'Head-to-head SERP comparison against up to 5 competitors per project',
+      'SERP feature tracking: featured snippets, people also ask, and local packs',
+      'Keyword overlap analysis to identify content gaps and ranking opportunities',
+      'Competitor URL change tracking over time',
+    ],
+  },
+  {
+    title: 'Keyword Intelligence & CPC',
+    tag: 'Search Demand',
+    description: 'Discover high-intent search queries with localized search demand and advertiser CPC benchmarks.',
+    bullets: [
+      'Search volume estimates tailored for the Ethiopian digital market',
+      'Commercial intent scoring and keyword difficulty indices',
+      'Advertiser CPC bid estimates for paid search benchmarking',
+      'Related keyword suggestions in English and Amharic script',
+    ],
+  },
+  {
+    title: 'Rule-Based Recommendations Feed',
+    tag: 'Actionable Insights',
+    description: 'Turn raw SEO data into a prioritized punch-list of technical, content, and link fixes.',
+    bullets: [
+      'Severity-ranked action items: High, Medium, Low, and Info',
+      'Step-by-step resolution guides for web developers and content writers',
+      'Dismiss, resolve, and re-audit workflows with change verification',
+      'Categorized by on-page SEO, indexability, speed, and metadata',
+    ],
+  },
+  {
+    title: 'Analytics & Search Integrations',
+    tag: 'Unified Telemetry',
+    description: 'Connect your verified properties seamlessly for unified performance telemetry.',
+    bullets: [
+      'Google Search Console: Sync queries, impressions, CTR, and average position',
+      'Google Analytics 4: Correlate organic search visits with goal conversions',
+      'Microsoft Clarity: Link session recordings and heatmaps to organic landing pages',
+      'Google Tag Manager: Verify container deployment and conversion trigger tags',
+    ],
+  },
+];
 ---
 
-<Layout title="DoxaRank Features">
-  <main class="min-h-screen p-10">
-    <h1 class="text-4xl font-bold">
-      DoxaRank Features
-    </h1>
+<Layout title="Platform Features — DoxaRank | Ethiopia SEO SaaS" description="Explore DoxaRank's complete SEO suite: Google Ethiopia rank tracking, Amharic keyword intelligence, technical site crawler, and analytics integrations.">
+  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="text-center max-w-3xl mx-auto mb-20">
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
+        Platform Capabilities
+      </div>
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
+        Purpose-built tools for Ethiopian search optimization
+      </h1>
+      <p class="text-lg text-slate-600">
+        Every tool in DoxaRank was designed to solve the real challenges of ranking websites on Google Ethiopia and optimizing Ethiopian digital presence.
+      </p>
+    </div>
 
-    <p class="mt-4">
-      Explore the SEO tools inside DoxaRank.
-    </p>
-  </main>
+    <!-- Feature Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 mb-20">
+      {featureGroups.map((feature, idx) => (
+        <div class="bg-white border border-slate-200/90 rounded-3xl p-8 hover:shadow-lg transition-all duration-200 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between gap-4 mb-4">
+              <span class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                {feature.tag}
+              </span>
+              <span class="text-xs font-mono font-medium text-slate-400">
+                0{idx + 1}
+              </span>
+            </div>
+            
+            <h2 class="text-2xl font-bold tracking-tight text-slate-900 mb-3">
+              {feature.title}
+            </h2>
+            
+            <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+              {feature.description}
+            </p>
+
+            <ul class="space-y-3 text-sm text-slate-700">
+              {feature.bullets.map((bullet) => (
+                <li class="flex items-start gap-2.5">
+                  <svg class="w-4 h-4 text-emerald-600 shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div class="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-500">Available across all paid plans</span>
+            <a href="/signup" class="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group">
+              Try now 
+              <span class="group-hover:translate-x-0.5 transition-transform">&rarr;</span>
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <!-- Bottom CTA -->
+    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-10 sm:p-14 text-center text-white">
+      <h2 class="text-2xl sm:text-3xl font-bold mb-4">
+        Ready to audit and rank your website on Google Ethiopia?
+      </h2>
+      <p class="text-slate-300 max-w-2xl mx-auto mb-8 text-sm sm:text-base">
+        Join Ethiopian businesses and agencies optimizing their search performance with DoxaRank.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="/signup" class="w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg shadow-emerald-500/25">
+          Start Free Account
+        </a>
+        <a href="/pricing" class="w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition-colors">
+          View Pricing Plans
+        </a>
+      </div>
+    </div>
+  </div>
 </Layout>

@@ -1,0 +1,78 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const dashboardUrl = import.meta.env.PUBLIC_DASHBOARD_URL || 'http://localhost:5173';
+---
+
+<Layout title="Start Free — DoxaRank | Ethiopia SEO SaaS" description="Create your free DoxaRank account. Track google.com.et rankings, run technical crawls, and optimize for Ethiopian search.">
+  <section class="min-h-[80vh] flex items-center justify-center py-16 px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-md bg-white border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-100/80 p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mb-6">
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+      </div>
+
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold mb-3">
+        Free Plan &bull; ETB 0 / forever
+      </div>
+
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900 mb-2">
+        Get Started with DoxaRank
+      </h1>
+      <p class="text-sm text-slate-600 mb-8">
+        Start tracking Google Ethiopia keywords, run automated technical audits, and connect your analytics. No credit card required.
+      </p>
+
+      <div class="space-y-4">
+        <a 
+          href={`${dashboardUrl}/register`}
+          class="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl transition-all shadow-md shadow-emerald-600/20"
+        >
+          <span>Create Account on Dashboard</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </a>
+
+        <div class="relative py-2">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-slate-200"></div>
+          </div>
+          <div class="relative flex justify-center text-xs uppercase">
+            <span class="bg-white px-2 text-slate-400 font-medium">Already registered?</span>
+          </div>
+        </div>
+
+        <a 
+          href="/login" 
+          class="w-full inline-flex items-center justify-center px-6 py-3 text-sm font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+        >
+          Sign In to Existing Account
+        </a>
+      </div>
+
+      <div class="mt-8 pt-6 border-t border-slate-100 text-xs text-slate-500 text-left space-y-2">
+        <p class="font-semibold text-slate-700">What's included in Free Plan:</p>
+        <ul class="space-y-1 text-slate-600">
+          <li class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            1 Tracked Project
+          </li>
+          <li class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            10 Tracked Keywords on google.com.et
+          </li>
+          <li class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            Weekly Technical Health Crawl
+          </li>
+          <li class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            Search Console & GA4 Integration
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</Layout>

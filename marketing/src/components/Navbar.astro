@@ -2,48 +2,141 @@
 const navItems = [
   { label: 'Features', href: '/features' },
   { label: 'Pricing', href: '/pricing' },
+  { label: 'About', href: '/about' },
   { label: 'Blog', href: '/blog' },
   { label: 'Case Studies', href: '/case-studies' },
-  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
 ];
+
+const currentPath = Astro.url.pathname;
 ---
 
-<header class="border-b border-gray-200 bg-white">
-  <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+<header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md transition-all">
+  <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
     
-    <!-- Logo -->
-    <a href="/" class="text-2xl font-bold">
-      DoxaRank
+    <!-- Brand Logo -->
+    <a href="/" class="group flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 shadow-sm transition group-hover:scale-105">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="14" width="3" height="6" rx="1" fill="#10b981" />
+          <rect x="10.5" y="9" width="3" height="11" rx="1" fill="#38bdf8" />
+          <rect x="17" y="4" width="3" height="16" rx="1" fill="#6366f1" />
+          <path d="M4 11L10.5 6L17 2" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-xl font-extrabold tracking-tight text-slate-900">
+          Doxa<span class="text-indigo-600">Rank</span>
+        </span>
+        <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/60">
+          🇪🇹 ET
+        </span>
+      </div>
     </a>
 
-    <!-- Navigation -->
-    <div class="hidden items-center gap-8 md:flex">
+    <!-- Desktop Navigation Links -->
+    <nav class="hidden md:flex items-center gap-1 lg:gap-2" aria-label="Main Navigation">
+      {navItems.map((item) => {
+        const isActive = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
+        return (
+          <a
+            href={item.href}
+            class:list={[
+              'rounded-md px-3 py-2 text-sm font-medium transition',
+              isActive
+                ? 'bg-slate-100 text-indigo-600 font-semibold'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+            ]}
+          >
+            {item.label}
+          </a>
+        );
+      })}
+    </nav>
+
+    <!-- Desktop Action Buttons -->
+    <div class="hidden items-center gap-3 md:flex">
+      <a
+        href="/login"
+        class="rounded-lg px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+      >
+        Sign In
+      </a>
+      <a
+        href="/signup"
+        class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+      >
+        Start Free
+      </a>
+    </div>
+
+    <!-- Mobile Hamburger Toggle Button -->
+    <div class="flex md:hidden">
+      <button
+        type="button"
+        id="mobile-menu-btn"
+        class="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+        aria-controls="mobile-menu"
+        aria-expanded="false"
+      >
+        <span class="sr-only">Open main menu</span>
+        <!-- Hamburger Icon -->
+        <svg id="hamburger-icon" class="h-6 w-6 block" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+        <!-- Close Icon -->
+        <svg id="close-icon" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Mobile Dropdown Menu -->
+  <div id="mobile-menu" class="hidden md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 shadow-lg">
+    <div class="space-y-1">
       {navItems.map((item) => (
         <a
           href={item.href}
-          class="text-sm font-medium text-gray-600 transition hover:text-black"
+          class="block rounded-lg px-3 py-2 text-base font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
         >
           {item.label}
         </a>
       ))}
     </div>
-
-    <!-- Auth -->
-    <div class="flex items-center gap-3">
+    <div class="mt-4 border-t border-slate-100 pt-4 flex flex-col gap-2">
       <a
         href="/login"
-        class="hidden text-sm font-medium text-gray-600 hover:text-black sm:block"
+        class="block w-full text-center rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
-        Log in
+        Sign In
       </a>
-
       <a
         href="/signup"
-        class="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+        class="block w-full text-center rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
       >
-        Get Started
+        Start Free
       </a>
     </div>
-
-  </nav>
+  </div>
 </header>
+
+<script>
+  const btn = document.getElementById('mobile-menu-btn');
+  const menu = document.getElementById('mobile-menu');
+  const hamburger = document.getElementById('hamburger-icon');
+  const close = document.getElementById('close-icon');
+
+  if (btn && menu && hamburger && close) {
+    btn.addEventListener('click', () => {
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!isExpanded));
+      menu.classList.toggle('hidden');
+      hamburger.classList.toggle('hidden');
+      hamburger.classList.toggle('block');
+      close.classList.toggle('hidden');
+      close.classList.toggle('block');
+    });
+  }
+</script>

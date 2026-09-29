@@ -1,0 +1,56 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const dashboardUrl = import.meta.env.PUBLIC_DASHBOARD_URL || 'http://localhost:5173';
+---
+
+<Layout title="Sign In — DoxaRank | Ethiopia SEO SaaS" description="Sign in to your DoxaRank account to access your Ethiopia SEO analytics, rank tracking, and site audits.">
+  <section class="min-h-[80vh] flex items-center justify-center py-16 px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-md bg-white border border-slate-200/80 rounded-2xl shadow-xl shadow-slate-100/80 p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mb-6">
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+        </svg>
+      </div>
+
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900 mb-2">
+        Welcome to DoxaRank
+      </h1>
+      <p class="text-sm text-slate-600 mb-8">
+        Access your Ethiopian SERP rank tracker, technical audits, and analytics integrations.
+      </p>
+
+      <div class="space-y-4">
+        <a 
+          href={`${dashboardUrl}/login`}
+          class="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl transition-all shadow-md shadow-emerald-600/20"
+        >
+          <span>Continue to Dashboard Login</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </a>
+
+        <div class="relative py-2">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-slate-200"></div>
+          </div>
+          <div class="relative flex justify-center text-xs uppercase">
+            <span class="bg-white px-2 text-slate-400 font-medium">New to DoxaRank?</span>
+          </div>
+        </div>
+
+        <a 
+          href="/signup" 
+          class="w-full inline-flex items-center justify-center px-6 py-3 text-sm font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+        >
+          Create a Free Account
+        </a>
+      </div>
+
+      <div class="mt-8 pt-6 border-t border-slate-100 text-xs text-slate-500">
+        <p>Connecting to DoxaRank Dashboard at <code class="text-emerald-700 font-mono">{dashboardUrl}</code></p>
+      </div>
+    </div>
+  </section>
+</Layout>
