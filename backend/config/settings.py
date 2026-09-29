@@ -234,6 +234,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.seo.tasks.run_weekly_competitor_snapshots',
         'schedule': 604800.0,  # Weekly competitor SERP snapshots (7 days in seconds)
     },
+    'expire-subscriptions-hourly': {
+        'task': 'apps.subscriptions.tasks.expire_subscriptions',
+        'schedule': 3600.0,  # Transition expired subscriptions hourly
+    },
 }
 
 
@@ -297,3 +301,11 @@ MICROSOFT_OAUTH_SCOPES = [
     'User.Read',
 ]
 CLARITY_API_BASE_URL = config('CLARITY_API_BASE_URL', default='https://www.clarity.ms')
+
+# ==============================================================================
+# Doxa Payments Gateway Configuration
+# ==============================================================================
+DOXA_PAYMENTS_BASE_URL = config('DOXA_PAYMENTS_BASE_URL', default='')
+DOXA_PAYMENTS_API_KEY = config('DOXA_PAYMENTS_API_KEY', default='')
+DOXA_PAYMENTS_WEBHOOK_SECRET = config('DOXA_PAYMENTS_WEBHOOK_SECRET', default='')
+DOXA_PAYMENTS_ENVIRONMENT = config('DOXA_PAYMENTS_ENVIRONMENT', default='sandbox')

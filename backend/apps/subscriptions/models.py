@@ -250,3 +250,117 @@ class ToolUsage(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.tool_code} ({self.usage_date}): {self.count}"
+
+
+class PaymentStatus(models.TextChoices):
+    PENDING = 'PENDING', 'Pending'
+    SUCCESS = 'SUCCESS', 'Success'
+    FAILED = 'FAILED', 'Failed'
+    CANCELLED = 'CANCELLED', 'Cancelled'
+    REFUNDED = 'REFUNDED', 'Refunded'
+
+
+class PaymentTransaction(models.Model):
+    """
+    Records a payment transaction processed for DoxaRank subscriptions.
+    Tracks state transitions, gateway references, and idempotent verification.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='payment_transactions',
+        help_text='The user who initiated the payment transaction.'
+    )
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payment_transactions',
+        help_text='The active subscription record associated with this transaction.'
+    )
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.PROTECT,
+        related_name='payment_transactions',
+        help_text='The plan tier being purchased.'
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Price billed for this transaction.'
+    )
+    currency = models.CharField(
+        max_length=10,
+        default='ETB',
+        help_text='Currency code (default ETB).'
+    )
+    provider = models.CharField(
+        max_length=50,
+        default='doxa',
+        help_text='Payment provider identifier (e.g. doxa).'
+    )
+    provider_transaction_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Transaction identifier assigned by the payment gateway.'
+    )
+    checkout_reference = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text='Unique internal reference used to correlate checkouts, callbacks, and webhooks.'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=PaymentStatus.choices,
+        default=PaymentStatus.PENDING,
+        db_index=True,
+        help_text='Current payment lifecycle status.'
+    )
+    checkout_url = models.TextField(
+        blank=True,
+        default='',
+        help_text='Hosted or provider checkout URL presented to the user.'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Additional contextual payment metadata (customer details, gateway payload).'
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text='Reason recorded if payment or verification failed.'
+    )
+    paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Timestamp when payment was successfully verified.'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'subscriptions_payment_transaction'
+        verbose_name = 'payment transaction'
+        verbose_name_plural = 'payment transactions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['checkout_reference']),
+            models.Index(fields=['provider', 'provider_transaction_id']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['provider', 'provider_transaction_id'],
+                condition=models.Q(provider_transaction_id__isnull=False),
+                name='unique_provider_transaction_id'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.checkout_reference} ({self.plan.code} {self.amount} {self.currency}) [{self.status}]"
+

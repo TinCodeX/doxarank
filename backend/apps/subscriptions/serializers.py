@@ -54,3 +54,54 @@ class ToolUsageCheckSerializer(serializers.Serializer):
     """
     tool_code = serializers.CharField(max_length=100, required=True)
     record = serializers.BooleanField(default=True, help_text="Whether to atomically record the usage or just check quota")
+
+
+class PaymentTransactionSerializer(serializers.ModelSerializer):
+    """
+    Serializer representing a payment transaction record.
+    Security: internal payment provider credentials and secret keys are never exposed.
+    """
+    plan = PlanSerializer(read_only=True)
+    plan_code = serializers.CharField(source='plan.code', read_only=True)
+    plan_name = serializers.CharField(source='plan.name', read_only=True)
+
+    class Meta:
+        from .models import PaymentTransaction
+        model = PaymentTransaction
+        fields = (
+            'id',
+            'checkout_reference',
+            'plan',
+            'plan_code',
+            'plan_name',
+            'amount',
+            'currency',
+            'provider',
+            'provider_transaction_id',
+            'status',
+            'checkout_url',
+            'metadata',
+            'error_message',
+            'paid_at',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class CheckoutRequestSerializer(serializers.Serializer):
+    """
+    Input payload for initiating a subscription checkout.
+    """
+    plan_code = serializers.CharField(max_length=50, required=True)
+    return_url = serializers.CharField(required=False, allow_blank=True, default='')
+    cancel_url = serializers.CharField(required=False, allow_blank=True, default='')
+    provider = serializers.CharField(max_length=50, required=False, default='doxa')
+
+
+class PaymentVerificationSerializer(serializers.Serializer):
+    """
+    Input payload for triggering manual or client-assisted payment verification.
+    """
+    payload = serializers.DictField(required=False, default=dict)
+

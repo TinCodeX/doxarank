@@ -33,12 +33,14 @@ import type { SearchConsoleConnection } from '../types/searchConsole';
 
 import { getUserSubscription } from '../api/subscriptions';
 import type { UserSubscriptionSummary } from '../types/subscription';
+import { SubscriptionModal } from '../components/SubscriptionModal';
 
 
 export const Dashboard: React.FC = () => {
 
   const { user, logout } = useAuth();
   const [subscriptionSummary, setSubscriptionSummary] = useState<UserSubscriptionSummary | null>(null);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
   // Project state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -407,42 +409,63 @@ export const Dashboard: React.FC = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {subscriptionSummary && (
-            <div
-              id="dashboard-plan-badge"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 12px',
-                backgroundColor: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                fontSize: '12px',
-              }}
-            >
-              <span
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                id="dashboard-plan-badge"
+                onClick={() => setIsSubscriptionModalOpen(true)}
+                title="Click to manage subscription and billing"
                 style={{
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color:
-                    subscriptionSummary.plan.code === 'AGENCY'
-                      ? '#7c3aed'
-                      : subscriptionSummary.plan.code === 'STARTER'
-                      ? '#2563eb'
-                      : '#475569',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 12px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
                 }}
               >
-                {subscriptionSummary.plan.name} PLAN
-              </span>
-              <span style={{ color: '#cbd5e1' }}>|</span>
-              <span style={{ color: '#475569' }}>
-                Sites: <strong>{subscriptionSummary.usage.projects.current}</strong>/{subscriptionSummary.usage.projects.limit}
-              </span>
-              <span style={{ color: '#cbd5e1' }}>|</span>
-              <span style={{ color: '#475569' }}>
-                Keywords: <strong>{subscriptionSummary.usage.keywords.current}</strong>/{subscriptionSummary.usage.keywords.limit}
-              </span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color:
+                      subscriptionSummary.plan.code === 'AGENCY'
+                        ? '#7c3aed'
+                        : subscriptionSummary.plan.code === 'STARTER'
+                        ? '#2563eb'
+                        : '#475569',
+                  }}
+                >
+                  {subscriptionSummary.plan.name} PLAN
+                </span>
+                <span style={{ color: '#cbd5e1' }}>|</span>
+                <span style={{ color: '#475569' }}>
+                  Sites: <strong>{subscriptionSummary.usage.projects.current}</strong>/{subscriptionSummary.usage.projects.limit}
+                </span>
+                <span style={{ color: '#cbd5e1' }}>|</span>
+                <span style={{ color: '#475569' }}>
+                  Keywords: <strong>{subscriptionSummary.usage.keywords.current}</strong>/{subscriptionSummary.usage.keywords.limit}
+                </span>
+              </div>
+              <button
+                id="open-billing-modal-btn"
+                onClick={() => setIsSubscriptionModalOpen(true)}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Upgrade / Billing
+              </button>
             </div>
           )}
 
@@ -1326,6 +1349,14 @@ export const Dashboard: React.FC = () => {
           )}
         </section>
       </main>
+
+      {/* Subscription & Billing Modal */}
+      <SubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        subscriptionSummary={subscriptionSummary}
+        onSubscriptionUpdated={fetchSubscription}
+      />
 
       {/* Create / Edit Project Modal */}
       <ProjectFormModal

@@ -1,6 +1,8 @@
 import logging
+import uuid
+from decimal import Decimal
+from datetime import date, timedelta
 from typing import Tuple, Dict, Any, Optional
-from datetime import date
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -9,12 +11,20 @@ from .models import (
     Plan,
     Subscription,
     ToolUsage,
+    PaymentTransaction,
     PlanCode,
     SubscriptionStatus,
+    PaymentStatus,
     FeatureCode,
     PLAN_DEFAULTS,
 )
-from .exceptions import PlanLimitReachedException, FeatureNotEntitledException
+from .exceptions import (
+    PlanLimitReachedException,
+    FeatureNotEntitledException,
+    InvalidPlanException,
+    PaymentTransactionNotFoundException,
+)
+from .providers import get_payment_provider
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +68,12 @@ class SubscriptionService:
             raise ValueError("Authenticated user required for subscription check.")
 
         try:
-            return user.subscription
+            sub = Subscription.objects.select_related('plan').get(user=user)
+            try:
+                user.subscription = sub
+            except Exception:
+                pass
+            return sub
         except Subscription.DoesNotExist:
             pass
 
@@ -108,7 +123,8 @@ class SubscriptionService:
     @classmethod
     def get_user_plan(cls, user) -> Plan:
         """
-        Return the user's active Plan object, falling back to FREE.
+        Return the user's active Plan object, falling back to FREE if not authenticated
+        or if their current subscription period has expired.
         """
         if not user or not user.is_authenticated:
             free_plan = Plan.objects.filter(code=PlanCode.FREE).first()
@@ -118,6 +134,13 @@ class SubscriptionService:
             return free_plan
 
         sub = cls.get_or_create_user_subscription(user)
+        if not sub.is_active_subscription:
+            free_plan = Plan.objects.filter(code=PlanCode.FREE).first()
+            if not free_plan:
+                plans = cls.bootstrap_default_plans()
+                free_plan = plans[PlanCode.FREE]
+            return free_plan
+
         return sub.plan
 
 
@@ -304,7 +327,7 @@ def get_user_subscription_summary(user) -> Dict[str, Any]:
     Produce a full serializable snapshot of the user's active plan, quotas, and current consumption.
     """
     sub = SubscriptionService.get_or_create_user_subscription(user)
-    plan = sub.plan
+    plan = SubscriptionService.get_user_plan(user)
 
     from apps.projects.models import Project
     from apps.seo.models import Keyword
@@ -317,6 +340,8 @@ def get_user_subscription_summary(user) -> Dict[str, Any]:
         ToolUsage.objects.filter(user=user, usage_date=today)
         .values('tool_code', 'count')
     )
+
+    latest_tx = PaymentTransaction.objects.filter(user=user).order_by('-created_at').first()
 
     return {
         'plan': {
@@ -346,5 +371,245 @@ def get_user_subscription_summary(user) -> Dict[str, Any]:
                 'remaining': max(0, plan.max_keywords - kw_count),
             },
             'tools_today': today_usages,
-        }
+        },
+        'latest_payment': {
+            'id': latest_tx.id,
+            'checkout_reference': latest_tx.checkout_reference,
+            'status': latest_tx.status,
+            'amount': str(latest_tx.amount),
+            'currency': latest_tx.currency,
+            'paid_at': latest_tx.paid_at,
+            'plan_code': latest_tx.plan.code,
+            'checkout_url': latest_tx.checkout_url,
+        } if latest_tx else None
     }
+
+
+class PaymentService:
+    """
+    Core orchestration service for Doxa Payments checkout, verification,
+    webhook processing, and idempotent subscription lifecycle transitions.
+    """
+
+    PURCHASABLE_PLANS = [PlanCode.STARTER, PlanCode.AGENCY]
+
+    @classmethod
+    def create_checkout_session(
+        cls,
+        user,
+        plan_code: str,
+        return_url: Optional[str] = None,
+        cancel_url: Optional[str] = None,
+        provider_name: str = 'doxa'
+    ) -> PaymentTransaction:
+        """
+        Validate plan, create a pending payment transaction, invoke provider checkout,
+        and return the transaction record containing the provider checkout URL.
+        Server-side pricing is strictly enforced.
+        """
+        if not user or not user.is_authenticated:
+            raise ValueError("Authenticated user required for checkout.")
+
+        plan_code = (plan_code or '').strip().upper()
+
+        if plan_code == PlanCode.FREE:
+            raise InvalidPlanException(
+                "The Free plan does not require payment. You already have access to the Free tier."
+            )
+
+        if plan_code not in cls.PURCHASABLE_PLANS:
+            raise InvalidPlanException(
+                f"Plan '{plan_code}' is not valid for purchase. Purchasable plans are: {', '.join(cls.PURCHASABLE_PLANS)}."
+            )
+
+        plan = Plan.objects.filter(code=plan_code, is_active=True).first()
+        if not plan:
+            plans = SubscriptionService.bootstrap_default_plans()
+            plan = plans.get(plan_code)
+
+        if not plan:
+            raise InvalidPlanException(f"Plan with code '{plan_code}' not found.")
+
+        # Server-side authoritative pricing (frontend price input is ignored)
+        amount = plan.monthly_price
+        currency = plan.currency
+
+        # Generate unique internal tracking reference
+        checkout_ref = f"doxa_chk_{uuid.uuid4().hex[:16]}"
+
+        with transaction.atomic():
+            tx = PaymentTransaction.objects.create(
+                user=user,
+                plan=plan,
+                amount=amount,
+                currency=currency,
+                provider=provider_name,
+                checkout_reference=checkout_ref,
+                status=PaymentStatus.PENDING,
+                metadata={
+                    'plan_name': plan.name,
+                    'initiated_by': user.email,
+                }
+            )
+
+        # Connect to provider abstraction
+        provider = get_payment_provider(provider_name)
+        checkout_res = provider.create_checkout(
+            transaction=tx,
+            return_url=return_url,
+            cancel_url=cancel_url
+        )
+
+        tx.checkout_url = checkout_res.checkout_url
+        if checkout_res.metadata:
+            tx.metadata.update(checkout_res.metadata)
+        tx.save(update_fields=['checkout_url', 'metadata', 'updated_at'])
+
+        logger.info(
+            f"Created pending checkout {tx.checkout_reference} for {user.email} (Plan: {plan.code}, Amount: {amount} {currency})"
+        )
+        return tx
+
+    @classmethod
+    def verify_and_process_payment(
+        cls,
+        transaction_id_or_ref,
+        payload: Optional[Dict[str, Any]] = None,
+        provider_name: Optional[str] = None
+    ) -> PaymentTransaction:
+        """
+        Idempotent, concurrency-safe payment verification and subscription activation.
+        Guarantees that duplicate callbacks, repeated webhooks, or repeated verifications
+        do not re-activate or duplicate subscription extensions.
+        """
+        with transaction.atomic():
+            # Query transaction with database lock
+            query = PaymentTransaction.objects.select_for_update()
+            if isinstance(transaction_id_or_ref, int) or (isinstance(transaction_id_or_ref, str) and transaction_id_or_ref.isdigit()):
+                tx = query.filter(id=int(transaction_id_or_ref)).first()
+            else:
+                tx = query.filter(checkout_reference=str(transaction_id_or_ref)).first()
+
+            if not tx:
+                raise PaymentTransactionNotFoundException(
+                    f"Payment transaction with identifier '{transaction_id_or_ref}' was not found."
+                )
+
+            # Idempotency check: if transaction has already succeeded, return immediately
+            if tx.status == PaymentStatus.SUCCESS:
+                logger.info(
+                    f"Payment transaction {tx.checkout_reference} is already SUCCESS. Returning idempotently."
+                )
+                return tx
+
+            provider = get_payment_provider(provider_name or tx.provider)
+            verification = provider.verify_payment(tx, payload)
+
+            # Security validation: amount check
+            if verification.amount is not None:
+                if Decimal(str(verification.amount)) != Decimal(str(tx.amount)):
+                    tx.status = PaymentStatus.FAILED
+                    tx.error_message = (
+                        f"Amount mismatch security rejection: expected {tx.amount}, provider verified {verification.amount}"
+                    )
+                    tx.save(update_fields=['status', 'error_message', 'updated_at'])
+                    logger.warning(
+                        f"SECURITY ALERT: Amount mismatch on transaction {tx.checkout_reference}. Marked FAILED."
+                    )
+                    return tx
+
+            # Security validation: currency check
+            if verification.currency:
+                if verification.currency.upper() != tx.currency.upper():
+                    tx.status = PaymentStatus.FAILED
+                    tx.error_message = (
+                        f"Currency mismatch security rejection: expected {tx.currency}, provider verified {verification.currency}"
+                    )
+                    tx.save(update_fields=['status', 'error_message', 'updated_at'])
+                    logger.warning(
+                        f"SECURITY ALERT: Currency mismatch on transaction {tx.checkout_reference}. Marked FAILED."
+                    )
+                    return tx
+
+            if verification.is_successful and verification.status == PaymentStatus.SUCCESS:
+                tx.status = PaymentStatus.SUCCESS
+                tx.paid_at = timezone.now()
+                if verification.provider_transaction_id:
+                    tx.provider_transaction_id = verification.provider_transaction_id
+                if verification.metadata:
+                    tx.metadata.update(verification.metadata)
+
+                # Safe subscription transition & renewal calculation
+                sub = SubscriptionService.get_or_create_user_subscription(tx.user)
+                now = timezone.now()
+
+                # If renewing an active subscription on the same plan, extend from existing period end
+                if (
+                    sub.plan_id == tx.plan_id
+                    and sub.is_active_subscription
+                    and sub.current_period_end
+                    and sub.current_period_end > now
+                ):
+                    new_period_end = sub.current_period_end + timedelta(days=30)
+                else:
+                    new_period_end = now + timedelta(days=30)
+                    sub.started_at = now
+
+                sub.plan = tx.plan
+                sub.status = SubscriptionStatus.ACTIVE
+                sub.current_period_end = new_period_end
+                sub.save(update_fields=['plan', 'status', 'started_at', 'current_period_end', 'updated_at'])
+
+                tx.subscription = sub
+                tx.save(update_fields=['status', 'paid_at', 'provider_transaction_id', 'metadata', 'subscription', 'updated_at'])
+                logger.info(
+                    f"Payment verified for {tx.user.email}: Plan {tx.plan.code} activated through {new_period_end}."
+                )
+            elif verification.status in (PaymentStatus.FAILED, PaymentStatus.CANCELLED):
+                tx.status = verification.status
+                tx.error_message = verification.error_message or 'Payment was declined or failed.'
+                tx.save(update_fields=['status', 'error_message', 'updated_at'])
+                logger.info(f"Payment transaction {tx.checkout_reference} marked as {tx.status}.")
+            else:
+                if verification.error_message:
+                    tx.error_message = verification.error_message
+                    tx.save(update_fields=['error_message', 'updated_at'])
+
+            return tx
+
+    @classmethod
+    def handle_webhook(
+        cls,
+        provider_name: str,
+        payload: Dict[str, Any],
+        raw_body: bytes,
+        headers: Dict[str, str]
+    ) -> Tuple[PaymentTransaction, str]:
+        """
+        Verify incoming webhook signature and process payment idempotently.
+        """
+        provider = get_payment_provider(provider_name)
+        verification = provider.handle_webhook(payload, raw_body, headers)
+
+        ref = (
+            payload.get('checkout_reference')
+            or payload.get('reference')
+            or payload.get('tx_ref')
+        )
+        if not ref:
+            raise ValueError("Webhook missing transaction reference.")
+
+        # Check transaction existence
+        tx = PaymentTransaction.objects.filter(checkout_reference=ref).first()
+        if not tx:
+            raise PaymentTransactionNotFoundException(f"Transaction with reference '{ref}' not found.")
+
+        if tx.status == PaymentStatus.SUCCESS:
+            return tx, "already_processed"
+
+        processed_tx = cls.verify_and_process_payment(
+            transaction_id_or_ref=tx.id,
+            payload=payload,
+            provider_name=provider_name
+        )
+        return processed_tx, "processed"

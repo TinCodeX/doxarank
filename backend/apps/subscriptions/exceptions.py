@@ -45,3 +45,32 @@ class FeatureNotEntitledException(exceptions.APIException):
             'upgrade_required': True,
             'detail': detail_msg,
         }
+
+
+class InvalidPlanException(exceptions.APIException):
+    """
+    Raised when an invalid, non-purchasable, or missing plan is selected for checkout.
+    """
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = 'INVALID_PLAN'
+
+    def __init__(self, message: str = "Invalid plan selected for checkout."):
+        self.detail = {
+            'code': 'INVALID_PLAN',
+            'detail': message,
+        }
+
+
+class PaymentTransactionNotFoundException(exceptions.APIException):
+    """
+    Raised when a requested payment transaction cannot be found or is not accessible.
+    """
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = 'PAYMENT_NOT_FOUND'
+
+    def __init__(self, message: str = "Payment transaction not found."):
+        self.detail = {
+            'code': 'PAYMENT_NOT_FOUND',
+            'detail': message,
+        }
+

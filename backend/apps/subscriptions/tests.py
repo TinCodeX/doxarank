@@ -1,6 +1,10 @@
+import hmac
+import hashlib
+import json
+from unittest.mock import patch
 from decimal import Decimal
 from datetime import timedelta
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -12,17 +16,21 @@ from .models import (
     Plan,
     Subscription,
     ToolUsage,
+    PaymentTransaction,
     PlanCode,
     SubscriptionStatus,
+    PaymentStatus,
     FeatureCode,
 )
 from .services import (
     SubscriptionService,
     PlanEntitlementService,
     UsageLimitService,
+    PaymentService,
     get_user_subscription_summary,
 )
-from .exceptions import PlanLimitReachedException, FeatureNotEntitledException
+from .tasks import expire_subscriptions
+from .exceptions import PlanLimitReachedException, FeatureNotEntitledException, InvalidPlanException
 from .permissions import require_feature, CanAccessRankTracking, CanAccessCompetitorSnapshots
 
 User = get_user_model()
@@ -522,3 +530,469 @@ class SubscriptionAPIEndpointsTests(PlanAndSubscriptionBaseTestCase):
         self.assertEqual(data['plan']['code'], PlanCode.AGENCY)
         self.assertEqual(data['usage']['projects']['limit'], 20)
         self.assertEqual(data['usage']['keywords']['limit'], 500)
+
+
+class PaymentBillingIntegrationTests(PlanAndSubscriptionBaseTestCase):
+    """
+    Focused test suite covering all 22 required payment, billing, and subscription scenarios
+    for the Doxa Payments integration.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user_payer = User.objects.create_user(
+            email='payer@doxarank.com',
+            password='TestPassword123!',
+            first_name='Payer',
+            last_name='User'
+        )
+        self.user_other = User.objects.create_user(
+            email='other@doxarank.com',
+            password='TestPassword123!',
+            first_name='Other',
+            last_name='User'
+        )
+
+    # 1. Free subscription creation
+    def test_01_free_subscription_creation(self):
+        user = User.objects.create_user(
+            email='new_free@doxarank.com',
+            password='Password123!',
+            first_name='New',
+            last_name='Free'
+        )
+        sub = SubscriptionService.get_or_create_user_subscription(user)
+        self.assertEqual(sub.plan.code, PlanCode.FREE)
+        self.assertEqual(sub.status, SubscriptionStatus.ACTIVE)
+        self.assertTrue(sub.is_active_subscription)
+        self.assertIsNone(sub.current_period_end)
+        # Limits check
+        self.assertEqual(sub.plan.max_projects, 1)
+        self.assertEqual(sub.plan.max_keywords, 3)
+        self.assertEqual(sub.plan.basic_tool_daily_limit, 5)
+
+    # 2. Starter checkout creation
+    def test_02_starter_checkout_creation(self):
+        self.client.force_authenticate(user=self.user_payer)
+        res = self.client.post('/api/subscriptions/checkout/', {
+            'plan_code': 'STARTER',
+            'return_url': 'http://localhost:5173/billing/complete',
+            'cancel_url': 'http://localhost:5173/billing/cancel',
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+        self.assertEqual(data['status'], PaymentStatus.PENDING)
+        self.assertEqual(Decimal(data['amount']), Decimal('1500.00'))
+        self.assertEqual(data['currency'], 'ETB')
+        self.assertEqual(data['plan_code'], PlanCode.STARTER)
+        self.assertTrue(data['checkout_reference'].startswith('doxa_chk_'))
+        self.assertIn('checkout_url', data)
+
+    # 3. Agency checkout creation
+    def test_03_agency_checkout_creation(self):
+        self.client.force_authenticate(user=self.user_payer)
+        res = self.client.post('/api/subscriptions/checkout/', {
+            'plan_code': 'AGENCY'
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+        self.assertEqual(data['status'], PaymentStatus.PENDING)
+        self.assertEqual(Decimal(data['amount']), Decimal('6000.00'))
+        self.assertEqual(data['currency'], 'ETB')
+        self.assertEqual(data['plan_code'], PlanCode.AGENCY)
+
+    # 4. Invalid plan rejection
+    def test_04_invalid_plan_rejection(self):
+        self.client.force_authenticate(user=self.user_payer)
+        # Non-existent plan
+        res_invalid = self.client.post('/api/subscriptions/checkout/', {
+            'plan_code': 'ENTERPRISE_DOES_NOT_EXIST'
+        }, format='json')
+        self.assertEqual(res_invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Free plan checkout rejection
+        res_free = self.client.post('/api/subscriptions/checkout/', {
+            'plan_code': 'FREE'
+        }, format='json')
+        self.assertEqual(res_free.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Free plan does not require payment', str(res_free.json()))
+
+    # 5. Server-side price enforcement
+    def test_05_server_side_price_enforcement(self):
+        self.client.force_authenticate(user=self.user_payer)
+        # Attempt to pass spoofed client-side amount and currency
+        res = self.client.post('/api/subscriptions/checkout/', {
+            'plan_code': 'STARTER',
+            'amount': '1.00',
+            'currency': 'USD'
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+        # Price must strictly match database plan price (1500.00 ETB), not client input
+        self.assertEqual(Decimal(data['amount']), Decimal('1500.00'))
+        self.assertEqual(data['currency'], 'ETB')
+
+    # 6. Pending transaction creation
+    def test_06_pending_transaction_creation(self):
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        self.assertEqual(tx.status, PaymentStatus.PENDING)
+        self.assertEqual(tx.amount, Decimal('1500.00'))
+        self.assertEqual(tx.currency, 'ETB')
+        self.assertEqual(tx.user, self.user_payer)
+        self.assertTrue(PaymentTransaction.objects.filter(checkout_reference=tx.checkout_reference).exists())
+
+    # 7. Successful payment verification
+    def test_07_successful_payment_verification(self):
+        self.client.force_authenticate(user=self.user_payer)
+        # Create checkout
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        # Verify payment
+        res = self.client.post(f'/api/subscriptions/payments/{tx.id}/verify/', {
+            'payload': {
+                'status': 'SUCCESS',
+                'amount': '1500.00',
+                'currency': 'ETB',
+                'provider_transaction_id': 'doxa_live_12345'
+            }
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+        self.assertEqual(data['status'], PaymentStatus.SUCCESS)
+        self.assertEqual(data['provider_transaction_id'], 'doxa_live_12345')
+        self.assertIsNotNone(data['paid_at'])
+
+        # Subscription active and upgraded to Starter
+        self.user_payer.refresh_from_db()
+        sub = Subscription.objects.get(user=self.user_payer)
+        self.assertEqual(sub.plan.code, PlanCode.STARTER)
+        self.assertEqual(sub.status, SubscriptionStatus.ACTIVE)
+        self.assertIsNotNone(sub.current_period_end)
+        self.assertTrue(sub.current_period_end > timezone.now())
+
+    # 8. Failed payment verification
+    def test_08_failed_payment_verification(self):
+        self.client.force_authenticate(user=self.user_payer)
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        res = self.client.post(f'/api/subscriptions/payments/{tx.id}/verify/', {
+            'payload': {
+                'status': 'FAILED',
+                'error_message': 'Insufficient funds on Telebirr wallet'
+            }
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+        self.assertEqual(data['status'], PaymentStatus.FAILED)
+        self.assertIn('Insufficient funds', data['error_message'])
+
+        # Subscription must NOT be upgraded
+        sub = SubscriptionService.get_or_create_user_subscription(self.user_payer)
+        self.assertEqual(sub.plan.code, PlanCode.FREE)
+
+    # 9. Invalid payment reference
+    def test_09_invalid_payment_reference(self):
+        self.client.force_authenticate(user=self.user_payer)
+        res_get = self.client.get('/api/subscriptions/payments/non_existent_ref_99999/')
+        self.assertEqual(res_get.status_code, status.HTTP_404_NOT_FOUND)
+
+        res_post = self.client.post('/api/subscriptions/payments/non_existent_ref_99999/verify/')
+        self.assertEqual(res_post.status_code, status.HTTP_404_NOT_FOUND)
+
+    # 10. Invalid amount rejection
+    def test_10_invalid_amount_rejection(self):
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        # Attempt verification with underpaid amount (e.g. 500 ETB instead of 1500 ETB)
+        processed_tx = PaymentService.verify_and_process_payment(
+            transaction_id_or_ref=tx.id,
+            payload={
+                'status': 'SUCCESS',
+                'amount': '500.00',
+                'currency': 'ETB'
+            }
+        )
+        self.assertEqual(processed_tx.status, PaymentStatus.FAILED)
+        self.assertIn('Amount mismatch', processed_tx.error_message)
+        # User not upgraded
+        sub = SubscriptionService.get_or_create_user_subscription(self.user_payer)
+        self.assertEqual(sub.plan.code, PlanCode.FREE)
+
+    # 11. Invalid currency rejection
+    def test_11_invalid_currency_rejection(self):
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        processed_tx = PaymentService.verify_and_process_payment(
+            transaction_id_or_ref=tx.id,
+            payload={
+                'status': 'SUCCESS',
+                'amount': '1500.00',
+                'currency': 'EUR'
+            }
+        )
+        self.assertEqual(processed_tx.status, PaymentStatus.FAILED)
+        self.assertIn('Currency mismatch', processed_tx.error_message)
+        sub = SubscriptionService.get_or_create_user_subscription(self.user_payer)
+        self.assertEqual(sub.plan.code, PlanCode.FREE)
+
+    # 12. Duplicate webhook idempotency
+    def test_12_duplicate_webhook_idempotency(self):
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        webhook_payload = {
+            'checkout_reference': tx.checkout_reference,
+            'status': 'SUCCESS',
+            'amount': '1500.00',
+            'currency': 'ETB',
+            'transaction_id': 'doxa_webhook_tx_101'
+        }
+        raw_body = json.dumps(webhook_payload).encode('utf-8')
+
+        # 1st webhook call
+        tx1, state1 = PaymentService.handle_webhook(
+            provider_name='doxa',
+            payload=webhook_payload,
+            raw_body=raw_body,
+            headers={}
+        )
+        self.assertEqual(tx1.status, PaymentStatus.SUCCESS)
+        self.assertEqual(state1, "processed")
+        first_period_end = Subscription.objects.get(user=self.user_payer).current_period_end
+
+        # 2nd webhook call (duplicate)
+        tx2, state2 = PaymentService.handle_webhook(
+            provider_name='doxa',
+            payload=webhook_payload,
+            raw_body=raw_body,
+            headers={}
+        )
+        self.assertEqual(tx2.status, PaymentStatus.SUCCESS)
+        self.assertEqual(state2, "already_processed")
+        self.assertEqual(Subscription.objects.get(user=self.user_payer).current_period_end, first_period_end)
+
+    # 13. Repeated callback idempotency
+    def test_13_repeated_callback_idempotency(self):
+        self.client.force_authenticate(user=self.user_payer)
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        verify_data = {
+            'payload': {
+                'status': 'SUCCESS',
+                'amount': '1500.00',
+                'currency': 'ETB',
+            }
+        }
+        res1 = self.client.post(f'/api/subscriptions/payments/{tx.id}/verify/', verify_data, format='json')
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        initial_period_end = Subscription.objects.get(user=self.user_payer).current_period_end
+
+        # Repeated verification call
+        res2 = self.client.post(f'/api/subscriptions/payments/{tx.id}/verify/', verify_data, format='json')
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        # Period end must remain identical (no double extension)
+        self.assertEqual(Subscription.objects.get(user=self.user_payer).current_period_end, initial_period_end)
+
+    # 14. Already completed transaction cannot be altered
+    def test_14_already_completed_transaction_cannot_be_altered(self):
+        tx = PaymentService.create_checkout_session(
+            user=self.user_payer,
+            plan_code=PlanCode.STARTER
+        )
+        PaymentService.verify_and_process_payment(tx.id, {'status': 'SUCCESS', 'amount': '1500.00'})
+        tx.refresh_from_db()
+        self.assertEqual(tx.status, PaymentStatus.SUCCESS)
+        original_paid_at = tx.paid_at
+
+        # Attempt to inject FAILED on already SUCCESS transaction
+        updated_tx = PaymentService.verify_and_process_payment(tx.id, {'status': 'FAILED'})
+        self.assertEqual(updated_tx.status, PaymentStatus.SUCCESS)
+        self.assertEqual(updated_tx.paid_at, original_paid_at)
+
+    # 15. Subscription activation unlocks features
+    def test_15_subscription_activation_unlocks_features(self):
+        # Initial Free state
+        self.assertFalse(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.RANK_TRACKING))
+        self.assertFalse(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.TECHNICAL_CRAWLER))
+        self.assertFalse(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.COMPETITOR_SNAPSHOTS))
+        current, limit = PlanEntitlementService.get_project_usage(self.user_payer)
+        self.assertEqual(limit, 1)
+
+        # Pay for Agency tier
+        tx = PaymentService.create_checkout_session(user=self.user_payer, plan_code=PlanCode.AGENCY)
+        PaymentService.verify_and_process_payment(tx.id, {'status': 'SUCCESS', 'amount': '6000.00'})
+
+        # Verify all Agency features unlocked
+        self.user_payer.refresh_from_db()
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.RANK_TRACKING))
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.TECHNICAL_CRAWLER))
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.COMPETITOR_SNAPSHOTS))
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_payer, FeatureCode.WHITE_LABEL_REPORTS))
+        _, agency_limit = PlanEntitlementService.get_project_usage(self.user_payer)
+        self.assertEqual(agency_limit, 20)
+
+    # 16. Subscription expiration via Celery task
+    def test_16_subscription_expiration_via_celery_task(self):
+        # Assign Starter plan expired 2 days ago
+        sub = SubscriptionService.assign_plan(
+            self.user_payer,
+            PlanCode.STARTER,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_end=timezone.now() - timedelta(days=2)
+        )
+        # Immediate entitlement fallback to Free
+        active_plan = SubscriptionService.get_user_plan(self.user_payer)
+        self.assertEqual(active_plan.code, PlanCode.FREE)
+
+        # Execute scheduled Celery sweep task
+        result_msg = expire_subscriptions()
+        self.assertIn("1 expired subscription(s)", result_msg)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.plan.code, PlanCode.FREE)
+        self.assertEqual(sub.status, SubscriptionStatus.EXPIRED)
+        self.assertIsNone(sub.current_period_end)
+
+        # Unrelated lifetime Free user was not modified
+        free_sub = SubscriptionService.get_or_create_user_subscription(self.user_other)
+        self.assertEqual(free_sub.status, SubscriptionStatus.ACTIVE)
+
+    # 17. Subscription renewal extends period safely
+    def test_17_subscription_renewal(self):
+        # User has an active Starter plan expiring 15 days in the future
+        future_end = timezone.now() + timedelta(days=15)
+        SubscriptionService.assign_plan(
+            self.user_payer,
+            PlanCode.STARTER,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_end=future_end
+        )
+        # Process renewal checkout
+        tx = PaymentService.create_checkout_session(user=self.user_payer, plan_code=PlanCode.STARTER)
+        PaymentService.verify_and_process_payment(tx.id, {'status': 'SUCCESS', 'amount': '1500.00'})
+
+        sub = Subscription.objects.get(user=self.user_payer)
+        # Renewal adds 30 days onto the 15 remaining days (~45 days from now)
+        expected_min = future_end + timedelta(days=29)
+        expected_max = future_end + timedelta(days=31)
+        self.assertTrue(expected_min <= sub.current_period_end <= expected_max)
+
+
+    # 18. Tenant isolation
+    def test_18_tenant_isolation(self):
+        tx_payer = PaymentService.create_checkout_session(user=self.user_payer, plan_code=PlanCode.STARTER)
+
+        # Authenticate as user_other (unauthorized tenant)
+        self.client.force_authenticate(user=self.user_other)
+
+        # Cannot read user_payer's transaction
+        res_get = self.client.get(f'/api/subscriptions/payments/{tx_payer.id}/')
+        self.assertEqual(res_get.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Cannot verify user_payer's transaction
+        res_post = self.client.post(f'/api/subscriptions/payments/{tx_payer.id}/verify/')
+        self.assertEqual(res_post.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Payments list only includes owned transactions
+        res_list = self.client.get('/api/subscriptions/payments/')
+        self.assertEqual(res_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_list.json()), 0)
+
+    # 19. Unauthorized payment access
+    def test_19_unauthorized_payment_access(self):
+        self.client.logout()
+        res_checkout = self.client.post('/api/subscriptions/checkout/', {'plan_code': 'STARTER'})
+        self.assertEqual(res_checkout.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        res_payments = self.client.get('/api/subscriptions/payments/')
+        self.assertEqual(res_payments.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # 20. Webhook security and signature verification
+    @override_settings(DOXA_PAYMENTS_WEBHOOK_SECRET='test_doxa_secret_key_123')
+    def test_20_webhook_security_signature_verification(self):
+        tx = PaymentService.create_checkout_session(user=self.user_payer, plan_code=PlanCode.STARTER)
+        payload = {
+            'checkout_reference': tx.checkout_reference,
+            'status': 'SUCCESS',
+            'amount': '1500.00',
+            'currency': 'ETB',
+            'transaction_id': 'doxa_sig_tx_99'
+        }
+        body_bytes = json.dumps(payload).encode('utf-8')
+
+        # 1. Invalid signature rejected
+        bad_sig = 'invalid_hex_signature'
+        res_bad = self.client.post(
+            '/api/subscriptions/webhooks/doxa/',
+            data=body_bytes,
+            content_type='application/json',
+            HTTP_X_DOXA_SIGNATURE=bad_sig
+        )
+        self.assertEqual(res_bad.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 2. Missing signature rejected when secret is configured
+        res_missing = self.client.post(
+            '/api/subscriptions/webhooks/doxa/',
+            data=body_bytes,
+            content_type='application/json'
+        )
+        self.assertEqual(res_missing.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # 3. Valid HMAC-SHA256 signature accepted
+        valid_sig = hmac.new(
+            b'test_doxa_secret_key_123',
+            body_bytes,
+            hashlib.sha256
+        ).hexdigest()
+
+        res_good = self.client.post(
+            '/api/subscriptions/webhooks/doxa/',
+            data=body_bytes,
+            content_type='application/json',
+            HTTP_X_DOXA_SIGNATURE=valid_sig
+        )
+        self.assertEqual(res_good.status_code, status.HTTP_200_OK)
+        tx.refresh_from_db()
+        self.assertEqual(tx.status, PaymentStatus.SUCCESS)
+
+    # 21. Payment secrets not exposed in API responses
+    def test_21_payment_secrets_not_exposed(self):
+        self.client.force_authenticate(user=self.user_payer)
+        res = self.client.post('/api/subscriptions/checkout/', {'plan_code': 'STARTER'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        raw_text = res.content.decode('utf-8')
+
+        # None of the secret settings names or secret tokens should appear
+        self.assertNotIn('DOXA_PAYMENTS_API_KEY', raw_text)
+        self.assertNotIn('DOXA_PAYMENTS_WEBHOOK_SECRET', raw_text)
+        self.assertNotIn('secret', raw_text.lower())
+
+    # 22. Existing subscription entitlement tests still pass
+    def test_22_existing_subscription_entitlements_still_pass(self):
+        # Free user quota: 1 project, 3 keywords, 5 tools
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_free, FeatureCode.BASIC_SEO_TOOLS))
+        self.assertFalse(PlanEntitlementService.can_use_feature(self.user_free, FeatureCode.RANK_TRACKING))
+
+        # Starter user: Rank tracking, GSC, GA4, Clarity, GTM, Crawler
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_starter, FeatureCode.RANK_TRACKING))
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_starter, FeatureCode.TECHNICAL_CRAWLER))
+        self.assertFalse(PlanEntitlementService.can_use_feature(self.user_starter, FeatureCode.COMPETITOR_SNAPSHOTS))
+
+        # Agency user: Competitor snapshots, White label reports
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_agency, FeatureCode.COMPETITOR_SNAPSHOTS))
+        self.assertTrue(PlanEntitlementService.can_use_feature(self.user_agency, FeatureCode.WHITE_LABEL_REPORTS))
+

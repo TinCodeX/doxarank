@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Specialized SEO Agent Orchestration API client (Phase 4.7).
  */

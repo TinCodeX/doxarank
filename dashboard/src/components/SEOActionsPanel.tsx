@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Project } from '../types/project';
 import type {
@@ -195,32 +196,16 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
 
 
   useEffect(() => {
-    fetchActions();
-    fetchPlans();
-    fetchHistoricalSignals();
-    fetchAdaptiveStrategy();
+    queueMicrotask(() => {
+      fetchActions();
+      fetchPlans();
+      fetchHistoricalSignals();
+      fetchAdaptiveStrategy();
+    });
   }, [fetchActions, fetchPlans, fetchHistoricalSignals, fetchAdaptiveStrategy]);
 
-
-
-  // Handle incoming target generator trigger from other panels
-  useEffect(() => {
-    if (!project) return;
-
-    if (targetDraftId) {
-      handleGenerateAction({ project_id: project.id, content_draft_id: targetDraftId });
-      if (onClearTargets) onClearTargets();
-    } else if (targetRecommendationId) {
-      handleGenerateAction({ project_id: project.id, recommendation_id: targetRecommendationId });
-      if (onClearTargets) onClearTargets();
-    } else if (targetBriefId) {
-      handleGenerateAction({ project_id: project.id, content_brief_id: targetBriefId });
-      if (onClearTargets) onClearTargets();
-    }
-  }, [targetDraftId, targetRecommendationId, targetBriefId, project]);
-
   // Generate action handler
-  const handleGenerateAction = async (payload: { project_id: number; recommendation_id?: number; content_draft_id?: number; content_brief_id?: number; action_type?: string }) => {
+  const handleGenerateAction = useCallback(async (payload: { project_id: number; recommendation_id?: number; content_draft_id?: number; content_brief_id?: number; action_type?: string }) => {
     setIsGenerating(true);
     try {
       const newAction = await generateSEOAction(payload);
@@ -232,7 +217,25 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [fetchActions, showFeedback]);
+
+  // Handle incoming target generator trigger from other panels
+  useEffect(() => {
+    if (!project) return;
+
+    queueMicrotask(() => {
+      if (targetDraftId) {
+        handleGenerateAction({ project_id: project.id, content_draft_id: targetDraftId });
+        if (onClearTargets) onClearTargets();
+      } else if (targetRecommendationId) {
+        handleGenerateAction({ project_id: project.id, recommendation_id: targetRecommendationId });
+        if (onClearTargets) onClearTargets();
+      } else if (targetBriefId) {
+        handleGenerateAction({ project_id: project.id, content_brief_id: targetBriefId });
+        if (onClearTargets) onClearTargets();
+      }
+    });
+  }, [targetDraftId, targetRecommendationId, targetBriefId, project, handleGenerateAction, onClearTargets]);
 
   // Generate Action Plan handler
   const handleTriggerPlanGeneration = async () => {

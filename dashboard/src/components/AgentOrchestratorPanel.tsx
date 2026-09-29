@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Project } from '../types/project';
 import type { AgentRun, AgentStep } from '../types/agentRun';
@@ -95,32 +96,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     onEvent: handleLiveAgentEvent,
   });
 
-  // Fetch runs on project change
-  useEffect(() => {
-    fetchProjectRuns();
-    return () => {
-      stopPolling();
-    };
-  }, [project.id]);
-
-  // Fallback Polling: Adjust interval based on WebSocket connection state
-  useEffect(() => {
-    const isRunActive = activeRun && (activeRun.status === 'running' || activeRun.status === 'pending');
-    if (isRunActive) {
-      // If WebSocket is actively connected or recovering, run polling at a relaxed heartbeat (10s)
-      // If WebSocket is offline/reconnecting/error, run polling at rapid fallback frequency (1.5s)
-      const isLiveOrRecovering = connectionState === 'connected' || connectionState === 'recovering';
-      const pollInterval = isLiveOrRecovering ? 10000 : 1500;
-      startPolling(activeRun.id, pollInterval);
-    } else {
-      stopPolling();
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current !== null) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
-    return () => {
-      stopPolling();
-    };
-  }, [activeRun?.status, activeRun?.id, connectionState]);
+  }, []);
 
-  const startPolling = (runId: number, intervalMs = 1500) => {
+  const startPolling = useCallback((runId: number, intervalMs = 1500) => {
     stopPolling();
     pollingRef.current = window.setInterval(async () => {
       try {
@@ -138,16 +121,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         stopPolling();
       }
     }, intervalMs);
-  };
+  }, [stopPolling]);
 
-  const stopPolling = () => {
-    if (pollingRef.current !== null) {
-      window.clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-
-  const fetchProjectRuns = async () => {
+  const fetchProjectRuns = useCallback(async () => {
     setIsLoadingRuns(true);
     setErrorMessage(null);
     try {
@@ -163,7 +139,34 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     } finally {
       setIsLoadingRuns(false);
     }
-  };
+  }, [project.id]);
+
+  // Fetch runs on project change
+  useEffect(() => {
+    queueMicrotask(() => {
+      fetchProjectRuns();
+    });
+    return () => {
+      stopPolling();
+    };
+  }, [project.id, fetchProjectRuns, stopPolling]);
+
+  // Fallback Polling: Adjust interval based on WebSocket connection state
+  useEffect(() => {
+    const isRunActive = activeRun && (activeRun.status === 'running' || activeRun.status === 'pending');
+    if (isRunActive) {
+      // If WebSocket is actively connected or recovering, run polling at a relaxed heartbeat (10s)
+      // If WebSocket is offline/reconnecting/error, run polling at rapid fallback frequency (1.5s)
+      const isLiveOrRecovering = connectionState === 'connected' || connectionState === 'recovering';
+      const pollInterval = isLiveOrRecovering ? 10000 : 1500;
+      startPolling(activeRun.id, pollInterval);
+    } else {
+      stopPolling();
+    }
+    return () => {
+      stopPolling();
+    };
+  }, [activeRun, connectionState, startPolling, stopPolling]);
 
   const fetchReasoning = useCallback(async () => {
     if (!activeRun?.id) {
@@ -174,7 +177,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     try {
       const data = await getCollaborationReasoning(activeRun.id);
       setReasoningData(data);
-    } catch (err) {
+    } catch {
       const snap = activeRun.context_snapshot;
       const cases = snap?.reasoning_cases || snap?.shared_memory?.reasoning_cases || [];
       if (cases && cases.length > 0) {
@@ -197,11 +200,13 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
     } finally {
       setIsLoadingReasoning(false);
     }
-  }, [activeRun?.id, activeRun?.context_snapshot, project.id]);
+  }, [activeRun, project.id]);
 
   useEffect(() => {
     if (viewMode === 'reasoning' && activeRun?.id) {
-      fetchReasoning();
+      queueMicrotask(() => {
+        fetchReasoning();
+      });
     }
   }, [viewMode, activeRun?.id, fetchReasoning]);
 
