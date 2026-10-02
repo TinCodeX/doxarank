@@ -241,14 +241,14 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
   const getContentTypeBadge = (type: BriefContentType) => {
     switch (type) {
       case 'landing_page':
-        return { icon: '🚀', label: 'Landing Page Draft', bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' };
+        return { icon: '', label: 'Landing Page Draft', bg: '#f6f2fb', text: '#593285', border: '#dac8ee' };
       case 'page_optimization':
-        return { icon: '🔄', label: 'Page Optimization Draft', bg: '#ecfdf5', text: '#065f46', border: '#a7f3d0' };
+        return { icon: '', label: 'Page Optimization Draft', bg: '#f3eef9', text: '#774da9', border: '#dac8ee' };
       case 'technical_implementation':
-        return { icon: '⚙️', label: 'Technical SEO Spec', bg: '#fef2f2', text: '#991b1b', border: '#fecaca' };
+        return { icon: '', label: 'Technical SEO Spec', bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' };
       case 'blog_post':
       default:
-        return { icon: '✍️', label: 'Article / Blog Draft', bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe' };
+        return { icon: '', label: 'Article / Blog Draft', bg: '#f6f2fb', text: '#774da9', border: '#dac8ee' };
     }
   };
 
@@ -271,7 +271,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '26px' }}>✍️</span>
+            
             <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
               AI SEO Content Draft Writer
             </h2>
@@ -305,7 +305,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   onClick={handleSaveDraft}
                   disabled={isSaving}
                   style={{
-                    backgroundColor: '#10b981',
+                    backgroundColor: '#774da9',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '8px',
@@ -313,10 +313,10 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     fontSize: '13px',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(16,185,129,0.2)',
+                    boxShadow: '0 2px 4px rgba(119,77,169,0.2)',
                   }}
                 >
-                  {isSaving ? 'Saving...' : '💾 Save Changes'}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               )}
 
@@ -335,7 +335,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   cursor: 'pointer',
                 }}
               >
-                {isGenerating ? 'Regenerating...' : '🔄 Regenerate'}
+                {isGenerating ? 'Regenerating...' : 'Regenerate'}
               </button>
 
               {/* Exports */}
@@ -354,7 +354,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  ⬇️ MD
+                  Export MD
                 </button>
                 <button
                   id="export-draft-html-btn"
@@ -370,7 +370,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  🌐 HTML
+                   HTML
                 </button>
                 <button
                   id="export-draft-pdf-btn"
@@ -385,7 +385,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  📄 PDF
+                   PDF
                 </button>
               </div>
 
@@ -395,9 +395,9 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   id="create-action-from-draft-btn"
                   onClick={() => onCreateAction(activeDraft.id)}
                   style={{
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    border: '1px solid #bfdbfe',
+                    backgroundColor: '#f6f2fb',
+                    color: '#774da9',
+                    border: '1px solid #dac8ee',
                     borderRadius: '8px',
                     padding: '7px 14px',
                     fontSize: '13px',
@@ -408,7 +408,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     gap: '4px',
                   }}
                 >
-                  ⚡ Create SEO Action
+                  Create SEO Action
                 </button>
               )}
             </>
@@ -430,19 +430,19 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
               feedbackMsg.type === 'error'
                 ? '#fef2f2'
                 : feedbackMsg.type === 'info'
-                ? '#eff6ff'
+                ? '#f6f2fb'
                 : '#ecfdf5',
             color:
               feedbackMsg.type === 'error'
                 ? '#991b1b'
                 : feedbackMsg.type === 'info'
-                ? '#1e40af'
+                ? '#593285'
                 : '#065f46',
             border: `1px solid ${
               feedbackMsg.type === 'error'
                 ? '#fecaca'
                 : feedbackMsg.type === 'info'
-                ? '#bfdbfe'
+                ? '#dac8ee'
                 : '#a7f3d0'
             }`,
           }}
@@ -485,12 +485,12 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     borderRadius: '8px',
                     fontSize: '13px',
                     fontWeight: isSelected ? 700 : 500,
-                    border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                    backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                    color: isSelected ? '#1e40af' : '#475569',
+                    border: isSelected ? '1px solid #774DA9' : '1px solid #cbd5e1',
+                    backgroundColor: isSelected ? '#f5f0fa' : '#ffffff',
+                    color: isSelected ? '#774DA9' : '#475569',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
-                    boxShadow: isSelected ? '0 1px 3px rgba(37,99,235,0.15)' : 'none',
+                    boxShadow: isSelected ? '0 1px 3px rgba(119,77,169,0.15)' : 'none',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -569,12 +569,12 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
             border: '1px dashed #cbd5e1',
           }}
         >
-          <div style={{ fontSize: '36px', marginBottom: '10px' }}>📄</div>
+          <div style={{ fontSize: '36px', marginBottom: '10px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
             No content drafts generated yet for this project
           </h4>
           <p style={{ margin: '0 0 18px 0', fontSize: '14px', color: '#64748b', maxWidth: '460px', marginLeft: 'auto', marginRight: 'auto' }}>
-            Generate structured content drafts directly from your SEO Content Briefs above. Click <strong>"✍️ Generate Draft"</strong> on any brief to start.
+            Generate structured content drafts directly from your SEO Content Briefs above. Click <strong>" Generate Draft"</strong> on any brief to start.
           </p>
         </div>
       ) : (
@@ -627,7 +627,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   border: '1px solid #a7f3d0',
                 }}
               >
-                📊 {activeDraft.word_count} words
+                 {activeDraft.word_count} words
               </span>
 
               {/* Target Keyword */}
@@ -705,13 +705,13 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                 borderRadius: '8px',
                 fontSize: '13px',
                 fontWeight: activeTab === 'editor' ? 700 : 500,
-                border: activeTab === 'editor' ? '1px solid #2563eb' : '1px solid transparent',
-                backgroundColor: activeTab === 'editor' ? '#eff6ff' : 'transparent',
-                color: activeTab === 'editor' ? '#1e40af' : '#64748b',
+                border: activeTab === 'editor' ? '1px solid #774DA9' : '1px solid transparent',
+                backgroundColor: activeTab === 'editor' ? '#f5f0fa' : 'transparent',
+                color: activeTab === 'editor' ? '#774DA9' : '#64748b',
                 cursor: 'pointer',
               }}
             >
-              📝 Draft Content Editor
+               Draft Content Editor
             </button>
             <button
               id="draft-subtab-optimization"
@@ -721,13 +721,13 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                 borderRadius: '8px',
                 fontSize: '13px',
                 fontWeight: activeTab === 'optimization' ? 700 : 500,
-                border: activeTab === 'optimization' ? '1px solid #2563eb' : '1px solid transparent',
-                backgroundColor: activeTab === 'optimization' ? '#eff6ff' : 'transparent',
-                color: activeTab === 'optimization' ? '#1e40af' : '#64748b',
+                border: activeTab === 'optimization' ? '1px solid #774DA9' : '1px solid transparent',
+                backgroundColor: activeTab === 'optimization' ? '#f5f0fa' : 'transparent',
+                color: activeTab === 'optimization' ? '#774DA9' : '#64748b',
                 cursor: 'pointer',
               }}
             >
-              🎯 SEO Optimization & Keyword Audit
+               SEO Optimization & Keyword Audit
             </button>
             <button
               id="draft-subtab-schema"
@@ -737,13 +737,13 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                 borderRadius: '8px',
                 fontSize: '13px',
                 fontWeight: activeTab === 'schema' ? 700 : 500,
-                border: activeTab === 'schema' ? '1px solid #2563eb' : '1px solid transparent',
-                backgroundColor: activeTab === 'schema' ? '#eff6ff' : 'transparent',
-                color: activeTab === 'schema' ? '#1e40af' : '#64748b',
+                border: activeTab === 'schema' ? '1px solid #774DA9' : '1px solid transparent',
+                backgroundColor: activeTab === 'schema' ? '#f5f0fa' : 'transparent',
+                color: activeTab === 'schema' ? '#774DA9' : '#64748b',
                 cursor: 'pointer',
               }}
             >
-              ⚙️ Schema JSON-LD
+               Schema JSON-LD
             </button>
           </div>
 
@@ -886,7 +886,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                       fontWeight: 600,
                     }}
                   >
-                    📋 Copy All (MD)
+                    Copy All (MD)
                   </button>
                 </div>
 
@@ -906,8 +906,8 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                         style={{
                           fontSize: '11px',
                           fontWeight: 800,
-                          backgroundColor: sec.level === 'H1' ? '#f3e8ff' : '#eff6ff',
-                          color: sec.level === 'H1' ? '#7c3aed' : '#2563eb',
+                          backgroundColor: '#f3e8ff',
+                          color: '#774DA9',
                           padding: '2px 6px',
                           borderRadius: '4px',
                         }}
@@ -964,7 +964,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
               {editFAQs.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                    ❓ Frequently Asked Questions (SERP Schema Targets)
+                    Frequently Asked Questions (SERP Schema Targets)
                   </h3>
                   {editFAQs.map((faq, idx) => (
                     <div
@@ -1037,21 +1037,21 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                 }}
               >
                 <h4 style={{ margin: '0 0 14px 0', fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  🎯 Primary Keyword Performance
+                   Primary Keyword Performance
                 </h4>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '12px' }}>Target Keyword:</span>
                     <div style={{ fontWeight: 700, fontSize: '16px', color: '#0f172a', marginTop: '2px' }}>
-                      🔍 {activeDraft.target_keyword || 'N/A'}
+                      {activeDraft.target_keyword || 'N/A'}
                     </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div style={{ backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                       <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Occurrences in Body:</span>
-                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#2563eb', marginTop: '2px' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#774DA9', marginTop: '2px' }}>
                         {activeDraft.keyword_usage?.target_keyword?.occurrences ?? 0}
                       </div>
                     </div>
@@ -1065,7 +1065,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
-                    <span>{activeDraft.keyword_usage?.target_keyword?.in_title ? '✅' : '⚠️'}</span>
+                    <span>{activeDraft.keyword_usage?.target_keyword?.in_title ? 'Active' : ''}</span>
                     <span style={{ color: '#334155', fontWeight: 600 }}>
                       {activeDraft.keyword_usage?.target_keyword?.in_title
                         ? 'Target keyword present in title / headline'
@@ -1087,7 +1087,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                   <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                    📊 Secondary Keyword Coverage
+                     Secondary Keyword Coverage
                   </h4>
                   <span
                     style={{
@@ -1095,8 +1095,8 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                       fontWeight: 700,
                       padding: '2px 8px',
                       borderRadius: '6px',
-                      backgroundColor: '#eff6ff',
-                      color: '#1d4ed8',
+                      backgroundColor: '#f6f2fb',
+                      color: '#774da9',
                     }}
                   >
                     {activeDraft.keyword_usage?.secondary_coverage_percent ?? 0}% Covered
@@ -1122,7 +1122,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                           }}
                         >
                           <span style={{ fontWeight: 500, color: isFound ? '#166534' : '#991b1b' }}>
-                            {isFound ? '✅' : '❌'} {kw}
+                            {isFound ? 'Active' : 'Failed'} {kw}
                           </span>
                           <span style={{ fontSize: '12px', fontWeight: 700, color: isFound ? '#16a34a' : '#ef4444' }}>
                             {count}x
@@ -1147,7 +1147,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                 }}
               >
                 <h4 style={{ margin: '0 0 14px 0', fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  🔗 Integrated Internal Links ({activeDraft.internal_links?.length || 0})
+                  Integrated Internal Links ({activeDraft.internal_links?.length || 0})
                 </h4>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
@@ -1162,7 +1162,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                           border: '1px solid #e2e8f0',
                         }}
                       >
-                        <div style={{ fontWeight: 600, color: '#2563eb' }}>
+                        <div style={{ fontWeight: 600, color: '#774DA9' }}>
                           Anchor: "{link.anchor_text}"
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b' }}>
@@ -1191,7 +1191,7 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>⚙️</span>
+                  <span style={{ fontSize: '18px' }}></span>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
                     Structured Schema.org JSON-LD Output
                   </h3>
@@ -1206,18 +1206,18 @@ export const SEOContentDraftPanel: React.FC<SEOContentDraftPanelProps> = ({
                     padding: '5px 12px',
                     fontSize: '12px',
                     fontWeight: 600,
-                    color: '#2563eb',
+                    color: '#774DA9',
                     cursor: 'pointer',
                   }}
                 >
-                  📋 Copy JSON-LD
+                  Copy JSON-LD
                 </button>
               </div>
 
               <pre
                 style={{
-                  backgroundColor: '#0f172a',
-                  color: '#38bdf8',
+                  backgroundColor: '#24143c',
+                  color: '#e9d5ff',
                   padding: '16px',
                   borderRadius: '8px',
                   fontSize: '13px',

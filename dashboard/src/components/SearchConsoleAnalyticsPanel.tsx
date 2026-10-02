@@ -227,8 +227,8 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
   }, [timeseries, metricView]);
 
   const metricColors: Record<MetricViewType, { stroke: string; fill: string; badge: string; label: string; unit: string }> = {
-    clicks: { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)', badge: '#dbeafe', label: 'Clicks', unit: '' },
-    impressions: { stroke: '#7c3aed', fill: 'rgba(124, 58, 237, 0.12)', badge: '#ede9fe', label: 'Impressions', unit: '' },
+    clicks: { stroke: '#774DA9', fill: 'rgba(119, 77, 169, 0.12)', badge: '#f6f2fb', label: 'Clicks', unit: '' },
+    impressions: { stroke: '#a372df', fill: 'rgba(163, 114, 223, 0.12)', badge: '#fbf9fd', label: 'Impressions', unit: '' },
     ctr: { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.12)', badge: '#d1fae5', label: 'CTR', unit: '%' },
     position: { stroke: '#d97706', fill: 'rgba(217, 119, 6, 0.12)', badge: '#fef3c7', label: 'Avg Position', unit: '' },
   };
@@ -241,7 +241,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
       <div style={headerContainerStyle}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>📈</span>
+            <span style={{ fontSize: '24px' }}></span>
             <h3 id="gsc-analytics-title" style={panelTitleStyle}>
               Search Console Search Analytics
             </h3>
@@ -328,12 +328,12 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
           >
             {isSyncing ? (
               <>
-                <span className="spinner-icon" style={spinAnimation}>🔄</span>
+                <span className="spinner-icon" style={spinAnimation}>Syncing...</span>
                 <span>Syncing...</span>
               </>
             ) : (
               <>
-                <span>⚡</span>
+                
                 <span>Sync Now</span>
               </>
             )}
@@ -346,7 +346,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
         <div style={syncSuccessBannerStyle} role="alert">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>✅</span>
+              <span style={{ fontSize: '18px' }}>Active</span>
               <div>
                 <strong style={{ fontSize: '14px', color: '#065f46' }}>Synchronization Complete!</strong>
                 <div style={{ fontSize: '13px', color: '#047857' }}>
@@ -361,7 +361,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
               style={dismissBtnStyle}
               aria-label="Dismiss summary"
             >
-              ✕
+              X
             </button>
           </div>
         </div>
@@ -370,7 +370,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
       {/* Sync / General Error Banner */}
       {(syncError || error) && (
         <div style={errorBannerStyle} role="alert">
-          <span style={{ fontSize: '18px' }}>⚠️</span>
+          <span style={{ fontSize: '18px' }}></span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: '14px', color: '#991b1b' }}>
               {syncError ? 'Sync Error' : 'Analytics Error'}
@@ -402,7 +402,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
       {/* Disconnected / Empty State */}
       {!isLoading && !hasData && (
         <div style={emptyStateCardStyle}>
-          <div style={{ fontSize: '42px', marginBottom: '12px' }}>📊</div>
+          <div style={{ fontSize: '42px', marginBottom: '12px' }}></div>
           <h4 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 700, color: '#111827' }}>
             No Search Console Analytics Data Yet
           </h4>
@@ -418,7 +418,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
               disabled={isSyncing}
               style={primaryActionBtnStyle}
             >
-              {isSyncing ? 'Syncing...' : '⚡ Sync Search Console Data'}
+              {isSyncing ? 'Syncing...' : 'Sync Search Console Data'}
             </button>
           ) : (
             <div style={{ fontSize: '13px', color: '#4b5563', fontWeight: 500 }}>
@@ -434,24 +434,24 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
           {/* 1. Overview Metric Cards */}
           <div style={kpiGridStyle}>
             {/* Total Clicks */}
-            <div style={{ ...kpiCardStyle, borderTop: '4px solid #2563eb' }}>
+            <div style={{ ...kpiCardStyle, borderTop: '4px solid #774DA9' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={kpiLabelStyle}>Total Clicks</span>
-                <span style={{ fontSize: '20px' }}>🖱️</span>
+                <span style={{ fontSize: '20px' }}></span>
               </div>
-              <div style={{ ...kpiValueStyle, color: '#2563eb' }}>
+              <div style={{ ...kpiValueStyle, color: '#774DA9' }}>
                 {performance.total_clicks.toLocaleString()}
               </div>
               <div style={kpiSubtextStyle}>Organic search visits to your site</div>
             </div>
 
             {/* Total Impressions */}
-            <div style={{ ...kpiCardStyle, borderTop: '4px solid #7c3aed' }}>
+            <div style={{ ...kpiCardStyle, borderTop: '4px solid #a372df' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={kpiLabelStyle}>Total Impressions</span>
-                <span style={{ fontSize: '20px' }}>👁️</span>
+                <span style={{ fontSize: '20px' }}></span>
               </div>
-              <div style={{ ...kpiValueStyle, color: '#7c3aed' }}>
+              <div style={{ ...kpiValueStyle, color: '#a372df' }}>
                 {performance.total_impressions.toLocaleString()}
               </div>
               <div style={kpiSubtextStyle}>Organic appearances on Google SERPs</div>
@@ -461,7 +461,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
             <div style={{ ...kpiCardStyle, borderTop: '4px solid #059669' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={kpiLabelStyle}>Average CTR</span>
-                <span style={{ fontSize: '20px' }}>🎯</span>
+                <span style={{ fontSize: '20px' }}></span>
               </div>
               <div style={{ ...kpiValueStyle, color: '#059669' }}>
                 {(performance.average_ctr * 100).toFixed(2)}%
@@ -473,7 +473,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
             <div style={{ ...kpiCardStyle, borderTop: '4px solid #d97706' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={kpiLabelStyle}>Average Position</span>
-                <span style={{ fontSize: '20px' }}>🏆</span>
+                <span style={{ fontSize: '20px' }}></span>
               </div>
               <div style={{ ...kpiValueStyle, color: '#d97706' }}>
                 #{performance.average_position.toFixed(1)}
@@ -602,10 +602,10 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                       {chartData.points[hoveredPointIndex].raw.date}
                     </div>
                     <div style={{ fontSize: '11px', color: '#374151', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <div>🖱️ Clicks: <strong>{chartData.points[hoveredPointIndex].raw.clicks}</strong></div>
-                      <div>👁️ Impressions: <strong>{chartData.points[hoveredPointIndex].raw.impressions}</strong></div>
-                      <div>🎯 CTR: <strong>{(chartData.points[hoveredPointIndex].raw.ctr * 100).toFixed(2)}%</strong></div>
-                      <div>🏆 Position: <strong>#{chartData.points[hoveredPointIndex].raw.position.toFixed(1)}</strong></div>
+                      <div> Clicks: <strong>{chartData.points[hoveredPointIndex].raw.clicks}</strong></div>
+                      <div> Impressions: <strong>{chartData.points[hoveredPointIndex].raw.impressions}</strong></div>
+                      <div> CTR: <strong>{(chartData.points[hoveredPointIndex].raw.ctr * 100).toFixed(2)}%</strong></div>
+                      <div> Position: <strong>#{chartData.points[hoveredPointIndex].raw.position.toFixed(1)}</strong></div>
                     </div>
                   </div>
                 )}
@@ -623,28 +623,28 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                   onClick={() => setActiveTab('queries')}
                   style={activeTab === 'queries' ? activeTabBtnStyle : tabBtnStyle}
                 >
-                  🔍 Top Queries ({queries.length})
+                  Top Queries ({queries.length})
                 </button>
                 <button
                   id="gsc-tab-pages"
                   onClick={() => setActiveTab('pages')}
                   style={activeTab === 'pages' ? activeTabBtnStyle : tabBtnStyle}
                 >
-                  📄 Top Pages ({pages.length})
+                   Top Pages ({pages.length})
                 </button>
                 <button
                   id="gsc-tab-devices"
                   onClick={() => setActiveTab('devices')}
                   style={activeTab === 'devices' ? activeTabBtnStyle : tabBtnStyle}
                 >
-                  💻 Devices ({devices.length})
+                  Devices ({devices.length})
                 </button>
                 <button
                   id="gsc-tab-countries"
                   onClick={() => setActiveTab('countries')}
                   style={activeTab === 'countries' ? activeTabBtnStyle : tabBtnStyle}
                 >
-                  🌍 Countries ({countries.length})
+                  Countries ({countries.length})
                 </button>
               </div>
 
@@ -687,7 +687,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                             <td style={{ ...tdStyle, fontWeight: 600, color: '#111827' }}>
                               {item.query}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#2563eb' }}>
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#774DA9' }}>
                               {item.clicks.toLocaleString()}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', color: '#4b5563' }}>
@@ -728,18 +728,18 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                       <tbody>
                         {filteredPages.map((item, idx) => (
                           <tr key={idx} style={tableRowStyle}>
-                            <td style={{ ...tdStyle, color: '#1d4ed8', wordBreak: 'break-all', maxWidth: '400px' }}>
+                            <td style={{ ...tdStyle, color: '#774DA9', wordBreak: 'break-all', maxWidth: '400px' }}>
                               <a
                                 href={item.page}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ color: '#1d4ed8', textDecoration: 'none' }}
+                                style={{ color: '#774DA9', textDecoration: 'none' }}
                                 title={item.page}
                               >
                                 {item.page} ↗
                               </a>
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#2563eb' }}>
+                            <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#774DA9' }}>
                               {item.clicks.toLocaleString()}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'right', color: '#4b5563' }}>
@@ -768,7 +768,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                     <div style={emptyTabStyle}>No device data available.</div>
                   ) : (
                     devices.map((dev, idx) => {
-                      const icon = dev.device.toLowerCase() === 'mobile' ? '📱' : dev.device.toLowerCase() === 'tablet' ? '📟' : '💻';
+                      const icon = dev.device.toLowerCase() === 'mobile' ? 'Mobile' : dev.device.toLowerCase() === 'tablet' ? 'Tablet' : 'Desktop';
                       const totalClicks = performance.total_clicks || 1;
                       const clickShare = ((dev.clicks / totalClicks) * 100).toFixed(1);
 
@@ -781,7 +781,7 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                                 {dev.device}
                               </span>
                             </div>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '3px 8px', borderRadius: '12px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#774DA9', backgroundColor: '#f6f2fb', padding: '3px 8px', borderRadius: '12px' }}>
                               {clickShare}% share
                             </span>
                           </div>
@@ -818,17 +818,17 @@ export const SearchConsoleAnalyticsPanel: React.FC<SearchConsoleAnalyticsPanelPr
                     <div style={emptyTabStyle}>No country data available.</div>
                   ) : (
                     countries.map((c, idx) => {
-                      const flag = c.country.toLowerCase() === 'eth' ? '🇪🇹' : c.country.toLowerCase() === 'usa' ? '🇺🇸' : '🌍';
+                      const flag = c.country.toLowerCase() === 'eth' ? 'ET' : c.country.toLowerCase() === 'usa' ? 'US' : c.country.substring(0, 2).toUpperCase();
                       return (
                         <div key={idx} style={breakdownCardStyle}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '22px' }}>{flag}</span>
+                              <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f6f2fb', color: '#774DA9' }}>{flag}</span>
                               <span style={{ fontWeight: 700, fontSize: '15px', color: '#111827', textTransform: 'uppercase' }}>
                                 {c.country}
                               </span>
                             </div>
-                            <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '14px' }}>
+                            <span style={{ fontWeight: 700, color: '#774DA9', fontSize: '14px' }}>
                               {c.clicks.toLocaleString()} clicks
                             </span>
                           </div>
@@ -901,9 +901,9 @@ const propertyBadgeStyle: React.CSSProperties = {
   fontWeight: 600,
   padding: '2px 8px',
   borderRadius: '6px',
-  backgroundColor: '#eff6ff',
-  color: '#2563eb',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f6f2fb',
+  color: '#774DA9',
+  border: '1px solid #dac8ee',
 };
 
 const presetGroupStyle: React.CSSProperties = {
@@ -927,7 +927,7 @@ const presetBtnStyle: React.CSSProperties = {
 
 const activePresetBtnStyle: React.CSSProperties = {
   ...presetBtnStyle,
-  color: '#1d4ed8',
+  color: '#774DA9',
   backgroundColor: '#ffffff',
   boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
 };
@@ -945,26 +945,26 @@ const syncBtnStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: '6px',
   padding: '8px 16px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '8px',
   fontSize: '13px',
   fontWeight: 600,
   cursor: 'pointer',
-  boxShadow: '0 1px 2px rgba(37,99,235,0.2)',
+  boxShadow: '0 1px 2px rgba(119,77,169,0.2)',
   transition: 'background-color 0.15s',
 };
 
 const syncingBtnStyle: React.CSSProperties = {
   ...syncBtnStyle,
-  backgroundColor: '#93c5fd',
+  backgroundColor: '#dac8ee',
   cursor: 'not-allowed',
 };
 
 const primaryActionBtnStyle: React.CSSProperties = {
   padding: '10px 20px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '8px',
@@ -1024,7 +1024,7 @@ const spinnerStyle: React.CSSProperties = {
   width: '32px',
   height: '32px',
   border: '3px solid #e5e7eb',
-  borderTop: '3px solid #2563eb',
+  borderTop: '3px solid #774DA9',
   borderRadius: '50%',
   animation: 'spin 0.8s linear infinite',
 };
@@ -1152,8 +1152,8 @@ const tabBtnStyle: React.CSSProperties = {
 
 const activeTabBtnStyle: React.CSSProperties = {
   ...tabBtnStyle,
-  color: '#1d4ed8',
-  backgroundColor: '#eff6ff',
+  color: '#774DA9',
+  backgroundColor: '#f6f2fb',
 };
 
 const searchInputStyle: React.CSSProperties = {

@@ -19,7 +19,7 @@ const plans = [
       'Basic Amharic & English SERP checks',
       'Google Search Console integration',
       'Google Analytics 4 integration',
-      'Standard email support',
+      'Community email support',
     ],
   },
   {
@@ -54,7 +54,7 @@ const plans = [
     ctaLink: '/signup?plan=agency',
     featured: false,
     features: [
-      'Unlimited projects (subject to fair use)',
+      'Unlimited projects (fair use)',
       '500 Keywords tracked with SERP histories',
       'Deep site audits with custom crawl configurations',
       'White-label executive PDF reports with custom logos',
@@ -70,76 +70,75 @@ const plans = [
 const faqs = [
   {
     q: 'How does payment work for Ethiopian businesses?',
-    a: 'We support local Ethiopian payment methods including Telebirr and local bank transfers via Doxa Payments, alongside international debit/credit cards. Billing is denominated directly in Ethiopian Birr (ETB) with no foreign currency conversion fees.',
+    a: 'We support local Ethiopian payment methods including Telebirr and local bank transfers via Doxa Payments, alongside international debit/credit cards. Billing is denominated directly in Ethiopian Birr (ETB) with no foreign exchange overhead.',
   },
   {
-    q: 'Are there hidden setup fees or minimum contracts?',
+    q: 'Are there hidden setup fees or long-term contracts?',
     a: 'No. All paid plans are billed on a month-to-month basis. You can upgrade, downgrade, or cancel your subscription at any time without penalties.',
   },
   {
     q: 'Does DoxaRank track Google Ethiopia accurately?',
-    a: 'Yes. Our crawlers query google.com.et with localized IP routing, geolocation headers, and language headers to deliver true ranking positions as seen by real users in Addis Ababa and across Ethiopia.',
+    a: 'Yes. Our systems query google.com.et with localized IP routing, geolocation parameters, and language headers to deliver true ranking positions as seen by real users in Addis Ababa and regional cities.',
   },
   {
     q: 'What is white-label reporting in the Agency plan?',
-    a: 'Agency subscribers can generate branded PDF audit and rank reports featuring their own agency name, logo, custom header colors, and executive summaries for distribution to their clients.',
+    a: 'Agency subscribers can generate branded executive PDF audit and ranking reports featuring their own agency branding, client logos, and custom notes with zero DoxaRank marks.',
   },
 ];
 ---
 
 <Layout title="Pricing Plans — DoxaRank | Ethiopia SEO SaaS" description="Transparent pricing for DoxaRank. Free (ETB 0), Starter (ETB 1,500/mo), and Agency (ETB 6,000/mo). Local ETB payments supported.">
-  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+  <div class="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="text-center max-w-3xl mx-auto mb-16">
-      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
-        Predictable ETB Pricing
+    <div class="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#f3eef9] border border-[#dac8ee] text-[#774DA9] text-xs font-bold uppercase tracking-wider mb-4">
+        <img src="/doxa-logo.png" alt="Doxa" class="h-3.5 w-3.5 object-contain rounded-full" />
+        Transparent ETB Pricing
       </div>
-      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
-        Simple, transparent plans for every stage of growth
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#24143C] mb-4">
+        Simple, predictable plans for every stage of growth
       </h1>
-      <p class="text-lg text-slate-600">
-        Choose the plan that fits your business. Start free, upgrade anytime, and pay locally with Telebirr or Ethiopian bank transfer.
+      <p class="text-base sm:text-lg text-slate-600">
+        Choose the plan that fits your business. Start free, upgrade anytime, and pay locally in Ethiopian Birr (ETB) with Telebirr or bank transfer.
       </p>
     </div>
 
-    <!-- Pricing Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch mb-24">
+    <!-- Pricing Cards (3 Columns) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-stretch mb-20">
       {plans.map((plan) => (
-        <div class={`relative rounded-3xl p-8 flex flex-col justify-between transition-all duration-300 ${
+        <div class={`relative rounded-2xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-200 ${
           plan.featured 
-            ? 'bg-slate-900 text-white shadow-2xl shadow-emerald-950/20 ring-2 ring-emerald-500 md:-translate-y-2' 
-            : 'bg-white text-slate-900 border border-slate-200 shadow-sm hover:shadow-md'
+            ? 'bg-[#24143C] text-white shadow-xl shadow-purple-950/20 ring-2 ring-[#774DA9] md:-translate-y-2' 
+            : 'bg-white text-slate-900 border border-slate-200 shadow-xs hover:border-[#774DA9]/50 hover:shadow-md'
         }`}>
           {plan.badge && (
             <div class="absolute -top-3.5 left-1/2 -translate-x-1/2">
-              <span class={`px-4 py-1 rounded-full text-xs font-bold tracking-wide uppercase shadow-sm ${
-                plan.featured ? 'bg-emerald-500 text-slate-950' : 'bg-slate-100 text-slate-700 border border-slate-200'
-              }`}>
+              <span class="px-3.5 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-[#774DA9] text-white shadow-sm border border-purple-400/40">
                 {plan.badge}
               </span>
             </div>
           )}
 
           <div>
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3">
               <h3 class="text-xl font-bold tracking-tight">{plan.name}</h3>
             </div>
             
-            <p class={`text-sm mb-6 ${plan.featured ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p class={`text-xs sm:text-sm mb-5 leading-relaxed ${plan.featured ? 'text-purple-200' : 'text-slate-600'}`}>
               {plan.description}
             </p>
 
-            <div class="mb-8 pb-6 border-b border-dashed ${plan.featured ? 'border-slate-800' : 'border-slate-200'}">
-              <span class="text-4xl sm:text-5xl font-extrabold tracking-tight">{plan.price}</span>
-              <span class={`text-sm ml-2 font-medium ${plan.featured ? 'text-slate-400' : 'text-slate-500'}`}>
+            <div class={`mb-6 pb-5 border-b ${plan.featured ? 'border-[#3b1d5f]' : 'border-slate-100'}`}>
+              <span class="text-3xl sm:text-4xl font-extrabold tracking-tight">{plan.price}</span>
+              <span class={`text-xs ml-2 font-medium ${plan.featured ? 'text-purple-300' : 'text-slate-500'}`}>
                 /{plan.period}
               </span>
             </div>
 
-            <ul class="space-y-3.5 mb-8 text-sm">
+            <ul class="space-y-3 mb-8 text-xs sm:text-sm">
               {plan.features.map((feature) => (
-                <li class="flex items-start gap-3">
-                  <svg class={`w-5 h-5 shrink-0 mt-0.5 ${plan.featured ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <li class="flex items-start gap-2.5">
+                  <svg class={`w-4 h-4 shrink-0 mt-0.5 ${plan.featured ? 'text-[#a372df]' : 'text-[#774DA9]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                   </svg>
                   <span class={plan.featured ? 'text-slate-200' : 'text-slate-700'}>{feature}</span>
@@ -151,10 +150,10 @@ const faqs = [
           <div>
             <a
               href={plan.ctaLink}
-              class={`w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-150 ${
+              class={`w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all ${
                 plan.featured
-                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25 active:scale-[0.99]'
-                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-sm active:scale-[0.99]'
+                  ? 'bg-[#774DA9] hover:bg-[#865cb8] text-white shadow-md'
+                  : 'bg-[#24143C] hover:bg-[#3b1d5f] text-white shadow-xs'
               }`}
             >
               <span>{plan.cta}</span>
@@ -168,17 +167,17 @@ const faqs = [
     </div>
 
     <!-- FAQ Section -->
-    <div class="max-w-3xl mx-auto border-t border-slate-200 pt-16">
-      <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-10">
+    <div class="max-w-3xl mx-auto border-t border-purple-900/10 pt-14">
+      <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-[#24143C] text-center mb-8">
         Frequently Asked Questions
       </h2>
-      <div class="space-y-6">
+      <div class="space-y-4">
         {faqs.map((faq) => (
-          <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-6">
-            <h3 class="text-base font-bold text-slate-900 mb-2">
+          <div class="bg-white border border-slate-200/90 rounded-xl p-5 hover:border-[#774DA9]/40 transition">
+            <h3 class="text-sm font-bold text-[#24143C] mb-1.5">
               {faq.q}
             </h3>
-            <p class="text-sm text-slate-600 leading-relaxed">
+            <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
               {faq.a}
             </p>
           </div>

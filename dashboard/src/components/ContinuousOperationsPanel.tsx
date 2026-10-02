@@ -199,7 +199,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
       case 'active':
         return '#10b981';
       case 'running':
-        return '#3b82f6';
+        return '#774da9';
       case 'paused':
         return '#f59e0b';
       case 'waiting':
@@ -238,7 +238,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>⚡</span>
+            
             <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-h, #fff)' }}>
               Continuous SEO Operations
             </h2>
@@ -266,7 +266,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
           <button
             onClick={() => setIsCreating(true)}
             style={{
-              background: '#8b5cf6',
+              background: '#774da9',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
@@ -431,7 +431,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   disabled={isActionLoading}
                   style={{
                     padding: '8px 16px',
-                    background: '#8b5cf6',
+                    background: '#774da9',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '6px',
@@ -462,7 +462,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
             borderRadius: '8px',
           }}
         >
-          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔄</div>
+          
           <h3 style={{ margin: '0 0 6px 0', color: 'var(--text-h, #fff)' }}>No Continuous Operation Configured</h3>
           <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text, #9ca3af)' }}>
             Start continuous autonomous SEO cycles to periodically audit, investigate, and plan optimizations.
@@ -470,7 +470,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
           <button
             onClick={() => setIsCreating(true)}
             style={{
-              background: '#8b5cf6',
+              background: '#774da9',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
@@ -498,7 +498,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    background: selectedOp?.id === op.id ? '#8b5cf6' : '#22232d',
+                    background: selectedOp?.id === op.id ? '#774da9' : '#22232d',
                     color: selectedOp?.id === op.id ? '#fff' : 'var(--text, #9ca3af)',
                     border: '1px solid var(--border, #2e303a)',
                   }}
@@ -612,7 +612,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                     style={{
                       padding: '6px 14px',
                       borderRadius: '6px',
-                      background: selectedOp.status === 'running' ? '#4b5563' : '#3b82f6',
+                      background: selectedOp.status === 'running' ? '#4b5563' : '#774da9',
                       color: '#fff',
                       border: 'none',
                       fontSize: '12px',
@@ -646,7 +646,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
 
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--text, #9ca3af)', textTransform: 'uppercase' }}>Next Run</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: selectedOp.status === 'paused' ? '#9ca3af' : '#60a5fa' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: selectedOp.status === 'paused' ? '#9ca3af' : '#dac8ee' }}>
                     {selectedOp.status === 'paused' ? 'Paused' : formatRelativeTime(selectedOp.next_run_at)}
                   </div>
                 </div>

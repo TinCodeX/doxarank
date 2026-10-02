@@ -131,7 +131,7 @@ export const AuditIssueFormModal: React.FC<AuditIssueFormModalProps> = ({
             type="button"
             style={closeBtnStyle}
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -154,9 +154,9 @@ export const AuditIssueFormModal: React.FC<AuditIssueFormModalProps> = ({
                 onChange={(e) => setSeverity(e.target.value as IssueSeverity)}
                 style={inputStyle}
               >
-                <option value="critical">🔴 Critical</option>
-                <option value="warning">🟡 Warning</option>
-                <option value="notice">🔵 Notice / Info</option>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="notice">Notice / Info</option>
               </select>
             </div>
 
@@ -347,7 +347,7 @@ const cancelBtnStyle: React.CSSProperties = {
 
 const submitBtnStyle: React.CSSProperties = {
   padding: '8px 16px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

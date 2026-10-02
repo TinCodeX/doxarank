@@ -80,7 +80,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
             onClick={onClose}
             style={closeButtonStyle}
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -214,7 +214,7 @@ const cancelButtonStyle: React.CSSProperties = {
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: '10px 18px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

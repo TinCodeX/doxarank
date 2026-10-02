@@ -117,7 +117,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
       critical: { bg: '#fef2f2', color: '#b91c1c', border: '#fca5a5' },
       high: { bg: '#fff7ed', color: '#c2410c', border: '#fdba74' },
       medium: { bg: '#fefce8', color: '#a16207', border: '#fde047' },
-      low: { bg: '#eff6ff', color: '#1d4ed8', border: '#93c5fd' },
+      low: { bg: '#f6f2fb', color: '#774da9', border: '#dac8ee' },
       info: { bg: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
     };
     const s = map[sev] || map.info;
@@ -195,8 +195,8 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
             </h2>
             <span
               style={{
-                backgroundColor: '#eff6ff',
-                color: '#1d4ed8',
+                backgroundColor: '#f6f2fb',
+                color: '#774da9',
                 fontSize: '12px',
                 fontWeight: 600,
                 padding: '2px 8px',
@@ -221,7 +221,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
             alignItems: 'center',
             gap: '8px',
             padding: '10px 18px',
-            backgroundColor: '#2563eb',
+            backgroundColor: '#774DA9',
             color: '#ffffff',
             border: 'none',
             borderRadius: '8px',
@@ -232,7 +232,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
             boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
           }}
         >
-          {generating ? 'Evaluating Findings...' : '⚡ Generate Recommendations'}
+          {generating ? 'Evaluating Findings...' : 'Generate Recommendations'}
         </button>
       </div>
 
@@ -331,8 +331,8 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
                 cursor: 'pointer',
                 fontSize: '13px',
                 fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#2563eb' : '#6b7280',
-                borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+                color: isActive ? '#774DA9' : '#6b7280',
+                borderBottom: isActive ? '2px solid #774DA9' : '2px solid transparent',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -357,7 +357,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
             border: '1px dashed #e5e7eb',
           }}
         >
-          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}></div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: '#374151' }}>
             No recommendations in this view
           </div>
@@ -431,10 +431,10 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
                         <span style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>● Acknowledged</span>
                       )}
                       {rec.status === 'resolved' && (
-                        <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 600 }}>✓ Resolved</span>
+                        <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 600 }}>● Resolved</span>
                       )}
                       {rec.status === 'dismissed' && (
-                        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600 }}>✕ Dismissed</span>
+                        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600 }}>X Dismissed</span>
                       )}
                     </div>
 
@@ -503,7 +503,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
                           cursor: 'pointer',
                         }}
                       >
-                        ✓ Mark Resolved
+                        Check Mark Resolved
                       </button>
                     ) : (
                       <button
@@ -553,7 +553,7 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
                         cursor: 'pointer',
                       }}
                     >
-                      {isExpanded ? 'Less ▲' : 'Details ▼'}
+                      {isExpanded ? 'Less' : 'Details'}
                     </button>
                   </div>
                 </div>
@@ -588,16 +588,16 @@ export const SEORecommendationsPanel: React.FC<SEORecommendationsPanelProps> = (
 
                     <div
                       style={{
-                        backgroundColor: '#eff6ff',
+                        backgroundColor: '#f6f2fb',
                         padding: '12px',
                         borderRadius: '6px',
-                        border: '1px solid #dbeafe',
+                        border: '1px solid #dac8ee',
                       }}
                     >
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#774da9', textTransform: 'uppercase', marginBottom: '4px' }}>
                         Recommended Action
                       </div>
-                      <div style={{ fontSize: '13px', color: '#1e3a8a', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: '13px', color: '#3b1d5f', lineHeight: 1.5 }}>
                         {rec.recommended_action}
                       </div>
                     </div>

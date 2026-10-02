@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CreditCard, X, Check, CheckCircle2 } from 'lucide-react';
 import type { UserSubscriptionSummary, PlanSummary, PaymentTransaction } from '../types/subscription';
 import { getPlans, createCheckoutSession, verifyPayment, getPaymentHistory } from '../api/subscriptions';
 
@@ -178,7 +179,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px' }}>💳</span>
+              <CreditCard size={20} color="#774DA9" />
               <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#0f172a' }}>
                 Subscription & Billing
               </h2>
@@ -196,13 +197,17 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               border: 'none',
               borderRadius: '8px',
               padding: '6px 12px',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 600,
               cursor: 'pointer',
               color: '#475569',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
-            ✕ Close
+            <X size={15} />
+            <span>Close</span>
           </button>
         </div>
 
@@ -215,9 +220,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               padding: '12px 4px',
               border: 'none',
               background: 'none',
-              borderBottom: activeTab === 'plans' ? '2px solid #2563eb' : '2px solid transparent',
+              borderBottom: activeTab === 'plans' ? '2px solid #774DA9' : '2px solid transparent',
               fontWeight: activeTab === 'plans' ? 700 : 500,
-              color: activeTab === 'plans' ? '#2563eb' : '#64748b',
+              color: activeTab === 'plans' ? '#774DA9' : '#64748b',
               cursor: 'pointer',
               fontSize: '14px',
             }}
@@ -232,9 +237,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 padding: '12px 4px',
                 border: 'none',
                 background: 'none',
-                borderBottom: activeTab === 'checkout' ? '2px solid #2563eb' : '2px solid transparent',
+                borderBottom: activeTab === 'checkout' ? '2px solid #774DA9' : '2px solid transparent',
                 fontWeight: activeTab === 'checkout' ? 700 : 500,
-                color: activeTab === 'checkout' ? '#2563eb' : '#64748b',
+                color: activeTab === 'checkout' ? '#774DA9' : '#64748b',
                 cursor: 'pointer',
                 fontSize: '14px',
                 display: 'flex',
@@ -264,9 +269,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               padding: '12px 4px',
               border: 'none',
               background: 'none',
-              borderBottom: activeTab === 'history' ? '2px solid #2563eb' : '2px solid transparent',
+              borderBottom: activeTab === 'history' ? '2px solid #774DA9' : '2px solid transparent',
               fontWeight: activeTab === 'history' ? 700 : 500,
-              color: activeTab === 'history' ? '#2563eb' : '#64748b',
+              color: activeTab === 'history' ? '#774DA9' : '#64748b',
               cursor: 'pointer',
               fontSize: '14px',
             }}
@@ -290,20 +295,20 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   ? '#f0fdf4'
                   : actionMessage.type === 'error'
                   ? '#fef2f2'
-                  : '#eff6ff',
+                  : '#f6f2fb',
               border: `1px solid ${
                 actionMessage.type === 'success'
                   ? '#bbf7d0'
                   : actionMessage.type === 'error'
                   ? '#fecaca'
-                  : '#bfdbfe'
+                  : '#dac8ee'
               }`,
               color:
                 actionMessage.type === 'success'
                   ? '#166534'
                   : actionMessage.type === 'error'
                   ? '#991b1b'
-                  : '#1e40af',
+                  : '#774DA9',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -313,8 +318,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             <button
               onClick={() => setActionMessage(null)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+              aria-label="Close message"
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
         )}
@@ -403,7 +409,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   id="plan-card-free"
                   style={{
                     borderRadius: '12px',
-                    border: currentPlanCode === 'FREE' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                    border: currentPlanCode === 'FREE' ? '2px solid #774DA9' : '1px solid #e2e8f0',
                     padding: '20px',
                     backgroundColor: '#ffffff',
                     display: 'flex',
@@ -424,12 +430,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     </p>
 
                     <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>1</strong> tracked website</div>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>3</strong> keywords</div>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>5</strong> daily SEO tool runs</div>
-                      <div style={{ marginBottom: '8px', color: '#94a3b8' }}>✕ No rank tracking</div>
-                      <div style={{ marginBottom: '8px', color: '#94a3b8' }}>✕ No GSC / GA4 integrations</div>
-                      <div style={{ color: '#94a3b8' }}>✕ No technical crawler</div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>1</strong> tracked website</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>3</strong> keywords</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>5</strong> daily SEO tool runs</span></div>
+                      <div style={{ marginBottom: '8px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No rank tracking</span></div>
+                      <div style={{ marginBottom: '8px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No GSC / GA4 integrations</span></div>
+                      <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No technical crawler</span></div>
                     </div>
                   </div>
 
@@ -456,7 +462,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   id="plan-card-starter"
                   style={{
                     borderRadius: '12px',
-                    border: currentPlanCode === 'STARTER' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    border: currentPlanCode === 'STARTER' ? '2px solid #774DA9' : '1px solid #e2e8f0',
                     padding: '20px',
                     backgroundColor: '#ffffff',
                     display: 'flex',
@@ -471,7 +477,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       position: 'absolute',
                       top: '-10px',
                       right: '16px',
-                      backgroundColor: '#2563eb',
+                      backgroundColor: '#774DA9',
                       color: '#ffffff',
                       fontSize: '11px',
                       fontWeight: 700,
@@ -487,7 +493,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
                       Starter
                     </h3>
-                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#1d4ed8' }}>
+                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#774DA9' }}>
                       {isLoadingPlans ? '...' : starterPrice}
                       <span style={{ fontSize: '13px', fontWeight: 500, color: '#64748b' }}> / month</span>
                     </div>
@@ -496,13 +502,13 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     </p>
 
                     <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>3</strong> tracked websites</div>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>50</strong> keywords on google.com.et</div>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>Unlimited</strong> tool usage</div>
-                      <div style={{ marginBottom: '8px' }}>✓ Daily Google Ethiopia rank tracker</div>
-                      <div style={{ marginBottom: '8px' }}>✓ GSC, GA4, Clarity & GTM OAuth</div>
-                      <div style={{ marginBottom: '8px' }}>✓ Technical site audit crawler</div>
-                      <div style={{ color: '#94a3b8' }}>✕ Competitor SERP snapshots</div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>3</strong> tracked websites</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>50</strong> keywords on google.com.et</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>Unlimited</strong> tool usage</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Daily Google Ethiopia rank tracker</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>GSC, GA4, Clarity & GTM OAuth</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Technical site audit crawler</span></div>
+                      <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>Competitor SERP snapshots</span></div>
                     </div>
                   </div>
 
@@ -515,7 +521,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       padding: '10px 16px',
                       borderRadius: '8px',
                       border: 'none',
-                      backgroundColor: currentPlanCode === 'STARTER' ? '#3b82f6' : '#2563eb',
+                      backgroundColor: '#774DA9',
                       color: '#ffffff',
                       fontWeight: 600,
                       cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
@@ -531,7 +537,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   id="plan-card-agency"
                   style={{
                     borderRadius: '12px',
-                    border: currentPlanCode === 'AGENCY' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                    border: currentPlanCode === 'AGENCY' ? '2px solid #774DA9' : '1px solid #cbd5e1',
                     padding: '20px',
                     backgroundColor: '#ffffff',
                     display: 'flex',
@@ -543,7 +549,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
                       Agency
                     </h3>
-                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#6d28d9' }}>
+                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#774DA9' }}>
                       {isLoadingPlans ? '...' : agencyPrice}
                       <span style={{ fontSize: '13px', fontWeight: 500, color: '#64748b' }}> / month</span>
                     </div>
@@ -552,12 +558,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     </p>
 
                     <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>20</strong> tracked websites</div>
-                      <div style={{ marginBottom: '8px' }}>✓ <strong>500</strong> keywords</div>
-                      <div style={{ marginBottom: '8px' }}>✓ Everything in Starter tier</div>
-                      <div style={{ marginBottom: '8px' }}>✓ Weekly Competitor SERP snapshots</div>
-                      <div style={{ marginBottom: '8px' }}>✓ White-label PDF reporting</div>
-                      <div style={{ marginBottom: '8px' }}>✓ Multi-site audit automation</div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>20</strong> tracked websites</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>500</strong> keywords</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Everything in Starter tier</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Weekly Competitor SERP snapshots</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>White-label PDF reporting</span></div>
+                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Multi-site audit automation</span></div>
                     </div>
                   </div>
 
@@ -570,7 +576,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       padding: '10px 16px',
                       borderRadius: '8px',
                       border: 'none',
-                      backgroundColor: '#7c3aed',
+                      backgroundColor: '#774DA9',
                       color: '#ffffff',
                       fontWeight: 600,
                       cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
@@ -645,7 +651,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 700, color: '#0f172a', paddingTop: '8px', borderTop: '1px solid #f8fafc' }}>
                     <span>Amount Due:</span>
-                    <span style={{ color: '#2563eb' }}>
+                    <span style={{ color: '#774DA9' }}>
                       {checkoutTx.amount} {checkoutTx.currency}
                     </span>
                   </div>
@@ -654,7 +660,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 {/* Supported Payment Channels */}
                 <div style={{ margin: '16px 0', padding: '12px', borderRadius: '8px', backgroundColor: '#f8fafc', fontSize: '12px', color: '#475569' }}>
                   <div style={{ fontWeight: 600, marginBottom: '4px' }}>Supported Ethiopian Channels:</div>
-                  <div>📱 Telebirr • 🏦 Commercial Bank of Ethiopia (CBE Birr) • 💳 Chapa / Awash / Stripe</div>
+                  <div>Telebirr • Commercial Bank of Ethiopia (CBE Birr) • Chapa / Awash / Stripe</div>
                 </div>
 
                 {/* Actions */}
@@ -669,14 +675,25 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                           padding: '12px',
                           borderRadius: '8px',
                           border: 'none',
-                          backgroundColor: '#10b981',
+                          backgroundColor: '#774DA9',
                           color: '#ffffff',
                           fontWeight: 700,
                           fontSize: '14px',
                           cursor: isVerifying ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
                         }}
                       >
-                        {isVerifying ? 'Verifying with Gateway...' : '✓ Confirm & Verify Payment'}
+                        {isVerifying ? (
+                          'Verifying with Gateway...'
+                        ) : (
+                          <>
+                            <Check size={16} />
+                            <span>Confirm & Verify Payment</span>
+                          </>
+                        )}
                       </button>
 
                       <button
@@ -697,7 +714,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     </>
                   ) : checkoutTx.status === 'SUCCESS' ? (
                     <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                      <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+                      <CheckCircle2 size={40} color="#16a34a" style={{ margin: '0 auto 8px', display: 'block' }} />
                       <div style={{ fontSize: '16px', fontWeight: 700, color: '#166534', marginBottom: '12px' }}>
                         Subscription Active!
                       </div>
@@ -707,7 +724,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                           padding: '10px 20px',
                           borderRadius: '8px',
                           border: 'none',
-                          backgroundColor: '#2563eb',
+                          backgroundColor: '#774DA9',
                           color: '#ffffff',
                           fontWeight: 600,
                           cursor: 'pointer',

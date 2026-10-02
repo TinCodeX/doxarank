@@ -319,12 +319,12 @@ export const MicrosoftClaritySection: React.FC<MicrosoftClaritySectionProps> = (
       {/* Feedback Messages */}
       {actionError && (
         <div style={errorBannerStyle} id="clarity-integration-error">
-          ⚠️ {actionError}
+           {actionError}
         </div>
       )}
       {successMessage && (
         <div style={successBannerStyle} id="clarity-integration-success">
-          ✅ {successMessage}
+          Active {successMessage}
         </div>
       )}
 
@@ -338,7 +338,7 @@ export const MicrosoftClaritySection: React.FC<MicrosoftClaritySectionProps> = (
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => setShowManualForm(!showManualForm)}
-                style={{ fontSize: '12px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
+                style={{ fontSize: '12px', background: 'none', border: 'none', color: '#774da9', cursor: 'pointer', padding: 0 }}
               >
                 {showManualForm ? 'Hide Manual Entry' : '+ Link by Project ID'}
               </button>
@@ -347,9 +347,9 @@ export const MicrosoftClaritySection: React.FC<MicrosoftClaritySectionProps> = (
                   setProjects(null);
                   handleToggleProjects();
                 }}
-                style={{ fontSize: '12px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
+                style={{ fontSize: '12px', background: 'none', border: 'none', color: '#774da9', cursor: 'pointer', padding: 0 }}
               >
-                🔄 Refresh List
+                Refresh List
               </button>
             </div>
           </div>
@@ -485,13 +485,13 @@ const badgeNeutralStyle: React.CSSProperties = {
   borderRadius: '12px',
   fontSize: '12px',
   fontWeight: 500,
-  backgroundColor: '#e0e7ff',
-  color: '#4338ca',
+  backgroundColor: '#f6f2fb',
+  color: '#593285',
 };
 
 const primaryBtnStyle: React.CSSProperties = {
   padding: '8px 14px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774da9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
@@ -580,9 +580,9 @@ const propertyCardStyle: React.CSSProperties = {
 
 const linkPropertyBtnStyle: React.CSSProperties = {
   padding: '6px 10px',
-  backgroundColor: '#eff6ff',
-  color: '#1d4ed8',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f6f2fb',
+  color: '#774da9',
+  border: '1px solid #dac8ee',
   borderRadius: '4px',
   fontSize: '12px',
   fontWeight: 600,

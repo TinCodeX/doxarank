@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { exchangeGoogleOAuthCallback } from '../api/googleOAuth';
 import { exchangeUserGoogleOAuthCallback } from '../api/integrations';
 import type { SearchConsoleConnection } from '../types/searchConsole';
@@ -96,9 +97,9 @@ export const GoogleOAuthCallback: React.FC = () => {
       <div style={cardStyle}>
         {/* Header Icon */}
         <div style={iconBadgeStyle}>
-          {status === 'loading' && <span style={{ fontSize: '28px' }}>🔄</span>}
-          {status === 'success' && <span style={{ fontSize: '28px' }}>✅</span>}
-          {status === 'error' && <span style={{ fontSize: '28px' }}>❌</span>}
+          {status === 'loading' && <RefreshCw size={28} color="#774DA9" style={{ animation: 'spin 1s linear infinite' }} />}
+          {status === 'success' && <CheckCircle2 size={32} color="#16a34a" />}
+          {status === 'error' && <AlertCircle size={32} color="#dc2626" />}
         </div>
 
         {/* Loading State */}
@@ -252,7 +253,7 @@ const metaValueStyle: React.CSSProperties = {
 const primaryButtonStyle: React.CSSProperties = {
   width: '100%',
   padding: '12px 20px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '8px',
@@ -278,7 +279,7 @@ const spinnerStyle: React.CSSProperties = {
   width: '32px',
   height: '32px',
   border: '3px solid #e2e8f0',
-  borderTop: '3px solid #2563eb',
+  borderTop: '3px solid #774DA9',
   borderRadius: '50%',
   margin: '16px auto',
   animation: 'spin 1s linear infinite',

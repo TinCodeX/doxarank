@@ -154,7 +154,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           color: '#991b1b',
           border: '1px solid #fecaca',
           label: 'Critical',
-          icon: '🚨'
+          icon: ''
         };
       case 'warning':
         return {
@@ -162,7 +162,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           color: '#92400e',
           border: '1px solid #fde68a',
           label: 'Warning',
-          icon: '⚠️'
+          icon: ''
         };
       case 'opportunity':
         return {
@@ -170,16 +170,16 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           color: '#065f46',
           border: '1px solid #a7f3d0',
           label: 'Opportunity',
-          icon: '💡'
+          icon: ''
         };
       case 'info':
       default:
         return {
-          backgroundColor: '#eff6ff',
-          color: '#1e40af',
-          border: '1px solid #bfdbfe',
+          backgroundColor: '#f6f2fb',
+          color: '#774DA9',
+          border: '1px solid #dac8ee',
           label: 'Info',
-          icon: 'ℹ️'
+          icon: ''
         };
     }
   };
@@ -189,7 +189,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
       case 'ranking':
         return { backgroundColor: '#f3e8ff', color: '#6b21a8', label: 'Rankings' };
       case 'search_console':
-        return { backgroundColor: '#e0f2fe', color: '#0369a1', label: 'Search Console' };
+        return { backgroundColor: '#f6f2fb', color: '#774DA9', label: 'Search Console' };
       case 'site_audit':
         return { backgroundColor: '#fef3c7', color: '#b45309', label: 'Site Audit' };
       case 'combined':
@@ -231,8 +231,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                 textTransform: 'uppercase',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
-                color: '#4338ca',
-                backgroundColor: '#e0e7ff',
+                color: '#774DA9',
+                backgroundColor: '#f6f2fb',
                 padding: '3px 10px',
                 borderRadius: '6px',
               }}
@@ -261,7 +261,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: isAnalyzing ? '#93c5fd' : '#2563eb',
+              backgroundColor: isAnalyzing ? '#c084fc' : '#774DA9',
               color: '#ffffff',
               border: 'none',
               padding: '10px 20px',
@@ -269,18 +269,18 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
               fontSize: '14px',
               fontWeight: 700,
               cursor: isAnalyzing ? 'not-allowed' : 'pointer',
-              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+              boxShadow: '0 2px 4px rgba(119, 77, 169, 0.2)',
               transition: 'all 0.2s ease',
             }}
           >
             {isAnalyzing ? (
               <>
-                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>🔄</span>
+                
                 Analyzing SEO Data...
               </>
             ) : (
               <>
-                <span>⚡</span>
+                
                 Analyze SEO
               </>
             )}
@@ -305,12 +305,12 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
             alignItems: 'center',
           }}
         >
-          <span>⚠️ {error}</span>
+          <span> {error}</span>
           <button
             onClick={() => setError(null)}
             style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -333,7 +333,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div>
-            <strong>✓ Analysis Complete:</strong> Found{' '}
+            <strong>Check Analysis Complete:</strong> Found{' '}
             <strong>{analyzeResult.created} new</strong> and{' '}
             <strong>{analyzeResult.updated} updated</strong> insights. Total open actionable items:{' '}
             <strong>{analyzeResult.total_open}</strong>.
@@ -342,7 +342,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
             onClick={() => setAnalyzeResult(null)}
             style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -371,7 +371,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>🚨 Critical</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}> Critical</span>
             <span style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 700, backgroundColor: '#fef2f2', padding: '2px 6px', borderRadius: '4px' }}>Open</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#991b1b', marginTop: '6px' }}>
@@ -394,7 +394,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}>⚠️ Warnings</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}> Warnings</span>
             <span style={{ fontSize: '11px', color: '#b45309', fontWeight: 700, backgroundColor: '#fffbeb', padding: '2px 6px', borderRadius: '4px' }}>Open</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#92400e', marginTop: '6px' }}>
@@ -417,7 +417,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#065f46' }}>💡 Opportunities</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#065f46' }}> Opportunities</span>
             <span style={{ fontSize: '11px', color: '#047857', fontWeight: 700, backgroundColor: '#ecfdf5', padding: '2px 6px', borderRadius: '4px' }}>Open</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#065f46', marginTop: '6px' }}>
@@ -432,7 +432,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '12px',
-            border: selectedSeverity === 'info' && selectedStatus === 'open' ? '2px solid #3b82f6' : '1px solid #bfdbfe',
+            border: selectedSeverity === 'info' && selectedStatus === 'open' ? '2px solid #774DA9' : '1px solid #e2e8f0',
             padding: '16px',
             cursor: 'pointer',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -440,10 +440,10 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>ℹ️ Info</span>
-            <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>Open</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Info</span>
+            <span style={{ fontSize: '11px', color: '#774DA9', fontWeight: 700, backgroundColor: '#f6f2fb', padding: '2px 6px', borderRadius: '4px' }}>Open</span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#1e40af', marginTop: '6px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#0f172a', marginTop: '6px' }}>
             {infoCount}
           </div>
         </div>
@@ -455,7 +455,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           style={{
             backgroundColor: '#f8fafc',
             borderRadius: '12px',
-            border: selectedSeverity === 'all' && selectedStatus === 'open' ? '2px solid #6366f1' : '1px solid #e2e8f0',
+            border: selectedSeverity === 'all' && selectedStatus === 'open' ? '2px solid #774DA9' : '1px solid #e2e8f0',
             padding: '16px',
             cursor: 'pointer',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -463,8 +463,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>📊 All Open</span>
-            <span style={{ fontSize: '11px', color: '#4338ca', fontWeight: 700, backgroundColor: '#e0e7ff', padding: '2px 6px', borderRadius: '4px' }}>Total</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}> All Open</span>
+            <span style={{ fontSize: '11px', color: '#774DA9', fontWeight: 700, backgroundColor: '#f6f2fb', padding: '2px 6px', borderRadius: '4px' }}>Total</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#0f172a', marginTop: '6px' }}>
             {openCount}
@@ -501,8 +501,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                   borderRadius: '8px',
                   fontSize: '13px',
                   fontWeight: isSelected ? 700 : 500,
-                  border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                  backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                  border: isSelected ? '1px solid #774DA9' : '1px solid #cbd5e1',
+                  backgroundColor: isSelected ? '#774DA9' : '#ffffff',
                   color: isSelected ? '#ffffff' : '#475569',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -595,7 +595,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
             border: '1px dashed #cbd5e1',
           }}
         >
-          <div style={{ fontSize: '36px', marginBottom: '10px' }}>🧠</div>
+          <div style={{ fontSize: '36px', marginBottom: '10px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
             {insights.length === 0 ? 'No insights detected yet' : 'No insights matching filters'}
           </h4>
@@ -610,7 +610,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
               onClick={handleAnalyze}
               disabled={isAnalyzing}
               style={{
-                backgroundColor: '#2563eb',
+                backgroundColor: '#774DA9',
                 color: '#ffffff',
                 border: 'none',
                 padding: '9px 18px',
@@ -627,8 +627,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
               onClick={() => { setSelectedSeverity('all'); setSelectedStatus('open'); }}
               style={{
                 backgroundColor: '#ffffff',
-                color: '#2563eb',
-                border: '1px solid #bfdbfe',
+                color: '#774DA9',
+                border: '1px solid #e9d5ff',
                 padding: '8px 16px',
                 borderRadius: '8px',
                 fontSize: '13px',
@@ -662,7 +662,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                       ? '#f59e0b'
                       : insight.severity === 'opportunity'
                       ? '#10b981'
-                      : '#3b82f6'
+                      : '#774DA9'
                   }`,
                   borderRadius: '12px',
                   padding: '20px 24px',
@@ -719,8 +719,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                         fontWeight: 600,
                         padding: '2px 8px',
                         borderRadius: '4px',
-                        backgroundColor: isResolved ? '#dcfce7' : isDismissed ? '#f1f5f9' : '#e0f2fe',
-                        color: isResolved ? '#15803d' : isDismissed ? '#475569' : '#0369a1',
+                        backgroundColor: isResolved ? '#dcfce7' : isDismissed ? '#f1f5f9' : '#f6f2fb',
+                        color: isResolved ? '#15803d' : isDismissed ? '#475569' : '#774DA9',
                       }}
                     >
                       ● {insight.status.toUpperCase()}
@@ -763,7 +763,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                      <span style={{ fontSize: '15px' }}>💡</span>
+                      <span style={{ fontSize: '15px' }}></span>
                       <div>
                         <strong style={{ fontSize: '13px', color: '#1e293b' }}>Recommendation: </strong>
                         <span style={{ fontSize: '13px', color: '#334155' }}>{insight.recommendation}</span>
@@ -795,7 +795,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                           borderRadius: '6px',
                         }}
                       >
-                        🏷️ Keyword: <strong>{insight.related_keyword_name}</strong>
+                         Keyword: <strong>{insight.related_keyword_name}</strong>
                       </span>
                     )}
 
@@ -806,8 +806,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                         rel="noreferrer"
                         style={{
                           fontSize: '12px',
-                          color: '#2563eb',
-                          backgroundColor: '#eff6ff',
+                          color: '#774DA9',
+                          backgroundColor: '#f6f2fb',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           textDecoration: 'none',
@@ -818,7 +818,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                           display: 'inline-block',
                         }}
                       >
-                        🔗 {insight.related_url}
+                        {insight.related_url}
                       </a>
                     )}
                   </div>
@@ -831,9 +831,9 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                       onClick={() => handleGenerateRecommendationForInsight(insight.id)}
                       disabled={generatingInsightId === insight.id}
                       style={{
-                        backgroundColor: '#f5f3ff',
-                        color: '#7c3aed',
-                        border: '1px solid #ddd6fe',
+                        backgroundColor: '#f6f2fb',
+                        color: '#774DA9',
+                        border: '1px solid #dac8ee',
                         padding: '5px 12px',
                         borderRadius: '6px',
                         fontSize: '12px',
@@ -845,7 +845,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      {generatingInsightId === insight.id ? '✨ Synthesizing...' : '✨ AI Recommendation'}
+                      {generatingInsightId === insight.id ? 'Synthesizing...' : 'AI Recommendation'}
                     </button>
 
                     {insight.status !== 'resolved' ? (
@@ -864,7 +864,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                           transition: 'all 0.15s ease',
                         }}
                       >
-                        ✓ Mark Resolved
+                        Check Mark Resolved
                       </button>
                     ) : (
                       <button
@@ -872,8 +872,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                         onClick={() => handleStatusChange(insight.id, 'open')}
                         style={{
                           backgroundColor: '#ffffff',
-                          color: '#2563eb',
-                          border: '1px solid #93c5fd',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 12px',
                           borderRadius: '6px',
                           fontSize: '12px',
@@ -882,7 +882,7 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                           transition: 'all 0.15s ease',
                         }}
                       >
-                        ↺ Reopen
+                        Reopen
                       </button>
                     )}
 
@@ -909,8 +909,8 @@ export const SEOInsightsPanel: React.FC<SEOInsightsPanelProps> = ({ project, onR
                         onClick={() => handleStatusChange(insight.id, 'open')}
                         style={{
                           backgroundColor: '#ffffff',
-                          color: '#2563eb',
-                          border: '1px solid #93c5fd',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 10px',
                           borderRadius: '6px',
                           fontSize: '12px',

@@ -104,7 +104,7 @@ export const SiteAuditFormModal: React.FC<SiteAuditFormModalProps> = ({
             type="button"
             style={closeBtnStyle}
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -271,7 +271,7 @@ const cancelBtnStyle: React.CSSProperties = {
 
 const submitBtnStyle: React.CSSProperties = {
   padding: '8px 16px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

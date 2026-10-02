@@ -182,7 +182,7 @@ export const GoogleAnalyticsSection: React.FC<GoogleAnalyticsSectionProps> = ({
             ) : isFullyConnected ? (
               <span style={badgeConnectedStyle} id="ga4-connection-status-badge">● Connected</span>
             ) : isGoogleConnected && !hasAnalyticsScope ? (
-              <span style={badgeWarningStyle} id="ga4-connection-status-badge">⚠️ Scope Missing</span>
+              <span style={badgeWarningStyle} id="ga4-connection-status-badge"> Scope Missing</span>
             ) : (
               <span style={badgeDisconnectedStyle} id="ga4-connection-status-badge">○ Not connected</span>
             )}
@@ -230,7 +230,7 @@ export const GoogleAnalyticsSection: React.FC<GoogleAnalyticsSectionProps> = ({
       {/* Scope Missing Notice */}
       {!isLoadingStatus && isGoogleConnected && !hasAnalyticsScope && (
         <div style={warningBannerStyle} id="ga4-scope-missing-banner">
-          <span>⚠️ <strong>Analytics permissions required:</strong> Your Google account is connected, but Google Analytics 4 permissions are missing. Please click <strong>Reconnect Google</strong> to authorize Analytics access. Existing Search Console permissions will be preserved.</span>
+          <span> <strong>Analytics permissions required:</strong> Your Google account is connected, but Google Analytics 4 permissions are missing. Please click <strong>Reconnect Google</strong> to authorize Analytics access. Existing Search Console permissions will be preserved.</span>
         </div>
       )}
 
@@ -257,12 +257,12 @@ export const GoogleAnalyticsSection: React.FC<GoogleAnalyticsSectionProps> = ({
       {/* Feedback Messages */}
       {actionError && (
         <div style={errorBannerStyle} id="ga4-integration-error">
-          ⚠️ {actionError}
+           {actionError}
         </div>
       )}
       {successMessage && (
         <div style={successBannerStyle} id="ga4-integration-success">
-          ✅ {successMessage}
+          Active {successMessage}
         </div>
       )}
 
@@ -278,9 +278,9 @@ export const GoogleAnalyticsSection: React.FC<GoogleAnalyticsSectionProps> = ({
                 setProperties(null);
                 handleToggleProperties();
               }}
-              style={{ fontSize: '12px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
+              style={{ fontSize: '12px', background: 'none', border: 'none', color: '#774da9', cursor: 'pointer', padding: 0 }}
             >
-              🔄 Refresh List
+              Refresh List
             </button>
           </div>
 
@@ -395,13 +395,13 @@ const badgeNeutralStyle: React.CSSProperties = {
   borderRadius: '12px',
   fontSize: '12px',
   fontWeight: 500,
-  backgroundColor: '#e0e7ff',
-  color: '#4338ca',
+  backgroundColor: '#f6f2fb',
+  color: '#593285',
 };
 
 const primaryBtnStyle: React.CSSProperties = {
   padding: '8px 14px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774da9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
@@ -494,9 +494,9 @@ const propertyCardStyle: React.CSSProperties = {
 
 const linkPropertyBtnStyle: React.CSSProperties = {
   padding: '6px 10px',
-  backgroundColor: '#eff6ff',
-  color: '#1d4ed8',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f6f2fb',
+  color: '#774da9',
+  border: '1px solid #dac8ee',
   borderRadius: '4px',
   fontSize: '12px',
   fontWeight: 600,

@@ -165,7 +165,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
       <div style={panelHeaderStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={gscIconBadgeStyle}>
-            <span style={{ fontSize: '18px' }}>📈</span>
+            <span style={{ fontSize: '18px' }}></span>
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -192,9 +192,9 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
               id="gsc-header-sync-btn"
               onClick={handleSyncNow}
               disabled={isSyncing || !connection.is_connected}
-              style={{ ...primaryAddBtnStyle, backgroundColor: '#2563eb' }}
+              style={{ ...primaryAddBtnStyle, backgroundColor: '#774DA9' }}
             >
-              {isSyncing ? 'Syncing...' : '⚡ Sync'}
+              {isSyncing ? 'Syncing...' : 'Sync'}
             </button>
             <button
               id="edit-gsc-connection-button"
@@ -217,7 +217,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
       {/* Sync Feedback Toast */}
       {syncFeedback && (
         <div style={{ ...errorAlertStyle, backgroundColor: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46', marginBottom: '16px' }}>
-          ✅ {syncFeedback}
+          Active {syncFeedback}
         </div>
       )}
 
@@ -263,7 +263,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
       ) : !connection ? (
         /* Empty State: No connection exists */
         <div style={emptyStateCardStyle}>
-          <div style={{ fontSize: '36px', marginBottom: '12px' }}>🌐</div>
+          <div style={{ fontSize: '36px', marginBottom: '12px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: '#111827' }}>
             Connect Google Search Console
           </h4>
@@ -280,12 +280,12 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: '#2563eb',
+                backgroundColor: '#774DA9',
                 opacity: isAuthorizing ? 0.7 : 1,
                 cursor: isAuthorizing ? 'not-allowed' : 'pointer',
               }}
             >
-              <span>{isAuthorizing ? 'Redirecting to Google...' : '🔐 Connect with Google (OAuth2)'}</span>
+              <span>{isAuthorizing ? 'Redirecting to Google...' : 'Connect with Google (OAuth2)'}</span>
             </button>
             <button
               id="connect-gsc-button"
@@ -303,7 +303,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
             {/* Property */}
             <div style={statCardStyle}>
               <span style={statLabelStyle}>Property</span>
-              <span style={{ ...statValueStyle, color: '#1d4ed8', wordBreak: 'break-all' }} title={connection.property_url}>
+              <span style={{ ...statValueStyle, color: '#774da9', wordBreak: 'break-all' }} title={connection.property_url}>
                 {connection.property_url}
               </span>
             </div>
@@ -369,7 +369,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
                       connection.sync_status === 'success'
                         ? '#dcfce7'
                         : connection.sync_status === 'syncing'
-                        ? '#dbeafe'
+                        ? '#f6f2fb'
                         : connection.sync_status === 'failed'
                         ? '#fee2e2'
                         : '#f1f5f9',
@@ -377,7 +377,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
                       connection.sync_status === 'success'
                         ? '#15803d'
                         : connection.sync_status === 'syncing'
-                        ? '#1d4ed8'
+                        ? '#774da9'
                         : connection.sync_status === 'failed'
                         ? '#b91c1c'
                         : '#475569',
@@ -415,7 +415,7 @@ export const SearchConsolePanel: React.FC<SearchConsolePanelProps> = ({ project,
           <div style={deleteModalBoxStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold' }}>
-                ⚠️
+                
               </div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>
                 Disconnect Google Search Console?
@@ -490,11 +490,11 @@ const gscIconBadgeStyle: React.CSSProperties = {
   width: '38px',
   height: '38px',
   borderRadius: '8px',
-  backgroundColor: '#eff6ff',
+  backgroundColor: '#f6f2fb',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  border: '1px solid #dbeafe',
+  border: '1px solid #dac8ee',
 };
 
 const connectedBadgeStyle: React.CSSProperties = {
@@ -517,7 +517,7 @@ const disconnectedBadgeStyle: React.CSSProperties = {
 
 const primaryAddBtnStyle: React.CSSProperties = {
   padding: '10px 18px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

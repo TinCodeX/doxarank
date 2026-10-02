@@ -139,7 +139,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
               fontWeight: 600,
             }}
           >
-            ✓ Ready
+            Check Ready
           </span>
         );
       case 'RUNNING':
@@ -148,14 +148,14 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
             style={{
               padding: '3px 8px',
               borderRadius: '6px',
-              backgroundColor: '#eff6ff',
-              color: '#1e40af',
-              border: '1px solid #bfdbfe',
+              backgroundColor: '#f6f2fb',
+              color: '#593285',
+              border: '1px solid #dac8ee',
               fontSize: '11px',
               fontWeight: 600,
             }}
           >
-            ⚙ Generating...
+            Generating...
           </span>
         );
       case 'PENDING':
@@ -187,7 +187,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
               fontWeight: 600,
             }}
           >
-            ✕ Failed
+            X Failed
           </span>
         );
       default:
@@ -229,9 +229,9 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                 fontWeight: 600,
                 padding: '3px 8px',
                 borderRadius: '6px',
-                backgroundColor: '#ede9fe',
-                color: '#6d28d9',
-                border: '1px solid #ddd6fe',
+                backgroundColor: '#f6f2fb',
+                color: '#774da9',
+                border: '1px solid #dac8ee',
               }}
             >
               Agency Plan
@@ -248,7 +248,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
             onClick={() => setShowGenerateModal(true)}
             style={{
               padding: '9px 18px',
-              backgroundColor: '#7c3aed',
+              backgroundColor: '#774da9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -260,7 +260,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
               gap: '6px',
             }}
           >
-            📄 Generate New Report
+             Generate New Report
           </button>
         )}
       </div>
@@ -277,7 +277,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔒</div>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>Locked</div>
           <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#581c87', margin: '0 0 8px 0' }}>
             White-Label PDF Reports is an Agency Feature
           </h3>
@@ -305,7 +305,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
             }}
             style={{
               padding: '9px 20px',
-              backgroundColor: '#7c3aed',
+              backgroundColor: '#774da9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -334,7 +334,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                 marginBottom: '16px',
               }}
             >
-              ⚠ {errorMsg}
+              {errorMsg}
             </div>
           )}
 
@@ -350,7 +350,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                 marginBottom: '16px',
               }}
             >
-              ✓ {successMsg}
+              Check {successMsg}
             </div>
           )}
 
@@ -380,7 +380,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                 onClick={() => setShowGenerateModal(true)}
                 style={{
                   padding: '7px 15px',
-                  backgroundColor: '#7c3aed',
+                  backgroundColor: '#774da9',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '6px',
@@ -442,7 +442,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                             disabled={downloadingId === rep.id}
                             style={{
                               padding: '6px 14px',
-                              backgroundColor: '#059669',
+                              backgroundColor: '#774da9',
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: '6px',
@@ -454,12 +454,12 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                               gap: '4px',
                             }}
                           >
-                            {downloadingId === rep.id ? 'Downloading...' : '⬇ Download PDF'}
+                            {downloadingId === rep.id ? 'Downloading...' : 'Download PDF'}
                           </button>
                         ) : rep.status === 'FAILED' ? (
                           <span style={{ fontSize: '12px', color: '#94a3b8' }}>Unavailable</span>
                         ) : (
-                          <span style={{ fontSize: '12px', color: '#2563eb' }}>Processing...</span>
+                          <span style={{ fontSize: '12px', color: '#774DA9' }}>Processing...</span>
                         )}
                       </td>
                     </tr>
@@ -501,7 +501,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                     onClick={() => setShowGenerateModal(false)}
                     style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#94a3b8' }}
                   >
-                    ✕
+                    X
                   </button>
                 </div>
 
@@ -572,7 +572,7 @@ export const WhiteLabelReportsPanel: React.FC<WhiteLabelReportsPanelProps> = ({
                       disabled={isGenerating}
                       style={{
                         padding: '8px 18px',
-                        backgroundColor: '#7c3aed',
+                        backgroundColor: '#774DA9',
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: '6px',

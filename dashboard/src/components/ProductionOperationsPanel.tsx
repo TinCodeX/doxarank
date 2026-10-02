@@ -119,7 +119,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#38bdf8' }}>⚙</span> Production Agent Platform
+             Production Agent Platform
             <span style={{
               fontSize: '0.75rem',
               padding: '2px 8px',
@@ -139,7 +139,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           disabled={isLoading}
           style={{
             background: '#1e293b',
-            color: '#38bdf8',
+            color: '#dac8ee',
             border: '1px solid #334155',
             padding: '6px 14px',
             borderRadius: '6px',
@@ -147,12 +147,12 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
             fontSize: '0.85rem'
           }}
         >
-          {isLoading ? 'Refreshing...' : '↻ Refresh'}
+          {isLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
       {actionMessage && (
-        <div style={{ padding: '10px 14px', background: '#1e293b', borderLeft: '4px solid #38bdf8', borderRadius: '4px', marginBottom: '16px', fontSize: '0.85rem' }}>
+        <div style={{ padding: '10px 14px', background: '#1e293b', borderLeft: '4px solid #774da9', borderRadius: '4px', marginBottom: '16px', fontSize: '0.85rem' }}>
           {actionMessage}
         </div>
       )}
@@ -190,7 +190,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
       <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>Agent Runtime Metrics</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '24px' }}>
         <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#38bdf8' }}>{metrics?.active_runs || 0}</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dac8ee' }}>{metrics?.active_runs || 0}</div>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active Runs</div>
         </div>
         <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
@@ -202,7 +202,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Success Rate</div>
         </div>
         <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#a855f7' }}>{metrics?.recovered_runs || 0}</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#a372df' }}>{metrics?.recovered_runs || 0}</div>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Recovered Runs</div>
         </div>
         <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
@@ -254,7 +254,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
                   {b.state !== 'closed' ? (
                     <button
                       onClick={() => handleBreakerAction(b.service_name, 'reset')}
-                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                      style={{ background: '#774da9', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
                     >
                       Reset
                     </button>
@@ -297,7 +297,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           </button>
           <button
             onClick={() => handleOperatorAction('resume_continuous_ops')}
-            style={{ background: '#047857', color: '#d1fae5', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#774da9', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
           >
             Resume Continuous Ops
           </button>
@@ -324,7 +324,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           <button
             type="submit"
             disabled={isInspecting || !inspectRunId}
-            style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#774da9', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
           >
             {isInspecting ? 'Inspecting...' : 'Inspect Run'}
           </button>
@@ -334,7 +334,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           <div style={{ background: '#0f172a', padding: '16px', borderRadius: '8px', fontSize: '0.85rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '8px', marginBottom: '12px' }}>
               <div>
-                <span style={{ fontWeight: 700, color: '#38bdf8' }}>Run #{inspectionData.run.id}</span> — {inspectionData.run.goal}
+                <span style={{ fontWeight: 700, color: '#dac8ee' }}>Run #{inspectionData.run.id}</span> — {inspectionData.run.goal}
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
                   Correlation ID: <code>{inspectionData.run.correlation_id || 'N/A'}</code> | Status: {inspectionData.run.status} | Worker: {inspectionData.run.worker_id || 'unassigned'}
                 </div>
@@ -345,7 +345,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
             {/* Steps & Tool hierarchy */}
             <h4 style={{ fontSize: '0.9rem', color: '#cbd5e1', margin: '8px 0' }}>Step Hierarchy:</h4>
             {inspectionData.steps.map((s) => (
-              <div key={s.step_number} style={{ marginBottom: '10px', paddingLeft: '12px', borderLeft: '2px solid #38bdf8' }}>
+              <div key={s.step_number} style={{ marginBottom: '10px', paddingLeft: '12px', borderLeft: '2px solid #774da9' }}>
                 <div style={{ fontWeight: 600, color: '#e2e8f0' }}>Step #{s.step_number} [{s.action_type}] — {s.status}</div>
                 <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontStyle: 'italic', margin: '2px 0' }}>{s.thought}</div>
                 {s.tool_calls.map((tc) => (

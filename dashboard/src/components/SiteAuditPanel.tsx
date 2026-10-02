@@ -205,9 +205,9 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
       case 'completed':
         return <span style={statusCompletedStyle}>● Completed</span>;
       case 'running':
-        return <span style={statusRunningStyle}>⏳ Running</span>;
+        return <span style={statusRunningStyle}>● Running</span>;
       case 'failed':
-        return <span style={statusFailedStyle}>✕ Failed</span>;
+        return <span style={statusFailedStyle}>X Failed</span>;
       case 'pending':
       default:
         return <span style={statusPendingStyle}>○ Pending</span>;
@@ -253,7 +253,7 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
         </div>
       ) : audits.length === 0 ? (
         <div style={emptyStateCardStyle}>
-          <div style={{ fontSize: '36px', marginBottom: '10px' }}>🩺</div>
+          <div style={{ fontSize: '36px', marginBottom: '10px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: '#111827' }}>
             No site audits recorded yet
           </h4>
@@ -290,9 +290,9 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                       onClick={() => setSelectedAudit(audit)}
                       style={{
                         ...auditHistoryPillStyle,
-                        backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                        borderColor: isSelected ? '#3b82f6' : '#e2e8f0',
-                        color: isSelected ? '#1d4ed8' : '#475569',
+                        backgroundColor: isSelected ? '#f6f2fb' : '#ffffff',
+                        borderColor: isSelected ? '#774da9' : '#e2e8f0',
+                        color: isSelected ? '#774da9' : '#475569',
                         fontWeight: isSelected ? 700 : 500,
                       }}
                     >
@@ -401,11 +401,11 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                   </div>
                 </div>
 
-                <div style={{ ...statCardStyle, backgroundColor: '#eff6ff', borderColor: '#dbeafe' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase' }}>
+                <div style={{ ...statCardStyle, backgroundColor: '#fdfaff', borderColor: '#f3e8ff' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#774DA9', textTransform: 'uppercase' }}>
                     Notices / Info
                   </div>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#2563eb', marginTop: '4px' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#774DA9', marginTop: '4px' }}>
                     {noticeCount}
                   </div>
                 </div>
@@ -466,8 +466,8 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                     onClick={() => setSelectedSeverityFilter('notice')}
                     style={{
                       ...filterTabStyle,
-                      backgroundColor: selectedSeverityFilter === 'notice' ? '#2563eb' : '#eff6ff',
-                      color: selectedSeverityFilter === 'notice' ? '#ffffff' : '#1e40af',
+                      backgroundColor: selectedSeverityFilter === 'notice' ? '#774DA9' : '#fdfaff',
+                      color: selectedSeverityFilter === 'notice' ? '#ffffff' : '#774DA9',
                     }}
                   >
                     Notices ({noticeCount})
@@ -487,7 +487,7 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                 </div>
               ) : issues.length === 0 ? (
                 <div style={{ ...emptyStateCardStyle, padding: '32px 20px' }}>
-                  <div style={{ fontSize: '30px', marginBottom: '8px' }}>🎉</div>
+                  <div style={{ fontSize: '30px', marginBottom: '8px' }}></div>
                   <h5 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 600, color: '#111827' }}>
                     No issues recorded for this audit
                   </h5>
@@ -513,10 +513,10 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                     const isCritical = issue.severity === 'critical';
                     const isWarning = issue.severity === 'warning';
 
-                    const borderAccentColor = isCritical ? '#dc2626' : isWarning ? '#f59e0b' : '#3b82f6';
-                    const badgeBg = isCritical ? '#fef2f2' : isWarning ? '#fffbeb' : '#eff6ff';
-                    const badgeColor = isCritical ? '#991b1b' : isWarning ? '#92400e' : '#1e40af';
-                    const badgeBorder = isCritical ? '#fca5a5' : isWarning ? '#fde68a' : '#bfdbfe';
+                    const borderAccentColor = isCritical ? '#dc2626' : isWarning ? '#f59e0b' : '#774da9';
+                    const badgeBg = isCritical ? '#fef2f2' : isWarning ? '#fffbeb' : '#f6f2fb';
+                    const badgeColor = isCritical ? '#991b1b' : isWarning ? '#92400e' : '#593285';
+                    const badgeBorder = isCritical ? '#fca5a5' : isWarning ? '#fde68a' : '#dac8ee';
 
                     return (
                       <div
@@ -537,10 +537,10 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                                 border: `1px solid ${badgeBorder}`,
                               }}
                             >
-                              {isCritical ? '🔴 Critical' : isWarning ? '🟡 Warning' : '🔵 Notice'}
+                              {isCritical ? 'Critical' : isWarning ? 'Warning' : 'Notice'}
                             </span>
                             <span style={issueTypeBadgeStyle}>
-                              🏷️ {issue.issue_type}
+                               {issue.issue_type}
                             </span>
                             {issue.page_url && (
                               <a
@@ -550,7 +550,7 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                                 style={pageUrlLinkStyle}
                                 title={issue.page_url}
                               >
-                                🔗 {issue.page_url}
+                                {issue.page_url}
                               </a>
                             )}
                           </div>
@@ -585,7 +585,7 @@ export const SiteAuditPanel: React.FC<SiteAuditPanelProps> = ({ project }) => {
                         {issue.recommendation && (
                           <div style={recommendationBoxStyle}>
                             <div style={{ fontWeight: 700, fontSize: '12px', color: '#0f766e', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              💡 Recommendation:
+                              Recommendation:
                             </div>
                             <div style={{ fontSize: '13px', color: '#134e4a', lineHeight: 1.4 }}>
                               {issue.recommendation}
@@ -716,7 +716,7 @@ const sectionBadgeStyle: React.CSSProperties = {
 
 const primaryAddBtnStyle: React.CSSProperties = {
   padding: '9px 16px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
@@ -816,8 +816,8 @@ const statusCompletedStyle: React.CSSProperties = {
 const statusRunningStyle: React.CSSProperties = {
   fontSize: '12px',
   fontWeight: 700,
-  color: '#2563eb',
-  backgroundColor: '#dbeafe',
+  color: '#774DA9',
+  backgroundColor: '#f3e8ff',
   padding: '2px 8px',
   borderRadius: '12px',
 };
@@ -901,7 +901,7 @@ const issueTypeBadgeStyle: React.CSSProperties = {
 
 const pageUrlLinkStyle: React.CSSProperties = {
   fontSize: '12px',
-  color: '#2563eb',
+  color: '#774DA9',
   textDecoration: 'none',
   maxWidth: '260px',
   overflow: 'hidden',
@@ -920,7 +920,7 @@ const recommendationBoxStyle: React.CSSProperties = {
 const actionInlineBtnStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
-  color: '#2563eb',
+  color: '#774DA9',
   fontSize: '13px',
   fontWeight: 600,
   cursor: 'pointer',

@@ -205,7 +205,7 @@ export const GoogleTagManagerSection: React.FC<GoogleTagManagerSectionProps> = (
             ) : isFullyConnected ? (
               <span style={badgeConnectedStyle} id="gtm-connection-status-badge">● Connected</span>
             ) : isGoogleConnected && !hasGtmScope ? (
-              <span style={badgeWarningStyle} id="gtm-connection-status-badge">⚠️ Scope Missing</span>
+              <span style={badgeWarningStyle} id="gtm-connection-status-badge"> Scope Missing</span>
             ) : (
               <span style={badgeDisconnectedStyle} id="gtm-connection-status-badge">○ Not connected</span>
             )}
@@ -253,7 +253,7 @@ export const GoogleTagManagerSection: React.FC<GoogleTagManagerSectionProps> = (
       {/* Scope Missing Notice */}
       {!isLoadingStatus && isGoogleConnected && !hasGtmScope && (
         <div style={warningBannerStyle} id="gtm-scope-missing-banner">
-          <span>⚠️ <strong>Tag Manager permissions required:</strong> Your Google account is connected, but Google Tag Manager permissions are missing. Please click <strong>Reconnect Google</strong> to authorize Tag Manager access. Existing Search Console and Analytics permissions will be preserved.</span>
+          <span> <strong>Tag Manager permissions required:</strong> Your Google account is connected, but Google Tag Manager permissions are missing. Please click <strong>Reconnect Google</strong> to authorize Tag Manager access. Existing Search Console and Analytics permissions will be preserved.</span>
         </div>
       )}
 
@@ -294,12 +294,12 @@ export const GoogleTagManagerSection: React.FC<GoogleTagManagerSectionProps> = (
       {/* Feedback Messages */}
       {actionError && (
         <div style={errorBannerStyle} id="gtm-integration-error">
-          ⚠️ {actionError}
+           {actionError}
         </div>
       )}
       {successMessage && (
         <div style={successBannerStyle} id="gtm-integration-success">
-          ✅ {successMessage}
+          Active {successMessage}
         </div>
       )}
 
@@ -315,9 +315,9 @@ export const GoogleTagManagerSection: React.FC<GoogleTagManagerSectionProps> = (
                 setContainers(null);
                 handleToggleContainers();
               }}
-              style={{ fontSize: '12px', background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
+              style={{ fontSize: '12px', background: 'none', border: 'none', color: '#774da9', cursor: 'pointer', padding: 0 }}
             >
-              🔄 Refresh List
+              Refresh List
             </button>
           </div>
 
@@ -341,7 +341,7 @@ export const GoogleTagManagerSection: React.FC<GoogleTagManagerSectionProps> = (
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
                         {cont.name}{' '}
-                        <span style={{ fontWeight: 500, fontFamily: 'monospace', color: '#2563eb', marginLeft: '6px' }}>
+                        <span style={{ fontWeight: 500, fontFamily: 'monospace', color: '#774da9', marginLeft: '6px' }}>
                           {cont.public_id}
                         </span>
                       </div>
@@ -438,13 +438,13 @@ const badgeNeutralStyle: React.CSSProperties = {
   borderRadius: '12px',
   fontSize: '12px',
   fontWeight: 500,
-  backgroundColor: '#e0e7ff',
-  color: '#4338ca',
+  backgroundColor: '#f6f2fb',
+  color: '#593285',
 };
 
 const primaryBtnStyle: React.CSSProperties = {
   padding: '8px 16px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
@@ -544,7 +544,7 @@ const containerCardRowStyle: React.CSSProperties = {
 
 const linkContainerBtnStyle: React.CSSProperties = {
   padding: '6px 12px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '4px',

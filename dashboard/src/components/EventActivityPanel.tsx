@@ -349,7 +349,7 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
         <div className="event-detail-drawer">
           <div className="drawer-header">
             <h4>Event #{selectedEvent.id} Details</h4>
-            <button className="btn-close" onClick={() => setSelectedEvent(null)}>✕</button>
+            <button className="btn-close" onClick={() => setSelectedEvent(null)}>X</button>
           </div>
           <div className="drawer-body">
             <div className="detail-meta-grid">
@@ -372,7 +372,7 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
           <div className="modal-dialog">
             <div className="modal-header">
               <h3>Simulate Incoming SEO Event</h3>
-              <button className="btn-close" onClick={() => setIsSimModalOpen(false)}>✕</button>
+              <button className="btn-close" onClick={() => setIsSimModalOpen(false)}>X</button>
             </div>
             <form onSubmit={handleSimulateEvent}>
               <div className="modal-body">
@@ -507,8 +507,8 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #3b82f6;
-          box-shadow: 0 0 8px #3b82f6;
+          background: #774da9;
+          box-shadow: 0 0 8px #774da9;
           display: inline-block;
         }
         .panel-subtitle {
@@ -531,11 +531,11 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
           transition: all 0.2s;
         }
         .btn-primary {
-          background: #2563eb;
+          background: #774da9;
           color: #ffffff;
         }
         .btn-primary:hover {
-          background: #1d4ed8;
+          background: #673f97;
         }
         .btn-secondary {
           background: #1e293b;
@@ -578,7 +578,7 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
         }
         .text-success { color: #10b981 !important; }
         .text-amber { color: #f59e0b !important; }
-        .text-purple { color: #a855f7 !important; }
+        .text-purple { color: #a372df !important; }
         .text-muted { color: #64748b; }
         .text-xs { font-size: 0.75rem; }
         .font-mono { font-family: monospace; }
@@ -634,8 +634,8 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
           background: #1e293b;
         }
         .event-row.selected {
-          background: #1e3a8a33;
-          border-left: 3px solid #3b82f6;
+          background: rgba(119,77,169,0.15);
+          border-left: 3px solid #774da9;
         }
         .badge {
           display: inline-block;
@@ -647,10 +647,10 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
         }
         .badge-critical { background: #991b1b; color: #fecaca; }
         .badge-high { background: #c2410c; color: #ffedd5; }
-        .badge-medium { background: #1d4ed8; color: #dbeafe; }
+        .badge-medium { background: #774da9; color: #f6f2fb; }
         .badge-low { background: #334155; color: #cbd5e1; }
         .badge-processed { background: #065f46; color: #a7f3d0; }
-        .badge-accepted { background: #1e40af; color: #bfdbfe; }
+        .badge-accepted { background: #593285; color: #dac8ee; }
         .badge-suppressed { background: #92400e; color: #fef3c7; }
         .badge-deduplicated { background: #6b21a8; color: #f3e8ff; }
         .badge-rejected { background: #831843; color: #fce7f3; }
@@ -658,11 +658,11 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
         .event-type-tag {
           font-size: 0.75rem;
           font-weight: 600;
-          color: #38bdf8;
+          color: #dac8ee;
         }
         .run-tag {
-          background: #0284c722;
-          color: #38bdf8;
+          background: rgba(119,77,169,0.2);
+          color: #dac8ee;
           padding: 0.2rem 0.5rem;
           border-radius: 4px;
           font-size: 0.75rem;
@@ -716,7 +716,7 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
           background: #0f172a;
           padding: 0.1rem 0.3rem;
           border-radius: 3px;
-          color: #38bdf8;
+          color: #dac8ee;
         }
         .payload-json {
           background: #0f172a;
@@ -780,7 +780,7 @@ export const EventActivityPanel: React.FC<EventActivityPanelProps> = ({ project 
         }
         .form-group input:focus, .form-group select:focus {
           outline: none;
-          border-color: #3b82f6;
+          border-color: #774da9;
         }
         .help-text {
           font-size: 0.75rem;

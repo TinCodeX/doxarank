@@ -137,7 +137,7 @@ export const RankingFormModal: React.FC<RankingFormModalProps> = ({
               {rankingToEdit ? 'Edit Ranking Observation' : 'Record New Ranking'}
             </h3>
             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
-              Keyword: <strong style={{ color: '#0f172a' }}>"{keyword.keyword}"</strong> · Project: <strong style={{ color: '#1d4ed8' }}>{projectName}</strong>
+              Keyword: <strong style={{ color: '#0f172a' }}>"{keyword.keyword}"</strong> · Project: <strong style={{ color: '#774da9' }}>{projectName}</strong>
             </div>
           </div>
           <button
@@ -145,7 +145,7 @@ export const RankingFormModal: React.FC<RankingFormModalProps> = ({
             onClick={onClose}
             style={closeButtonStyle}
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -367,7 +367,7 @@ const cancelButtonStyle: React.CSSProperties = {
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: '10px 18px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

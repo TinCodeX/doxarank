@@ -198,7 +198,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
             onClick={handleTriggerReview}
             disabled={isActionLoading}
             style={{
-              background: '#2563eb',
+              background: '#774da9',
               color: '#ffffff',
               border: 'none',
               padding: '8px 16px',
@@ -252,8 +252,8 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
       {pendingReview && proposedStrategy && (
         <div
           style={{
-            background: '#312e81',
-            border: '1px solid #4f46e5',
+            background: '#24143c',
+            border: '1px solid #774da9',
             borderRadius: '8px',
             padding: '16px',
             marginBottom: '20px',
@@ -343,7 +343,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
           </div>
           <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Achieved Goals</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#38bdf8' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#10b981' }}>
               {metrics.achieved_objectives}
             </div>
           </div>
@@ -355,7 +355,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
           </div>
           <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Strategy Versions</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#a855f7' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#dac8ee' }}>
               v{metrics.current_strategy_version} ({metrics.total_strategy_versions})
             </div>
           </div>
@@ -401,7 +401,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                             ? '#059669'
                             : obj.status === 'at_risk'
                             ? '#d97706'
-                            : '#3b82f6',
+                            : '#774da9',
                         color: '#ffffff',
                       }}
                     >
@@ -418,7 +418,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                     <div style={{ background: '#374151', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
                       <div
                         style={{
-                          background: obj.status === 'achieved' ? '#10b981' : obj.status === 'at_risk' ? '#f59e0b' : '#3b82f6',
+                          background: obj.status === 'achieved' ? '#10b981' : obj.status === 'at_risk' ? '#f59e0b' : '#774da9',
                           height: '100%',
                           width: `${Math.min(obj.progress * 100, 100)}%`,
                           transition: 'width 0.3s ease',

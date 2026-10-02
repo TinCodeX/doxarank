@@ -320,8 +320,8 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 fontSize: '11px',
                 textTransform: 'uppercase',
                 fontWeight: 700,
-                color: '#2563eb',
-                backgroundColor: '#eff6ff',
+                color: '#774DA9',
+                backgroundColor: '#f6f2fb',
                 padding: '2px 8px',
                 borderRadius: '4px',
               }}
@@ -352,7 +352,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                   padding: '5px 12px',
                   fontSize: '12px',
                   fontWeight: datePreset === preset ? 700 : 500,
-                  color: datePreset === preset ? '#1e40af' : '#475569',
+                  color: datePreset === preset ? '#774DA9' : '#475569',
                   backgroundColor: datePreset === preset ? '#ffffff' : 'transparent',
                   border: 'none',
                   borderRadius: '6px',
@@ -392,9 +392,9 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
             }}
           >
             <option value="all">All Devices</option>
-            <option value="desktop">💻 Desktop</option>
-            <option value="mobile">📱 Mobile</option>
-            <option value="tablet">📟 Tablet</option>
+            <option value="desktop">Desktop</option>
+            <option value="mobile">Mobile</option>
+            <option value="tablet"> Tablet</option>
           </select>
 
           {/* Refresh Button */}
@@ -416,7 +416,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
               gap: '4px',
             }}
           >
-            🔄 Refresh
+            Refresh
           </button>
         </div>
       </div>
@@ -474,7 +474,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
               padding: '4px 12px',
               fontSize: '12px',
               fontWeight: 600,
-              backgroundColor: '#2563eb',
+              backgroundColor: '#774DA9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '6px',
@@ -502,7 +502,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
             alignItems: 'center',
           }}
         >
-          <span>⚠️ {error}</span>
+          <span> {error}</span>
           <button
             onClick={() => fetchAnalytics(project.id)}
             style={{
@@ -550,7 +550,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
             border: '1px dashed #cbd5e1',
           }}
         >
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>📈</div>
+          <div style={{ fontSize: '40px', marginBottom: '12px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
             No Search Analytics data yet
           </h4>
@@ -563,14 +563,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
               alignItems: 'center',
               gap: '6px',
               padding: '6px 14px',
-              backgroundColor: '#eff6ff',
-              color: '#1d4ed8',
+              backgroundColor: '#f6f2fb',
+              color: '#774DA9',
               borderRadius: '20px',
               fontSize: '12px',
               fontWeight: 600,
             }}
           >
-            <span>💡 Tip: Ensure Search Console connection is active above.</span>
+            <span> Tip: Ensure Search Console connection is active above.</span>
           </div>
         </div>
       ) : (
@@ -593,16 +593,16 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 border: '1px solid #e2e8f0',
                 borderRadius: '10px',
                 padding: '16px 20px',
-                borderLeft: '4px solid #2563eb',
+                borderLeft: '4px solid #774DA9',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                   Total Clicks
                 </span>
-                <span style={{ fontSize: '16px' }}>👆</span>
+                <span style={{ fontSize: '16px' }}></span>
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 800, color: '#1e3a8a' }}>
+              <div style={{ fontSize: '26px', fontWeight: 800, color: '#774DA9' }}>
                 {metrics.totalClicks.toLocaleString()}
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
@@ -618,16 +618,16 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 border: '1px solid #e2e8f0',
                 borderRadius: '10px',
                 padding: '16px 20px',
-                borderLeft: '4px solid #7c3aed',
+                borderLeft: '4px solid #a372df',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                   Total Impressions
                 </span>
-                <span style={{ fontSize: '16px' }}>👁️</span>
+                <span style={{ fontSize: '16px' }}></span>
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 800, color: '#4c1d95' }}>
+              <div style={{ fontSize: '26px', fontWeight: 800, color: '#a372df' }}>
                 {metrics.totalImpressions.toLocaleString()}
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
@@ -650,7 +650,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                   Average CTR
                 </span>
-                <span style={{ fontSize: '16px' }}>🎯</span>
+                <span style={{ fontSize: '16px' }}></span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 800, color: '#065f46' }}>
                 {metrics.averageCtr.toFixed(2)}%
@@ -675,7 +675,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                   Average Position
                 </span>
-                <span style={{ fontSize: '16px' }}>🏆</span>
+                <span style={{ fontSize: '16px' }}></span>
               </div>
               <div style={{ fontSize: '26px', fontWeight: 800, color: '#92400e' }}>
                 #{metrics.averagePosition.toFixed(1)}
@@ -718,11 +718,11 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
               {/* Legend */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#2563eb' }} />
+                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#774DA9' }} />
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>Clicks</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#8b5cf6' }} />
+                  <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#a372df' }} />
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>Impressions</span>
                 </div>
               </div>
@@ -754,7 +754,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                   {/* Clicks Area & Line */}
                   <polyline
                     fill="none"
-                    stroke="#2563eb"
+                    stroke="#774DA9"
                     strokeWidth="3"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -769,7 +769,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                   {/* Impressions Area & Line */}
                   <polyline
                     fill="none"
-                    stroke="#8b5cf6"
+                    stroke="#a372df"
                     strokeWidth="2"
                     strokeDasharray="4 4"
                     strokeLinecap="round"
@@ -793,7 +793,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                           cx={clickCoord.x}
                           cy={clickCoord.y}
                           r={isHovered ? 6 : 4}
-                          fill="#2563eb"
+                          fill="#774DA9"
                           stroke="#ffffff"
                           strokeWidth="2"
                           style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
@@ -838,11 +838,11 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                   gap: '12px',
                 }}
               >
-                <span>📅 Date: <strong>{dailyChartData[hoveredPointIndex].date}</strong></span>
-                <span>👆 Clicks: <strong>{dailyChartData[hoveredPointIndex].clicks}</strong></span>
-                <span>👁️ Impressions: <strong>{dailyChartData[hoveredPointIndex].impressions}</strong></span>
-                <span>🎯 CTR: <strong>{dailyChartData[hoveredPointIndex].ctr}%</strong></span>
-                <span>🏆 Avg Pos: <strong>#{dailyChartData[hoveredPointIndex].avgPosition}</strong></span>
+                <span> Date: <strong>{dailyChartData[hoveredPointIndex].date}</strong></span>
+                <span> Clicks: <strong>{dailyChartData[hoveredPointIndex].clicks}</strong></span>
+                <span> Impressions: <strong>{dailyChartData[hoveredPointIndex].impressions}</strong></span>
+                <span> CTR: <strong>{dailyChartData[hoveredPointIndex].ctr}%</strong></span>
+                <span> Avg Pos: <strong>#{dailyChartData[hoveredPointIndex].avgPosition}</strong></span>
               </div>
             )}
           </div>
@@ -878,14 +878,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                     padding: '6px 14px',
                     fontSize: '13px',
                     fontWeight: activeTab === 'queries' ? 700 : 500,
-                    color: activeTab === 'queries' ? '#2563eb' : '#475569',
+                    color: activeTab === 'queries' ? '#774DA9' : '#475569',
                     backgroundColor: activeTab === 'queries' ? '#ffffff' : 'transparent',
-                    border: activeTab === 'queries' ? '1px solid #cbd5e1' : '1px solid transparent',
+                    border: activeTab === 'queries' ? '1px solid #dac8ee' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                   }}
                 >
-                  🔍 Queries ({queryRows.length})
+                  Queries ({queryRows.length})
                 </button>
                 <button
                   id="tab-pages"
@@ -894,14 +894,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                     padding: '6px 14px',
                     fontSize: '13px',
                     fontWeight: activeTab === 'pages' ? 700 : 500,
-                    color: activeTab === 'pages' ? '#2563eb' : '#475569',
+                    color: activeTab === 'pages' ? '#774DA9' : '#475569',
                     backgroundColor: activeTab === 'pages' ? '#ffffff' : 'transparent',
-                    border: activeTab === 'pages' ? '1px solid #cbd5e1' : '1px solid transparent',
+                    border: activeTab === 'pages' ? '1px solid #dac8ee' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                   }}
                 >
-                  📄 Pages ({pageRows.length})
+                   Pages ({pageRows.length})
                 </button>
                 <button
                   id="tab-devices"
@@ -910,14 +910,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                     padding: '6px 14px',
                     fontSize: '13px',
                     fontWeight: activeTab === 'devices' ? 700 : 500,
-                    color: activeTab === 'devices' ? '#2563eb' : '#475569',
+                    color: activeTab === 'devices' ? '#774DA9' : '#475569',
                     backgroundColor: activeTab === 'devices' ? '#ffffff' : 'transparent',
-                    border: activeTab === 'devices' ? '1px solid #cbd5e1' : '1px solid transparent',
+                    border: activeTab === 'devices' ? '1px solid #dac8ee' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                   }}
                 >
-                  💻 Devices ({deviceRows.length})
+                  Devices ({deviceRows.length})
                 </button>
                 <button
                   id="tab-countries"
@@ -926,14 +926,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                     padding: '6px 14px',
                     fontSize: '13px',
                     fontWeight: activeTab === 'countries' ? 700 : 500,
-                    color: activeTab === 'countries' ? '#2563eb' : '#475569',
+                    color: activeTab === 'countries' ? '#774DA9' : '#475569',
                     backgroundColor: activeTab === 'countries' ? '#ffffff' : 'transparent',
                     border: activeTab === 'countries' ? '1px solid #cbd5e1' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                   }}
                 >
-                  🌍 Countries ({countryRows.length})
+                  Countries ({countryRows.length})
                 </button>
               </div>
 
@@ -956,7 +956,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                     }}
                   />
                   <span style={{ position: 'absolute', left: '8px', top: '7px', fontSize: '12px', color: '#94a3b8' }}>
-                    🔍
+                    
                   </span>
                 </div>
               )}
@@ -988,7 +988,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                           <td style={tdStyle}>
                             <span style={{ fontWeight: 600, color: '#0f172a' }}>{q.query}</span>
                           </td>
-                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#774DA9' }}>
                             {q.clicks.toLocaleString()}
                           </td>
                           <td style={{ ...tdStyle, textAlign: 'right', color: '#475569' }}>
@@ -1007,8 +1007,8 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                                 borderRadius: '6px',
                                 fontWeight: 700,
                                 fontSize: '12px',
-                                backgroundColor: Number(q.position) <= 3 ? '#fef3c7' : Number(q.position) <= 10 ? '#dbeafe' : '#f1f5f9',
-                                color: Number(q.position) <= 3 ? '#92400e' : Number(q.position) <= 10 ? '#1e40af' : '#475569',
+                                backgroundColor: Number(q.position) <= 3 ? '#fef3c7' : Number(q.position) <= 10 ? '#f3eef9' : '#f1f5f9',
+                                color: Number(q.position) <= 3 ? '#92400e' : Number(q.position) <= 10 ? '#774DA9' : '#475569',
                               }}
                             >
                               #{q.position}
@@ -1051,7 +1051,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
-                                color: '#2563eb',
+                                color: '#774DA9',
                                 textDecoration: 'none',
                                 fontWeight: 500,
                                 display: 'inline-block',
@@ -1062,10 +1062,10 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                               }}
                               title={p.page}
                             >
-                              🔗 {p.page}
+                              {p.page}
                             </a>
                           </td>
-                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#774DA9' }}>
                             {p.clicks.toLocaleString()}
                           </td>
                           <td style={{ ...tdStyle, textAlign: 'right', color: '#475569' }}>
@@ -1084,8 +1084,8 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                                 borderRadius: '6px',
                                 fontWeight: 700,
                                 fontSize: '12px',
-                                backgroundColor: Number(p.position) <= 3 ? '#fef3c7' : Number(p.position) <= 10 ? '#dbeafe' : '#f1f5f9',
-                                color: Number(p.position) <= 3 ? '#92400e' : Number(p.position) <= 10 ? '#1e40af' : '#475569',
+                                backgroundColor: Number(p.position) <= 3 ? '#fef3c7' : Number(p.position) <= 10 ? '#f3eef9' : '#f1f5f9',
+                                color: Number(p.position) <= 3 ? '#92400e' : Number(p.position) <= 10 ? '#774DA9' : '#475569',
                               }}
                             >
                               #{p.position}
@@ -1104,7 +1104,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
               <div style={{ padding: '20px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                   {deviceRows.map((d, idx) => {
-                    const icon = d.device.includes('mobile') ? '📱' : d.device.includes('tablet') ? '📟' : '💻';
+                    const icon = d.device.includes('mobile') ? 'Mobile' : d.device.includes('tablet') ? 'Tablet' : 'Desktop';
                     const percentage = metrics.totalClicks > 0 ? ((d.clicks / metrics.totalClicks) * 100).toFixed(1) : '0';
                     return (
                       <div
@@ -1134,7 +1134,7 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                             style={{
                               width: `${percentage}%`,
                               height: '100%',
-                              backgroundColor: '#2563eb',
+                              backgroundColor: '#774DA9',
                               borderRadius: '3px',
                             }}
                           />
@@ -1152,14 +1152,14 @@ export const SearchAnalyticsPanel: React.FC<SearchAnalyticsPanelProps> = ({ proj
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                   {countryRows.map((c, idx) => {
                     const isEthiopia = c.country === 'ET' || c.country === 'ETH';
-                    const flag = isEthiopia ? '🇪🇹' : '🌍';
+                    const flag = isEthiopia ? 'ET' : 'Global';
                     const countryName = isEthiopia ? 'Ethiopia' : c.country;
                     return (
                       <div
                         key={idx}
                         style={{
                           backgroundColor: '#f8fafc',
-                          border: isEthiopia ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                          border: isEthiopia ? '1px solid #dac8ee' : '1px solid #e2e8f0',
                           borderRadius: '8px',
                           padding: '16px',
                         }}

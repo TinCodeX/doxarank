@@ -315,7 +315,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       case 'reconnecting':
         return (
           <span style={badgeWsReconnectingStyle} title="Reconnecting with exponential backoff...">
-            ⚠️ Reconnecting...
+             Reconnecting...
           </span>
         );
       case 'error':
@@ -351,13 +351,13 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       case 'waiting_for_approval':
         return (
           <span style={badgeWaitingStyle}>
-            ⚠️ Paused — Human Approval Required
+             Paused — Human Approval Required
           </span>
         );
       case 'completed':
-        return <span style={badgeCompletedStyle}>✓ Completed</span>;
+        return <span style={badgeCompletedStyle}>Check Completed</span>;
       case 'failed':
-        return <span style={badgeFailedStyle}>✕ Failed</span>;
+        return <span style={badgeFailedStyle}>X Failed</span>;
       case 'cancelled':
         return <span style={badgeCancelledStyle}>⊘ Cancelled</span>;
       default:
@@ -367,16 +367,16 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
 
   const getEventTypeTagStyle = (eventType: string) => {
     if (eventType.includes('.parallel.')) {
-      return { backgroundColor: '#ede9fe', color: '#6d28d9' };
+      return { backgroundColor: '#f6f2fb', color: '#774DA9' };
     }
     if (eventType.startsWith('seo.agent.task.')) {
-      return { backgroundColor: '#e0f2fe', color: '#0369a1' };
+      return { backgroundColor: '#f6f2fb', color: '#774DA9' };
     }
     if (eventType.startsWith('agent.')) {
-      return { backgroundColor: '#e0e7ff', color: '#3730a3' };
+      return { backgroundColor: '#f6f2fb', color: '#774DA9' };
     }
     if (eventType.startsWith('tool.')) {
-      return { backgroundColor: '#f3e8ff', color: '#6b21a8' };
+      return { backgroundColor: '#f3eef9', color: '#593285' };
     }
     if (eventType.startsWith('approval.')) {
       return { backgroundColor: '#fef3c7', color: '#92400e' };
@@ -401,7 +401,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             </span>
           </div>
           <h3 style={titleStyle}>
-            🤖 AI SEO Agent Orchestrator
+             AI SEO Agent Orchestrator
           </h3>
           <p style={subtitleStyle}>
             Define high-level objectives. The agent decomposes goals, invokes governed SEO tools, evaluates observations, and requests approval for publishing actions.
@@ -439,13 +439,13 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       {/* Alert Messages */}
       {errorMessage && (
         <div style={errorAlertStyle}>
-          <span>⚠️ {errorMessage}</span>
+          <span> {errorMessage}</span>
           <button onClick={() => setErrorMessage(null)} style={closeAlertBtnStyle}>×</button>
         </div>
       )}
       {successMessage && (
         <div style={successAlertStyle}>
-          <span>✓ {successMessage}</span>
+          <span>Check {successMessage}</span>
           <button onClick={() => setSuccessMessage(null)} style={closeAlertBtnStyle}>×</button>
         </div>
       )}
@@ -466,7 +466,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '18px' }}>🤖</span>
+            <span style={{ fontSize: '18px' }}></span>
             <strong style={{ fontSize: '14px', color: '#0f172a' }}>Specialized SEO Agent Team (Phase 4.7)</strong>
             <span
               style={{
@@ -474,8 +474,8 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: '12px',
-                backgroundColor: '#dbeafe',
-                color: '#1d4ed8'
+                backgroundColor: '#f6f2fb',
+                color: '#774DA9'
               }}
             >
               5 SPECIALIZED AGENTS + SUPERVISOR
@@ -489,23 +489,23 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         {/* Specialized Agents Badges */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🔍 Research Agent</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>Research Agent</div>
             <div style={{ fontSize: '11px', color: '#64748b' }}>GSC, Rankings, Audit (11 Read-Only Tools)</div>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🩺 Investigation Agent</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}> Investigation Agent</div>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Root Cause & Certainty (10 Tools)</div>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🧠 Strategy Agent</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}> Strategy Agent</div>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Bayesian Lift & 4-Tier Reasoning (3 Tools)</div>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>⚡ Action Planning Agent</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>Action Planning Agent</div>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Human-Gated Proposals (5 Tools)</div>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>🎯 Verification & Outcome</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}> Verification & Outcome</div>
             <div style={{ fontSize: '11px', color: '#64748b' }}>Live Proof & GSC Lift (3 Tools)</div>
           </div>
         </div>
@@ -516,30 +516,30 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           <button
             type="button"
             onClick={() => setGoal('Execute full autonomous cycle: Research performance data, investigate anomalies, evaluate historical strategy, and synthesize an action plan.')}
-            style={{ ...suggestionPillStyle, backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}
+            style={{ ...suggestionPillStyle, backgroundColor: '#f6f2fb', borderColor: '#dac8ee', color: '#774DA9' }}
           >
-            🔄 Full Autonomous Cycle
+            Full Autonomous Cycle
           </button>
           <button
             type="button"
             onClick={() => setGoal('Investigate why page rankings and organic impressions declined over the past 28 days.')}
             style={{ ...suggestionPillStyle, backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' }}
           >
-            📉 Investigate Ranking Drop
+            Investigate Ranking Drop
           </button>
           <button
             type="button"
             onClick={() => setGoal('Evaluate adaptive strategy and domain win rates to prioritize highest-impact SEO interventions.')}
             style={{ ...suggestionPillStyle, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}
           >
-            🧠 Prioritize Strategy
+             Prioritize Strategy
           </button>
           <button
             type="button"
             onClick={() => setGoal('Verify live website DOM changes and measure search outcome lift for completed actions.')}
             style={{ ...suggestionPillStyle, backgroundColor: '#faf5ff', borderColor: '#e9d5ff', color: '#6b21a8' }}
           >
-            🎯 Verify & Measure
+             Verify & Measure
           </button>
         </div>
       </div>
@@ -560,7 +560,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>🔌</span>
+            
             <strong style={{ fontSize: '13px', color: '#0f172a' }}>External Tool Interoperability — Model Context Protocol (MCP)</strong>
             <span
               style={{
@@ -582,15 +582,15 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ check_url_status</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>Check check_url_status</span>
             <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ get_page_metadata</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>Check get_page_metadata</span>
             <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
           </div>
           <div style={{ backgroundColor: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>✓ get_external_page_signals</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>Check get_external_page_signals</span>
             <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569' }}>READ ONLY</span>
           </div>
           <button
@@ -598,7 +598,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             onClick={() => setGoal('Inspect URL with external MCP diagnostic tools: check live HTTP status latency, OpenGraph head tags, and DOM text-to-HTML ratio.')}
             style={{ ...suggestionPillStyle, backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#334155', marginLeft: 'auto' }}
           >
-            ⚡ Test MCP Diagnostics Mission
+            Test MCP Diagnostics Mission
           </button>
         </div>
       </div>
@@ -629,7 +629,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               style={suggestionPillStyle}
               title="Click to populate goal"
             >
-              💡 {sample.slice(0, 48)}...
+               {sample.slice(0, 48)}...
             </button>
           ))}
         </div>
@@ -644,7 +644,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               padding: '10px 18px',
               fontSize: '13px',
               fontWeight: 700,
-              backgroundColor: '#4338ca',
+              backgroundColor: '#774DA9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -655,7 +655,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               gap: '6px',
             }}
           >
-            {isOrchestrating ? '⚡ Collaborating...' : '🤝 Run Multi-Agent Team (Phase 5.3)'}
+            {isOrchestrating ? 'Collaborating...' : ' Run Multi-Agent Team (Phase 5.3)'}
           </button>
 
           <button
@@ -668,7 +668,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               cursor: isStartingRun || isOrchestrating || !goal.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            {isStartingRun ? '⚡ Launching Agent Loop...' : '🚀 Run Autonomous Agent'}
+            {isStartingRun ? 'Launching Agent Loop...' : 'Run Autonomous Agent'}
           </button>
         </div>
       </div>
@@ -679,22 +679,22 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           id="multi-agent-collaboration-card"
           style={{
             backgroundColor: '#ffffff',
-            border: '1px solid #c7d2fe',
+            border: '1px solid #dac8ee',
             borderRadius: '12px',
             padding: '20px',
             marginBottom: '20px',
-            boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.08)',
+            boxShadow: '0 4px 6px -1px rgba(119, 77, 169, 0.08)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', borderBottom: '1px solid #e0e7ff', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '20px' }}>🤝</span>
+              <span style={{ fontSize: '20px' }}></span>
               <div>
                 <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>
                   Multi-Agent Collaboration: {orchestrationResult.task_type.toUpperCase()}
                 </h4>
-                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6366f1' }}>
-                  Correlation ID: <code style={{ fontSize: '11px', backgroundColor: '#eef2ff', padding: '2px 6px', borderRadius: '4px' }}>{orchestrationResult.correlation_id}</code>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#774DA9' }}>
+                  Correlation ID: <code style={{ fontSize: '11px', backgroundColor: '#f6f2fb', padding: '2px 6px', borderRadius: '4px' }}>{orchestrationResult.correlation_id}</code>
                 </p>
               </div>
             </div>
@@ -709,7 +709,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                   color: orchestrationResult.status === 'completed' ? '#15803d' : orchestrationResult.status === 'degraded' ? '#b45309' : '#b91c1c',
                 }}
               >
-                {orchestrationResult.status === 'completed' ? '✓ Completed' : orchestrationResult.status === 'degraded' ? '⚠️ Degraded (Evidence Preserved)' : '✕ Failed'}
+                {orchestrationResult.status === 'completed' ? 'Check Completed' : orchestrationResult.status === 'degraded' ? ' Degraded (Evidence Preserved)' : 'X Failed'}
               </span>
               <button
                 type="button"
@@ -724,7 +724,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                   cursor: 'pointer',
                 }}
               >
-                ✕ Dismiss
+                X Dismiss
               </button>
             </div>
           </div>
@@ -749,7 +749,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     gap: '6px',
                   }}
                 >
-                  <span>{res.status === 'completed' ? '✓' : '✕'}</span>
+                  <span>{res.status === 'completed' ? 'Check' : 'X'}</span>
                   <strong>{res.agent}</strong>
                   <span style={{ fontSize: '11px', color: '#64748b' }}>({res.duration_ms}ms)</span>
                 </div>
@@ -766,8 +766,8 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 {orchestrationResult.handoff_history.map((h, idx) => (
                   <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#eef2ff', color: '#4338ca', fontWeight: 600 }}>
-                      {h.source_agent} ➔ {h.target_agent}
+                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
+                      {h.source_agent} &rarr; {h.target_agent}
                     </span>
                     {idx < (orchestrationResult.handoff_history?.length || 0) - 1 && (
                       <span style={{ color: '#94a3b8' }}>•</span>
@@ -783,9 +783,9 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             {/* Column 1: Observed Facts */}
             <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '14px' }}>🔬</span>
+                <span style={{ fontSize: '14px' }}></span>
                 <strong style={{ fontSize: '13px', color: '#0f172a' }}>Observed Facts (Empirical)</strong>
-                <span style={{ fontSize: '10px', backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                <span style={{ fontSize: '10px', backgroundColor: '#f6f2fb', color: '#774DA9', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                   PROVENANCE PRESERVED
                 </span>
               </div>
@@ -810,7 +810,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             {/* Column 2: Inferences & Uncertainties */}
             <div style={{ backgroundColor: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '14px' }}>💡</span>
+                <span style={{ fontSize: '14px' }}></span>
                 <strong style={{ fontSize: '13px', color: '#0f172a' }}>Derived Inferences & Hypotheses</strong>
                 <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                   NOT EMPIRICAL FACTS
@@ -837,7 +837,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               {orchestrationResult.uncertainties && orchestrationResult.uncertainties.length > 0 && (
                 <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
                   <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', marginBottom: '4px' }}>
-                    ❓ Declared Knowledge Boundaries / Uncertainties:
+                    Declared Knowledge Boundaries / Uncertainties:
                   </div>
                   <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: '#64748b' }}>
                     {orchestrationResult.uncertainties.map((unc, idx) => (
@@ -862,14 +862,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>🧠</span>
+                <span style={{ fontSize: '18px' }}></span>
                 <strong style={{ fontSize: '14px', color: '#1e293b' }}>Shared Working Memory (Phase 5.2)</strong>
                 <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                   Role-Projected & Bounded
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
                   Revisits: {orchestrationResult.shared_memory?.summary?.revisits_count ?? orchestrationResult.collaboration_state?.revisit_history?.length ?? 0}
                 </span>
                 <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
@@ -900,7 +900,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               </div>
               <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>Decisions</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#4338ca' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#774DA9' }}>
                   {orchestrationResult.shared_memory?.summary?.decisions_count ?? orchestrationResult.shared_memory?.decisions?.length ?? 0}
                 </div>
               </div>
@@ -921,12 +921,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             {/* Decisions & Conflicts Inspector */}
             {(orchestrationResult.shared_memory?.decisions && orchestrationResult.shared_memory.decisions.length > 0) && (
               <div style={{ marginTop: '10px', backgroundColor: '#ffffff', padding: '10px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>📋 Collaboration Decisions:</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>Collaboration Decisions:</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {orchestrationResult.shared_memory.decisions.map((dec, dIdx) => (
                     <div key={dIdx} style={{ fontSize: '12px', color: '#475569', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>• <strong>{dec.title}</strong> — {dec.reason} <span style={{ color: '#94a3b8' }}>({dec.decision_owner})</span></span>
-                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>{dec.status.toUpperCase()}</span>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>{dec.status.toUpperCase()}</span>
                     </div>
                   ))}
                 </div>
@@ -947,14 +947,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>🗺️</span>
+                <span style={{ fontSize: '18px' }}></span>
                 <strong style={{ fontSize: '14px', color: '#1e293b' }}>Dynamic Task Plan & Decomposition (Phase 5.3)</strong>
                 <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                   DAG Validated (Cycle-Free)
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
                   Planning Rounds: {orchestrationResult.task_plan?.summary?.planning_rounds ?? orchestrationResult.collaboration_state?.task_plan_summary?.planning_rounds ?? 1}
                 </span>
                 <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
@@ -976,7 +976,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               </div>
               <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>Ready / Running</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0284c7' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#774DA9' }}>
                   {(orchestrationResult.task_plan?.summary?.ready_tasks ?? 0) + (orchestrationResult.task_plan?.summary?.running_tasks ?? 0)}
                 </div>
               </div>
@@ -1000,7 +1000,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               </div>
               <div style={{ backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: '#64748b' }}>Parallel Tiers</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#7c3aed' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#a372df' }}>
                   {orchestrationResult.task_plan?.summary?.parallel_groups_count ?? 1}
                 </div>
               </div>
@@ -1010,26 +1010,26 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             {orchestrationResult.task_plan?.tasks && Object.keys(orchestrationResult.task_plan.tasks).length > 0 && (
               <div style={{ marginTop: '10px', backgroundColor: '#ffffff', padding: '12px 14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  🎯 Decomposed Agent Tasks (Topological Execution Order):
+                   Decomposed Agent Tasks (Topological Execution Order):
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {Object.values(orchestrationResult.task_plan.tasks).map((t: any) => {
                     const statusBg =
                       t.status === 'completed' ? '#dcfce7' :
-                      t.status === 'running' ? '#e0f2fe' :
+                      t.status === 'running' ? '#f6f2fb' :
                       t.status === 'blocked' ? '#ffedd5' :
                       t.status === 'failed' ? '#fee2e2' :
                       t.status === 'ready' ? '#f0fdf4' : '#f1f5f9';
                     const statusColor =
                       t.status === 'completed' ? '#166534' :
-                      t.status === 'running' ? '#0369a1' :
+                      t.status === 'running' ? '#774DA9' :
                       t.status === 'blocked' ? '#c2410c' :
                       t.status === 'failed' ? '#b91c1c' :
                       t.status === 'ready' ? '#15803d' : '#475569';
                     const priorityColor =
                       t.priority === 'critical' ? '#dc2626' :
                       t.priority === 'high' ? '#ea580c' :
-                      t.priority === 'medium' ? '#2563eb' : '#64748b';
+                      t.priority === 'medium' ? '#774DA9' : '#64748b';
 
                     return (
                       <div
@@ -1047,7 +1047,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{t.task_id}</span>
-                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
                               {t.responsible_agent}
                             </span>
                             <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', border: `1px solid ${priorityColor}`, color: priorityColor, fontWeight: 700 }}>
@@ -1064,7 +1064,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         {t.metadata?.routing_decision && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', fontSize: '11px', color: '#475569', flexWrap: 'wrap' }}>
                             <span style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                              🎯 {Math.round((t.metadata.routing_decision.confidence || 0) * 100)}% Conf
+                               {Math.round((t.metadata.routing_decision.confidence || 0) * 100)}% Conf
                             </span>
                             <span style={{ backgroundColor: '#f1f5f9', padding: '1px 6px', borderRadius: '4px' }}>
                               Score: {t.metadata.routing_decision.score}
@@ -1076,7 +1076,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                             )}
                             {t.metadata.routing_decision.fallback_attempt > 0 && (
                               <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                                ⚠️ Fallback (Att #{t.metadata.routing_decision.fallback_attempt})
+                                 Fallback (Att #{t.metadata.routing_decision.fallback_attempt})
                               </span>
                             )}
                           </div>
@@ -1088,12 +1088,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         )}
                         {t.result_summary && (
                           <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#f0fdf4', padding: '4px 8px', borderRadius: '4px', marginTop: '2px' }}>
-                            ✓ {t.result_summary}
+                            Check {t.result_summary}
                           </div>
                         )}
                         {t.error && (
                           <div style={{ fontSize: '11px', color: '#b91c1c', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: '4px', marginTop: '2px' }}>
-                            ✕ {t.error}
+                            X {t.error}
                           </div>
                         )}
                       </div>
@@ -1119,14 +1119,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>⚡</span>
+                  
                   <strong style={{ fontSize: '14px', color: '#581c87' }}>Parallel Execution Batches (Phase 5.4)</strong>
-                  <span style={{ fontSize: '11px', backgroundColor: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                  <span style={{ fontSize: '11px', backgroundColor: '#f6f2fb', color: '#774DA9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                     Bounded Concurrency & Overlap Telemetry
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f3e8ff', color: '#7e22ce', fontWeight: 600 }}>
+                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f6f2fb', color: '#774da9', fontWeight: 600 }}>
                     Batches: {(orchestrationResult.parallel_batches || orchestrationResult.collaboration_state?.parallel_batches || []).length}
                   </span>
                 </div>
@@ -1146,7 +1146,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                       style={{
                         padding: '12px',
                         borderRadius: '8px',
-                        border: '1px solid #e9d5ff',
+                        border: '1px solid #dac8ee',
                         backgroundColor: '#ffffff',
                         display: 'flex',
                         flexDirection: 'column',
@@ -1155,13 +1155,13 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <strong style={{ fontSize: '12px', color: '#4c1d95' }}>Batch: {batch.batch_id}</strong>
-                          <span style={{ fontSize: '11px', color: '#6b21a8', backgroundColor: '#f5f3ff', padding: '1px 6px', borderRadius: '4px' }}>
+                          <strong style={{ fontSize: '12px', color: '#24143c' }}>Batch: {batch.batch_id}</strong>
+                          <span style={{ fontSize: '11px', color: '#774da9', backgroundColor: '#f6f2fb', padding: '1px 6px', borderRadius: '4px' }}>
                             Limit: {batch.concurrency_limit}
                           </span>
                           {batch.overlap_detected && (
                             <span style={{ fontSize: '11px', color: '#047857', backgroundColor: '#d1fae5', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                              ⚡ Genuine Overlap ({Math.round(batch.overlap_duration_ms || 0)}ms)
+                              Genuine Overlap ({Math.round(batch.overlap_duration_ms || 0)}ms)
                             </span>
                           )}
                         </div>
@@ -1221,14 +1221,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>🎯</span>
+                  <span style={{ fontSize: '18px' }}></span>
                   <strong style={{ fontSize: '14px', color: '#14532d' }}>Adaptive Agent Selection & Routing (Phase 5.5)</strong>
                   <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                     Deterministic & Explainable
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                  <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
                     Decisions: {(orchestrationResult.routing_decisions || orchestrationResult.collaboration_state?.routing_decisions || []).length}
                   </span>
                 </div>
@@ -1251,7 +1251,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{dec.task_id}</span>
-                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#f6f2fb', color: '#774DA9', fontWeight: 600 }}>
                           {dec.selected_agent}
                         </span>
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#ecfdf5', color: '#065f46', fontWeight: 700 }}>
@@ -1263,7 +1263,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                       </div>
                       {dec.fallback_attempt > 0 && (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#fff7ed', color: '#c2410c', fontWeight: 700 }}>
-                          ⚠️ Fallback Attempt #{dec.fallback_attempt}
+                           Fallback Attempt #{dec.fallback_attempt}
                         </span>
                       )}
                     </div>
@@ -1330,7 +1330,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     ? '#f59e0b'
                     : activeRun.status === 'failed' || activeRun.status === 'cancelled'
                     ? '#ef4444'
-                    : '#3b82f6',
+                    : '#774DA9',
               }}
             />
           </div>
@@ -1339,7 +1339,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
           {activeRun.status === 'waiting_for_approval' && activeRun.pending_action && (
             <div style={approvalGateCardStyle} id="agent-approval-gate-card">
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-                <span style={{ fontSize: '28px' }}>⚠️</span>
+                <span style={{ fontSize: '28px' }}></span>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#92400e' }}>
@@ -1362,10 +1362,10 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     </div>
                     <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b', display: 'flex', gap: '16px' }}>
                       {activeRun.pending_action.target_keyword && (
-                        <span>🎯 Keyword: <strong>{activeRun.pending_action.target_keyword}</strong></span>
+                        <span> Keyword: <strong>{activeRun.pending_action.target_keyword}</strong></span>
                       )}
                       {activeRun.pending_action.target_url && (
-                        <span>🔗 URL: <strong>{activeRun.pending_action.target_url}</strong></span>
+                        <span>URL: <strong>{activeRun.pending_action.target_url}</strong></span>
                       )}
                     </div>
                   </div>
@@ -1378,7 +1378,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                       disabled={isResuming}
                       style={approveBtnStyle}
                     >
-                      {isResuming ? 'Processing Approval...' : '✓ Approve & Resume Run'}
+                      {isResuming ? 'Processing Approval...' : 'Check Approve & Resume Run'}
                     </button>
                     <button
                       id="agent-reject-btn"
@@ -1386,7 +1386,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                       disabled={isResuming}
                       style={rejectBtnStyle}
                     >
-                      {isResuming ? 'Processing...' : '✕ Reject Proposal'}
+                      {isResuming ? 'Processing...' : 'X Reject Proposal'}
                     </button>
                   </div>
                 </div>
@@ -1414,21 +1414,21 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                   onClick={() => setViewMode('steps')}
                   style={{
                     ...tabBtnStyle,
-                    backgroundColor: viewMode === 'steps' ? '#4338ca' : '#f1f5f9',
+                    backgroundColor: viewMode === 'steps' ? '#774DA9' : '#f1f5f9',
                     color: viewMode === 'steps' ? '#ffffff' : '#475569',
                   }}
                 >
-                  ⚡ ReAct Steps ({activeRun.steps?.length || 0})
+                  ReAct Steps ({activeRun.steps?.length || 0})
                 </button>
                 <button
                   onClick={() => setViewMode('events')}
                   style={{
                     ...tabBtnStyle,
-                    backgroundColor: viewMode === 'events' ? '#4338ca' : '#f1f5f9',
+                    backgroundColor: viewMode === 'events' ? '#774DA9' : '#f1f5f9',
                     color: viewMode === 'events' ? '#ffffff' : '#475569',
                   }}
                 >
-                  📡 Event Log ({liveEvents.length} Events)
+                   Event Log ({liveEvents.length} Events)
                 </button>
                 <button
                   onClick={() => {
@@ -1437,11 +1437,11 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                   }}
                   style={{
                     ...tabBtnStyle,
-                    backgroundColor: viewMode === 'reasoning' ? '#4338ca' : '#f1f5f9',
+                    backgroundColor: viewMode === 'reasoning' ? '#774DA9' : '#f1f5f9',
                     color: viewMode === 'reasoning' ? '#ffffff' : '#475569',
                   }}
                 >
-                  🧠 Multi-Agent Reasoning {reasoningData?.total_cases ? `(${reasoningData.total_cases})` : ''}
+                   Multi-Agent Reasoning {reasoningData?.total_cases ? `(${reasoningData.total_cases})` : ''}
                 </button>
               </div>
 
@@ -1488,7 +1488,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                             <span
                               style={{
                                 ...stepNumberBadgeStyle,
-                                backgroundColor: isStepWaiting ? '#f59e0b' : isStepFailed ? '#ef4444' : isStepCompleted ? '#10b981' : '#3b82f6',
+                                backgroundColor: isStepWaiting ? '#f59e0b' : isStepFailed ? '#ef4444' : isStepCompleted ? '#10b981' : '#774DA9',
                               }}
                             >
                               {step.step_number}
@@ -1498,12 +1498,12 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                 <span style={actionTypeTagStyle}>{step.action_type_display}</span>
                                 {toolCall && (
                                   <code style={toolNameCodeStyle}>
-                                    🔧 {toolCall.tool_name}
+                                     {toolCall.tool_name}
                                   </code>
                                 )}
                                 {toolCall?.duration_ms !== undefined && (
                                   <span style={{ fontSize: '11px', color: '#64748b' }}>
-                                    ⏱️ {toolCall.duration_ms}ms
+                                    {toolCall.duration_ms}ms
                                   </span>
                                 )}
                               </div>
@@ -1518,7 +1518,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                               onClick={() => toggleStepExpand(step.id)}
                               style={toggleDetailBtnStyle}
                             >
-                              {isExpanded ? 'Hide Data ▲' : 'View Observation ▼'}
+                              {isExpanded ? 'Hide Data' : 'View Observation'}
                             </button>
                           )}
                         </div>
@@ -1543,7 +1543,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                 {Array.isArray(toolCall.tool_output?.findings) && toolCall.tool_output.findings.length > 0 && (
                                   <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
-                                      🎯 Discovered GSC Intelligence Opportunities ({toolCall.tool_output.findings.length})
+                                       Discovered GSC Intelligence Opportunities ({toolCall.tool_output.findings.length})
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                       {toolCall.tool_output.findings.slice(0, 5).map((f: any, fIdx: number) => (
@@ -1556,8 +1556,8 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                               textTransform: 'uppercase',
                                               padding: '2px 6px',
                                               borderRadius: '4px',
-                                              backgroundColor: f.severity === 'critical' ? '#fee2e2' : f.severity === 'warning' ? '#fef3c7' : '#e0f2fe',
-                                              color: f.severity === 'critical' ? '#991b1b' : f.severity === 'warning' ? '#92400e' : '#0369a1'
+                                              backgroundColor: f.severity === 'critical' ? '#fee2e2' : f.severity === 'warning' ? '#fef3c7' : '#f6f2fb',
+                                              color: f.severity === 'critical' ? '#991b1b' : f.severity === 'warning' ? '#92400e' : '#774DA9'
                                             }}>
                                               {f.severity || 'info'}
                                             </span>
@@ -1565,7 +1565,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                           <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#475569' }}>{f.insight}</p>
                                           {f.recommendation && (
                                             <p style={{ margin: 0, fontSize: '11px', color: '#166534', backgroundColor: '#f0fdf4', padding: '4px 6px', borderRadius: '4px' }}>
-                                              💡 <strong>Recommendation:</strong> {f.recommendation}
+                                               <strong>Recommendation:</strong> {f.recommendation}
                                             </p>
                                           )}
                                         </div>
@@ -1578,7 +1578,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                 {toolCall.tool_output?.summary_deltas && (
                                   <div style={{ marginBottom: '12px', padding: '10px 12px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                                     <div style={{ fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
-                                      📊 Period-over-Period Performance Deltas
+                                       Period-over-Period Performance Deltas
                                     </div>
                                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px', color: '#1e293b' }}>
                                       <span><strong>Clicks:</strong> {toolCall.tool_output.summary_deltas.clicks_delta > 0 ? '+' : ''}{toolCall.tool_output.summary_deltas.clicks_delta} ({toolCall.tool_output.summary_deltas.clicks_change_percent}%)</span>
@@ -1622,15 +1622,15 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                             <span style={stepSmallTagStyle}>Step {ev.step_number}</span>
                           )}
                           {ev.payload?.tool_name && (
-                            <code style={toolNameCodeStyle}>🔧 {ev.payload.tool_name}</code>
+                            <code style={toolNameCodeStyle}> {ev.payload.tool_name}</code>
                           )}
                           {ev.payload?.duration_ms !== undefined && (
                             <span style={{ fontSize: '11px', color: '#64748b' }}>
-                              ⏱️ {ev.payload.duration_ms}ms
+                              {ev.payload.duration_ms}ms
                             </span>
                           )}
                           {ev.payload?.requires_human_approval && (
-                            <span style={approvalBadgeStyle}>⚠️ Approval Checkpoint</span>
+                            <span style={approvalBadgeStyle}> Approval Checkpoint</span>
                           )}
                         </div>
                         <div style={{ fontSize: '11px', color: '#94a3b8' }}>
@@ -1653,8 +1653,8 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             {viewMode === 'reasoning' && (
               isLoadingReasoning ? (
                 <div style={emptyStepsStyle}>
-                  <p style={{ margin: 0, color: '#4338ca', fontSize: '13px', fontWeight: 600 }}>
-                    ⏳ Loading multi-agent reasoning cases & consensus analysis...
+                  <p style={{ margin: 0, color: '#774DA9', fontSize: '13px', fontWeight: 600 }}>
+                    Loading multi-agent reasoning cases & consensus analysis...
                   </p>
                 </div>
               ) : reasoningData?.cases && reasoningData.cases.length > 0 ? (
@@ -1666,10 +1666,10 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                     const badgeBg = isReached ? '#dcfce7' : isEscalated ? '#fee2e2' : '#ffedd5';
                     const badgeColor = isReached ? '#166534' : isEscalated ? '#991b1b' : '#9a3412';
                     const badgeLabel = isReached
-                      ? '✓ Consensus Reached'
+                      ? 'Check Consensus Reached'
                       : isEscalated
-                      ? '⚠️ Escalated to Human (HITL)'
-                      : '⚡ No Consensus';
+                      ? ' Escalated to Human (HITL)'
+                      : 'No Consensus';
 
                     return (
                       <div
@@ -1686,7 +1686,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4338ca', backgroundColor: '#e0e7ff', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#774DA9', backgroundColor: '#f6f2fb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
                                 CASE: {rc.case_id}
                               </span>
                               <span style={{ fontSize: '11px', color: '#64748b' }}>
@@ -1715,7 +1715,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                           <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Participating Agents:</span>
                           {(rc.participating_agents || []).map((ag: string) => (
                             <span key={ag} style={{ fontSize: '11px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', padding: '2px 6px', borderRadius: '4px', color: '#334155' }}>
-                              🤖 {ag}
+                               {ag}
                             </span>
                           ))}
                         </div>
@@ -1742,7 +1742,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                             )}
                             {rc.consensus_result.escalation_reason && (
                               <div style={{ fontSize: '12px', color: '#991b1b', fontWeight: 600, marginTop: '4px' }}>
-                                ⚠️ Escalation Note: {rc.consensus_result.escalation_reason}
+                                 Escalation Note: {rc.consensus_result.escalation_reason}
                               </div>
                             )}
                             {rc.consensus_result.unresolved_uncertainty && rc.consensus_result.unresolved_uncertainty.length > 0 && (
@@ -1761,7 +1761,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         {/* Competing Hypotheses */}
                         <div style={{ marginBottom: '16px' }}>
                           <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            💡 Competing Hypotheses ({rc.hypotheses?.length || 0})
+                             Competing Hypotheses ({rc.hypotheses?.length || 0})
                           </h5>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px' }}>
                             {(rc.hypotheses || []).map((hyp: any) => {
@@ -1770,14 +1770,14 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                 <div
                                   key={hyp.hypothesis_id}
                                   style={{
-                                    border: `1px solid ${isSelected ? '#4338ca' : '#e2e8f0'}`,
+                                    border: `1px solid ${isSelected ? '#774DA9' : '#e2e8f0'}`,
                                     backgroundColor: isSelected ? '#f8faff' : '#ffffff',
                                     borderRadius: '8px',
                                     padding: '10px 12px',
                                   }}
                                 >
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#774DA9' }}>
                                       {hyp.agent}
                                     </span>
                                     <div style={{ display: 'flex', gap: '4px' }}>
@@ -1803,7 +1803,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                   </div>
                                   {hyp.supporting_evidence && hyp.supporting_evidence.length > 0 && (
                                     <div style={{ marginTop: '6px', fontSize: '10px', color: '#059669', backgroundColor: '#f0fdf4', padding: '4px 6px', borderRadius: '4px' }}>
-                                      📎 {hyp.supporting_evidence.map((e: any) => e.claim).join('; ')}
+                                       {hyp.supporting_evidence.map((e: any) => e.claim).join('; ')}
                                     </div>
                                   )}
                                 </div>
@@ -1816,7 +1816,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         {rc.rounds && rc.rounds.some((r: any) => r.critiques && r.critiques.length > 0) && (
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              ⚔️ Cross-Agent Critiques & Challenges
+                              Cross-Agent Critiques & Challenges
                             </h5>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {rc.rounds.flatMap((r: any) => r.critiques || []).map((crit: any) => {
@@ -1837,7 +1837,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                   >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                       <span style={{ fontWeight: 700, color: '#1e293b' }}>
-                                        🤖 {crit.critique_agent} ➔ 🎯 {crit.target_agent}
+                                         {crit.critique_agent} &rarr; {crit.target_agent}
                                       </span>
                                       <div style={{ display: 'flex', gap: '6px' }}>
                                         <span style={{ fontSize: '10px', color: '#64748b' }}>{crit.challenge_type}</span>
@@ -1850,8 +1850,8 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                                       {crit.critique_text}
                                     </div>
                                     {crit.suggested_verification && (
-                                      <div style={{ fontSize: '11px', color: '#0369a1' }}>
-                                        🔍 Suggested verification: {crit.suggested_verification}
+                                      <div style={{ fontSize: '11px', color: '#774DA9' }}>
+                                        Suggested verification: {crit.suggested_verification}
                                       </div>
                                     )}
                                   </div>
@@ -1865,7 +1865,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
                         {rc.rounds && rc.rounds.some((r: any) => r.disagreements && r.disagreements.length > 0) && (
                           <div>
                             <h5 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              ⚠️ Detected Disagreements
+                               Detected Disagreements
                             </h5>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {rc.rounds.flatMap((r: any) => r.disagreements || []).map((dis: any) => (
@@ -1913,7 +1913,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         </div>
       ) : (
         <div style={emptyRunsCardStyle}>
-          <span style={{ fontSize: '36px', marginBottom: '8px' }}>🚀</span>
+          
           <h4 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>
             No Agent Runs Executed Yet
           </h4>
@@ -1952,8 +1952,8 @@ const featureTagStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   fontWeight: 800,
   letterSpacing: '0.05em',
-  color: '#4338ca',
-  backgroundColor: '#e0e7ff',
+  color: '#774DA9',
+  backgroundColor: '#f6f2fb',
   padding: '3px 8px',
   borderRadius: '4px',
 };
@@ -2016,9 +2016,9 @@ const goalTextareaStyle: React.CSSProperties = {
 const suggestionPillStyle: React.CSSProperties = {
   padding: '4px 10px',
   borderRadius: '16px',
-  backgroundColor: '#eff6ff',
-  color: '#2563eb',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f5f0fa',
+  color: '#774DA9',
+  border: '1px solid #e9d5ff',
   fontSize: '11px',
   fontWeight: 600,
   cursor: 'pointer',
@@ -2028,12 +2028,12 @@ const suggestionPillStyle: React.CSSProperties = {
 const primaryRunBtnStyle: React.CSSProperties = {
   padding: '10px 20px',
   borderRadius: '8px',
-  backgroundColor: '#4338ca',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   fontWeight: 700,
   fontSize: '14px',
   border: 'none',
-  boxShadow: '0 2px 4px rgba(67, 56, 202, 0.25)',
+  boxShadow: '0 2px 4px rgba(119, 77, 169, 0.25)',
 };
 
 const executionCardStyle: React.CSSProperties = {
@@ -2312,9 +2312,9 @@ const badgeWsRecoveringStyle: React.CSSProperties = {
   fontWeight: 700,
   padding: '3px 10px',
   borderRadius: '12px',
-  backgroundColor: '#f5f3ff',
-  color: '#6d28d9',
-  border: '1px solid #ddd6fe',
+  backgroundColor: '#f6f2fb',
+  color: '#774DA9',
+  border: '1px solid #dac8ee',
 };
 
 const badgeWsConnectingStyle: React.CSSProperties = {
@@ -2325,16 +2325,16 @@ const badgeWsConnectingStyle: React.CSSProperties = {
   fontWeight: 700,
   padding: '3px 10px',
   borderRadius: '12px',
-  backgroundColor: '#eff6ff',
-  color: '#2563eb',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f5f0fa',
+  color: '#774DA9',
+  border: '1px solid #e9d5ff',
 };
 
 const pulseBlueDotStyle: React.CSSProperties = {
   width: '8px',
   height: '8px',
   borderRadius: '50%',
-  backgroundColor: '#3b82f6',
+  backgroundColor: '#774DA9',
 };
 
 const badgeWsReconnectingStyle: React.CSSProperties = {
@@ -2373,16 +2373,16 @@ const badgeRunningStyle: React.CSSProperties = {
   fontWeight: 700,
   padding: '3px 10px',
   borderRadius: '12px',
-  backgroundColor: '#eff6ff',
-  color: '#1d4ed8',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f6f2fb',
+  color: '#774DA9',
+  border: '1px solid #dac8ee',
 };
 
 const pulseDotStyle: React.CSSProperties = {
   width: '8px',
   height: '8px',
   borderRadius: '50%',
-  backgroundColor: '#3b82f6',
+  backgroundColor: '#774DA9',
 };
 
 const badgeWaitingStyle: React.CSSProperties = {

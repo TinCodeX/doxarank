@@ -112,7 +112,7 @@ export const KeywordFormModal: React.FC<KeywordFormModalProps> = ({
               {keywordToEdit ? 'Edit Keyword' : 'Track New Keyword'}
             </h3>
             <span style={{ fontSize: '12px', color: '#6b7280' }}>
-              Project: <strong style={{ color: '#1d4ed8' }}>{projectName}</strong>
+              Project: <strong style={{ color: '#774da9' }}>{projectName}</strong>
             </span>
           </div>
           <button
@@ -120,7 +120,7 @@ export const KeywordFormModal: React.FC<KeywordFormModalProps> = ({
             onClick={onClose}
             style={closeButtonStyle}
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -326,7 +326,7 @@ const cancelButtonStyle: React.CSSProperties = {
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: '10px 18px',
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',

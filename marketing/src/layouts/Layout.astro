@@ -75,9 +75,9 @@ const structuredData = {
     <meta property="twitter:description" content={description} />
     <meta property="twitter:image" content={ogImage} />
 
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <!-- Favicon & Icons -->
+    <link rel="icon" type="image/png" href="/doxa-logo.png" />
+    <link rel="apple-touch-icon" href="/doxa-logo.png" />
 
     <!-- Preconnect to Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -91,7 +91,7 @@ const structuredData = {
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
   </head>
 
-  <body class="flex min-h-screen flex-col bg-slate-50 text-slate-900 antialiased selection:bg-indigo-600 selection:text-white">
+  <body class="flex min-h-screen flex-col bg-[#faf9fc] text-[#1a1625] antialiased selection:bg-[#774DA9] selection:text-white">
     {!hideNav && <Navbar />}
     <main class="flex-grow">
       <slot />

@@ -148,7 +148,7 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
             onClick={handleRunMonitoring}
             disabled={isTriggering}
           >
-            {isTriggering ? 'Running Cycle...' : '▶ Run Monitoring Now'}
+            {isTriggering ? 'Running Cycle...' : 'Run Monitoring Now'}
           </button>
         </div>
       </div>
@@ -695,7 +695,7 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         }
         .badge-monitor-type {
           background: #1e293b;
-          color: #93c5fd;
+          color: #dac8ee;
           padding: 0.2rem 0.5rem;
           border-radius: 4px;
           font-size: 0.75rem;
@@ -731,7 +731,7 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         }
         .btn-details {
           background: #1e293b;
-          color: #38bdf8;
+          color: #dac8ee;
           border: 1px solid #334155;
           padding: 0.2rem 0.5rem;
           border-radius: 4px;
@@ -757,8 +757,8 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         .text-success { color: #34d399; }
         .text-danger { color: #f87171; }
         .text-amber { color: #fbbf24; }
-        .text-blue { color: #60a5fa; }
-        .text-purple { color: #c084fc; }
+        .text-blue { color: #dac8ee; }
+        .text-purple { color: #a372df; }
         .text-cyan { color: #22d3ee; }
         .text-muted { color: #64748b; }
         .font-mono { font-family: monospace; }

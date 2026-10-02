@@ -3,33 +3,32 @@ const navItems = [
   { label: 'Features', href: '/features' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'About', href: '/about' },
-  { label: 'Blog', href: '/blog' },
   { label: 'Case Studies', href: '/case-studies' },
+  { label: 'Blog', href: '/blog' },
   { label: 'Contact', href: '/contact' },
 ];
 
 const currentPath = Astro.url.pathname;
 ---
 
-<header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md transition-all">
-  <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
+<header class="sticky top-0 z-50 border-b border-purple-900/10 bg-white/95 backdrop-blur-md transition-all">
+  <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
     
-    <!-- Brand Logo -->
-    <a href="/" class="group flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg">
-      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 shadow-sm transition group-hover:scale-105">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none">
-          <rect x="4" y="14" width="3" height="6" rx="1" fill="#10b981" />
-          <rect x="10.5" y="9" width="3" height="11" rx="1" fill="#38bdf8" />
-          <rect x="17" y="4" width="3" height="16" rx="1" fill="#6366f1" />
-          <path d="M4 11L10.5 6L17 2" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="text-xl font-extrabold tracking-tight text-slate-900">
-          Doxa<span class="text-indigo-600">Rank</span>
+    <!-- Brand Logo with Official Doxa Asset -->
+    <a href="/" class="group flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#774DA9] rounded-lg">
+      <img
+        src="/doxa-logo.png"
+        alt="DoxaRank Logo"
+        class="h-9 w-9 object-contain rounded-lg shadow-xs transition group-hover:scale-105"
+        width="36"
+        height="36"
+      />
+      <div class="flex items-center gap-2">
+        <span class="text-xl font-extrabold tracking-tight text-[#24143C]">
+          Doxa<span class="text-[#774DA9]">Rank</span>
         </span>
-        <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/60">
-          🇪🇹 ET
+        <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200/80">
+          ET
         </span>
       </div>
     </a>
@@ -42,10 +41,10 @@ const currentPath = Astro.url.pathname;
           <a
             href={item.href}
             class:list={[
-              'rounded-md px-3 py-2 text-sm font-medium transition',
+              'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors',
               isActive
-                ? 'bg-slate-100 text-indigo-600 font-semibold'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                ? 'bg-[#ece4f6] text-[#774DA9] font-bold'
+                : 'text-slate-600 hover:bg-[#faf7fd] hover:text-[#24143C]',
             ]}
           >
             {item.label}
@@ -58,13 +57,13 @@ const currentPath = Astro.url.pathname;
     <div class="hidden items-center gap-3 md:flex">
       <a
         href="/login"
-        class="rounded-lg px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+        class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-[#faf7fd] hover:text-[#774DA9]"
       >
         Sign In
       </a>
       <a
         href="/signup"
-        class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        class="inline-flex items-center justify-center rounded-lg bg-[#774DA9] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#673f97] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#774DA9]"
       >
         Start Free
       </a>
@@ -75,7 +74,7 @@ const currentPath = Astro.url.pathname;
       <button
         type="button"
         id="mobile-menu-btn"
-        class="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+        class="inline-flex items-center justify-center rounded-lg p-2 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#774DA9]"
         aria-controls="mobile-menu"
         aria-expanded="false"
       >
@@ -94,12 +93,12 @@ const currentPath = Astro.url.pathname;
   </div>
 
   <!-- Mobile Dropdown Menu -->
-  <div id="mobile-menu" class="hidden md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 shadow-lg">
+  <div id="mobile-menu" class="hidden md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 shadow-xl">
     <div class="space-y-1">
       {navItems.map((item) => (
         <a
           href={item.href}
-          class="block rounded-lg px-3 py-2 text-base font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
+          class="block rounded-lg px-3 py-2 text-base font-medium text-slate-700 hover:bg-[#faf7fd] hover:text-[#774DA9]"
         >
           {item.label}
         </a>
@@ -108,13 +107,13 @@ const currentPath = Astro.url.pathname;
     <div class="mt-4 border-t border-slate-100 pt-4 flex flex-col gap-2">
       <a
         href="/login"
-        class="block w-full text-center rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        class="block w-full text-center rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
         Sign In
       </a>
       <a
         href="/signup"
-        class="block w-full text-center rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+        class="block w-full text-center rounded-lg bg-[#774DA9] py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#673f97]"
       >
         Start Free
       </a>

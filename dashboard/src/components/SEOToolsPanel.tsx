@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Globe,
+  Tag,
+  Code2,
+  Share2,
+  FileCode,
+  Network,
+  Languages,
+  Search,
+  Gauge,
+  Link2,
+  Type,
+  Wrench,
+} from 'lucide-react';
+
+import {
   seoToolsApi,
   type MetaTagResult,
   type SchemaResult,
@@ -562,7 +577,7 @@ export const SEOToolsPanel: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '20px' }}>🛠️</span>
+            <Wrench size={20} color="#774DA9" />
             <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>
               Standalone Core SEO Tools
             </h3>
@@ -611,120 +626,120 @@ export const SEOToolsPanel: React.FC = () => {
           onClick={() => setActiveTab('meta')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'meta' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'meta' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'meta' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'meta' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'meta' ? 700 : 500,
           }}
         >
-          🏷️ Meta Tags
+          <Tag size={14} style={{ marginRight: "6px" }} /> Meta Tags
         </button>
         <button
           id="seo-tool-tab-schema"
           onClick={() => setActiveTab('schema')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'schema' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'schema' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'schema' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'schema' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'schema' ? 700 : 500,
           }}
         >
-          📐 Schema JSON-LD
+          <Code2 size={14} style={{ marginRight: "6px" }} /> Schema JSON-LD
         </button>
         <button
           id="seo-tool-tab-social"
           onClick={() => setActiveTab('social')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'social' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'social' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'social' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'social' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'social' ? 700 : 500,
           }}
         >
-          📱 Social Preview
+          <Share2 size={14} style={{ marginRight: "6px" }} /> Social Preview
         </button>
         <button
           id="seo-tool-tab-robots"
           onClick={() => setActiveTab('robots')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'robots' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'robots' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'robots' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'robots' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'robots' ? 700 : 500,
           }}
         >
-          🤖 Robots.txt
+          <FileCode size={14} style={{ marginRight: "6px" }} /> Robots.txt
         </button>
         <button
           id="seo-tool-tab-sitemap"
           onClick={() => setActiveTab('sitemap')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'sitemap' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'sitemap' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'sitemap' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'sitemap' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'sitemap' ? 700 : 500,
           }}
         >
-          🗺️ XML Sitemap
+          <Network size={14} style={{ marginRight: "6px" }} /> XML Sitemap
         </button>
         <button
           id="seo-tool-tab-hreflang"
           onClick={() => setActiveTab('hreflang')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'hreflang' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'hreflang' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'hreflang' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'hreflang' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'hreflang' ? 700 : 500,
           }}
         >
-          🌐 hreflang Builder
+          <Languages size={14} style={{ marginRight: "6px" }} /> hreflang Builder
         </button>
         <button
           id="seo-tool-tab-serp"
           onClick={() => setActiveTab('serp')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'serp' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'serp' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'serp' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'serp' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'serp' ? 700 : 500,
           }}
         >
-          🔍 SERP Snippet
+          <Search size={14} style={{ marginRight: "6px" }} /> SERP Snippet
         </button>
         <button
           id="seo-tool-tab-pagespeed"
           onClick={() => setActiveTab('pagespeed')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'pagespeed' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'pagespeed' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'pagespeed' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'pagespeed' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'pagespeed' ? 700 : 500,
           }}
         >
-          ⚡ PageSpeed & CWV
+          <Gauge size={14} style={{ marginRight: "6px" }} /> PageSpeed & CWV
         </button>
         <button
           id="seo-tool-tab-broken-links"
           onClick={() => setActiveTab('broken_links')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'broken_links' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'broken_links' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'broken_links' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'broken_links' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'broken_links' ? 700 : 500,
           }}
         >
-          🔗 Broken Links
+          <Link2 size={14} style={{ marginRight: "6px" }} /> Broken Links
         </button>
         <button
           id="seo-tool-tab-amharic"
           onClick={() => setActiveTab('amharic')}
           style={{
             ...tabButtonStyle,
-            borderBottom: activeTab === 'amharic' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'amharic' ? '#1d4ed8' : '#64748b',
+            borderBottom: activeTab === 'amharic' ? '2px solid #774DA9' : '2px solid transparent',
+            color: activeTab === 'amharic' ? '#774DA9' : '#64748b',
             fontWeight: activeTab === 'amharic' ? 700 : 500,
           }}
         >
-          🇪🇹 Amharic Fidel
+          <Type size={14} style={{ marginRight: "6px" }} /> Amharic Fidel
         </button>
       </div>
 
@@ -829,7 +844,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={metaLoading || !metaTitle.trim() || !metaDescription.trim()}
                   style={primaryBtnStyle}
                 >
-                  {metaLoading ? 'Generating...' : '⚡ Generate Meta Tags'}
+                  {metaLoading ? 'Generating...' : 'Generate Meta Tags'}
                 </button>
                 <button id="meta-reset-btn" type="button" onClick={handleResetMeta} style={secondaryBtnStyle}>
                   Reset
@@ -841,7 +856,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>Generated HTML</h4>
                 {metaResult && (
                   <button id="meta-copy-btn" onClick={() => handleCopy(metaResult.html, 'meta')} style={copyBtnStyle}>
-                    {copiedKey === 'meta' ? '✓ Copied!' : '📋 Copy HTML'}
+                    {copiedKey === 'meta' ? 'Copied!' : 'Copy HTML'}
                   </button>
                 )}
               </div>
@@ -876,9 +891,9 @@ export const SEOToolsPanel: React.FC = () => {
                 }}
                 style={{
                   ...schemaPillStyle,
-                  backgroundColor: schemaType === type ? '#eff6ff' : '#ffffff',
-                  borderColor: schemaType === type ? '#2563eb' : '#e2e8f0',
-                  color: schemaType === type ? '#1d4ed8' : '#475569',
+                  backgroundColor: schemaType === type ? '#f6f2fb' : '#ffffff',
+                  borderColor: schemaType === type ? '#774DA9' : '#e2e8f0',
+                  color: schemaType === type ? '#774DA9' : '#475569',
                   fontWeight: schemaType === type ? 700 : 500,
                 }}
               >
@@ -1055,7 +1070,7 @@ export const SEOToolsPanel: React.FC = () => {
                       <input type="text" value={bc.name} onChange={(e) => { const u = [...breadcrumbItems]; u[idx].name = e.target.value; setBreadcrumbItems(u); }} placeholder="Label" style={{ ...inputStyle, flex: 1 }} />
                       <input type="url" value={bc.item} onChange={(e) => { const u = [...breadcrumbItems]; u[idx].item = e.target.value; setBreadcrumbItems(u); }} placeholder="https://example.com" style={{ ...inputStyle, flex: 2 }} />
                       {breadcrumbItems.length > 1 && (
-                        <button type="button" onClick={() => setBreadcrumbItems(breadcrumbItems.filter((_, i) => i !== idx))} style={removeBtnStyle}>✕</button>
+                        <button type="button" onClick={() => setBreadcrumbItems(breadcrumbItems.filter((_, i) => i !== idx))} style={removeBtnStyle}>X</button>
                       )}
                     </div>
                   ))}
@@ -1063,7 +1078,7 @@ export const SEOToolsPanel: React.FC = () => {
               )}
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button id="schema-generate-btn" type="submit" disabled={schemaLoading} style={primaryBtnStyle}>
-                  {schemaLoading ? 'Generating...' : `⚡ Generate ${schemaType}`}
+                  {schemaLoading ? 'Generating...' : `Generate ${schemaType}`}
                 </button>
                 <button type="button" onClick={handleResetSchema} style={secondaryBtnStyle}>Reset</button>
               </div>
@@ -1073,7 +1088,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>JSON-LD Output</h4>
                 {schemaResult && (
                   <button id="schema-copy-script-btn" onClick={() => handleCopy(schemaResult.script_tag, 'schema_script')} style={copyBtnStyle}>
-                    {copiedKey === 'schema_script' ? '✓ Copied!' : '📋 Copy <script>'}
+                    {copiedKey === 'schema_script' ? 'Copied!' : 'Copy <script>'}
                   </button>
                 )}
               </div>
@@ -1146,7 +1161,7 @@ export const SEOToolsPanel: React.FC = () => {
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button type="submit" disabled={socialLoading || !socialTitle.trim() || !socialDesc.trim()} style={primaryBtnStyle}>
-                  {socialLoading ? 'Generating...' : '⚡ Generate Tags & Preview'}
+                  {socialLoading ? 'Generating...' : 'Generate Tags & Preview'}
                 </button>
                 <button type="button" onClick={handleResetSocial} style={secondaryBtnStyle}>Reset</button>
               </div>
@@ -1156,7 +1171,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Card Preview & Tags</h4>
                 {socialResult && (
                   <button onClick={() => handleCopy(socialResult.html, 'social')} style={copyBtnStyle}>
-                    {copiedKey === 'social' ? '✓ Copied!' : '📋 Copy Meta Tags'}
+                    {copiedKey === 'social' ? 'Copied!' : 'Copy Meta Tags'}
                   </button>
                 )}
               </div>
@@ -1166,7 +1181,7 @@ export const SEOToolsPanel: React.FC = () => {
                     <img src={socialImage} alt="Preview" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 ) : (
-                  <div style={cardImagePlaceholderStyle}><span>🖼️ No image URL specified</span></div>
+                  <div style={cardImagePlaceholderStyle}><span>No image URL specified</span></div>
                 )}
                 <div style={{ padding: '10px' }}>
                   <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
@@ -1197,13 +1212,13 @@ export const SEOToolsPanel: React.FC = () => {
               onClick={() => { setRobotsMode('generate'); setRobotsResult(null); }}
               style={{
                 ...schemaPillStyle,
-                backgroundColor: robotsMode === 'generate' ? '#eff6ff' : '#ffffff',
-                borderColor: robotsMode === 'generate' ? '#2563eb' : '#e2e8f0',
-                color: robotsMode === 'generate' ? '#1d4ed8' : '#475569',
+                backgroundColor: robotsMode === 'generate' ? '#f6f2fb' : '#ffffff',
+                borderColor: robotsMode === 'generate' ? '#774DA9' : '#e2e8f0',
+                color: robotsMode === 'generate' ? '#774DA9' : '#475569',
                 fontWeight: robotsMode === 'generate' ? 700 : 500,
               }}
             >
-              🛠️ Robots.txt Generator
+              Robots.txt Generator
             </button>
             <button
               id="robots-mode-test"
@@ -1211,13 +1226,13 @@ export const SEOToolsPanel: React.FC = () => {
               onClick={() => { setRobotsMode('test'); setRobotsResult(null); }}
               style={{
                 ...schemaPillStyle,
-                backgroundColor: robotsMode === 'test' ? '#eff6ff' : '#ffffff',
-                borderColor: robotsMode === 'test' ? '#2563eb' : '#e2e8f0',
-                color: robotsMode === 'test' ? '#1d4ed8' : '#475569',
+                backgroundColor: robotsMode === 'test' ? '#f6f2fb' : '#ffffff',
+                borderColor: robotsMode === 'test' ? '#774DA9' : '#e2e8f0',
+                color: robotsMode === 'test' ? '#774DA9' : '#475569',
                 fontWeight: robotsMode === 'test' ? 700 : 500,
               }}
             >
-              🧪 URL Access Tester
+              URL Access Tester
             </button>
           </div>
 
@@ -1384,7 +1399,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={robotsLoading}
                   style={primaryBtnStyle}
                 >
-                  {robotsLoading ? 'Processing...' : robotsMode === 'generate' ? '⚡ Generate Robots.txt' : '🧪 Test Access'}
+                  {robotsLoading ? 'Processing...' : robotsMode === 'generate' ? 'Generate Robots.txt' : 'Test Access'}
                 </button>
                 <button type="button" onClick={handleResetRobots} style={secondaryBtnStyle}>
                   Reset
@@ -1400,7 +1415,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </h4>
                 {robotsResult?.content && (
                   <button id="robots-copy-btn" onClick={() => handleCopy(robotsResult.content!, 'robots')} style={copyBtnStyle}>
-                    {copiedKey === 'robots' ? '✓ Copied!' : '📋 Copy Robots.txt'}
+                    {copiedKey === 'robots' ? 'Copied!' : 'Copy Robots.txt'}
                   </button>
                 )}
               </div>
@@ -1433,7 +1448,7 @@ export const SEOToolsPanel: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '18px' }}>{robotsResult.allowed ? '✅' : '🚫'}</span>
+                          <span style={{ fontSize: '18px' }}>{robotsResult.allowed ? 'ALLOWED' : 'BLOCKED'}</span>
                           <span
                             style={{
                               fontSize: '15px',
@@ -1483,13 +1498,13 @@ export const SEOToolsPanel: React.FC = () => {
               onClick={() => { setSitemapMode('generate'); setSitemapResult(null); }}
               style={{
                 ...schemaPillStyle,
-                backgroundColor: sitemapMode === 'generate' ? '#eff6ff' : '#ffffff',
-                borderColor: sitemapMode === 'generate' ? '#2563eb' : '#e2e8f0',
-                color: sitemapMode === 'generate' ? '#1d4ed8' : '#475569',
+                backgroundColor: sitemapMode === 'generate' ? '#f6f2fb' : '#ffffff',
+                borderColor: sitemapMode === 'generate' ? '#774DA9' : '#e2e8f0',
+                color: sitemapMode === 'generate' ? '#774DA9' : '#475569',
                 fontWeight: sitemapMode === 'generate' ? 700 : 500,
               }}
             >
-              🗺️ Sitemap Generator
+              Sitemap Generator
             </button>
             <button
               id="sitemap-mode-validate"
@@ -1497,13 +1512,13 @@ export const SEOToolsPanel: React.FC = () => {
               onClick={() => { setSitemapMode('validate'); setSitemapResult(null); }}
               style={{
                 ...schemaPillStyle,
-                backgroundColor: sitemapMode === 'validate' ? '#eff6ff' : '#ffffff',
-                borderColor: sitemapMode === 'validate' ? '#2563eb' : '#e2e8f0',
-                color: sitemapMode === 'validate' ? '#1d4ed8' : '#475569',
+                backgroundColor: sitemapMode === 'validate' ? '#f6f2fb' : '#ffffff',
+                borderColor: sitemapMode === 'validate' ? '#774DA9' : '#e2e8f0',
+                color: sitemapMode === 'validate' ? '#774DA9' : '#475569',
                 fontWeight: sitemapMode === 'validate' ? 700 : 500,
               }}
             >
-              🔍 Local XML Validator
+              Local XML Validator
             </button>
           </div>
 
@@ -1627,7 +1642,7 @@ export const SEOToolsPanel: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button id="sitemap-submit-btn" type="submit" disabled={sitemapLoading} style={primaryBtnStyle}>
-                  {sitemapLoading ? 'Processing...' : sitemapMode === 'generate' ? '⚡ Generate XML Sitemap' : '🔍 Validate XML'}
+                  {sitemapLoading ? 'Processing...' : sitemapMode === 'generate' ? 'Generate XML Sitemap' : 'Validate XML'}
                 </button>
                 <button type="button" onClick={handleResetSitemap} style={secondaryBtnStyle}>
                   Reset
@@ -1643,7 +1658,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </h4>
                 {sitemapResult?.xml && (
                   <button id="sitemap-copy-btn" onClick={() => handleCopy(sitemapResult.xml!, 'sitemap')} style={copyBtnStyle}>
-                    {copiedKey === 'sitemap' ? '✓ Copied XML!' : '📋 Copy XML'}
+                    {copiedKey === 'sitemap' ? 'Copied XML!' : 'Copy XML'}
                   </button>
                 )}
               </div>
@@ -1671,7 +1686,7 @@ export const SEOToolsPanel: React.FC = () => {
                         }}
                       >
                         <span style={{ fontSize: '14px', fontWeight: 700, color: sitemapResult.is_valid ? '#166534' : '#991b1b' }}>
-                          {sitemapResult.is_valid ? '✅ VALID SITEMAP PROTOCOL' : '❌ INVALID SITEMAP STRUCTURE'}
+                          {sitemapResult.is_valid ? 'VALID SITEMAP PROTOCOL' : 'INVALID SITEMAP STRUCTURE'}
                         </span>
                         <div style={{ fontSize: '12px', marginTop: '4px', color: '#475569' }}>
                           Parsed URLs: <strong>{sitemapResult.url_count}</strong> | Root element: <code>&lt;{sitemapResult.root_tag}&gt;</code>
@@ -1803,7 +1818,7 @@ export const SEOToolsPanel: React.FC = () => {
                       onClick={() => setHreflangEntries(hreflangEntries.filter((_, i) => i !== idx))}
                       style={removeBtnStyle}
                     >
-                      ✕
+                      X
                     </button>
                   )}
                 </div>
@@ -1822,7 +1837,7 @@ export const SEOToolsPanel: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button id="hreflang-submit-btn" type="submit" disabled={hreflangLoading} style={primaryBtnStyle}>
-                  {hreflangLoading ? 'Generating...' : '⚡ Generate hreflang Tags'}
+                  {hreflangLoading ? 'Generating...' : 'Generate hreflang Tags'}
                 </button>
                 <button type="button" onClick={handleResetHreflang} style={secondaryBtnStyle}>
                   Reset
@@ -1836,7 +1851,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>hreflang Annotations</h4>
                 {hreflangResult && (
                   <button id="hreflang-copy-btn" onClick={() => handleCopy(hreflangResult.html, 'hreflang')} style={copyBtnStyle}>
-                    {copiedKey === 'hreflang' ? '✓ Copied HTML!' : '📋 Copy HTML Tags'}
+                    {copiedKey === 'hreflang' ? 'Copied HTML!' : 'Copy HTML Tags'}
                   </button>
                 )}
               </div>
@@ -1849,7 +1864,7 @@ export const SEOToolsPanel: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>XML Sitemap Snippet:</span>
                     <button onClick={() => handleCopy(hreflangResult.xml_snippet, 'hreflang_xml')} style={copyBtnStyle}>
-                      {copiedKey === 'hreflang_xml' ? '✓ Copied!' : 'Copy XML'}
+                      {copiedKey === 'hreflang_xml' ? 'Copied!' : 'Copy XML'}
                     </button>
                   </div>
                   <pre style={{ ...codeBlockStyle, marginBottom: '12px' }}>{hreflangResult.xml_snippet}</pre>
@@ -1893,22 +1908,22 @@ export const SEOToolsPanel: React.FC = () => {
                     onClick={() => setSerpDevice('desktop')}
                     style={{
                       ...presetBtnStyle,
-                      backgroundColor: serpDevice === 'desktop' ? '#2563eb' : '#f1f5f9',
+                      backgroundColor: serpDevice === 'desktop' ? '#774DA9' : '#f1f5f9',
                       color: serpDevice === 'desktop' ? '#ffffff' : '#475569',
                     }}
                   >
-                    🖥️ Desktop
+                    Desktop
                   </button>
                   <button
                     type="button"
                     onClick={() => setSerpDevice('mobile')}
                     style={{
                       ...presetBtnStyle,
-                      backgroundColor: serpDevice === 'mobile' ? '#2563eb' : '#f1f5f9',
+                      backgroundColor: serpDevice === 'mobile' ? '#774DA9' : '#f1f5f9',
                       color: serpDevice === 'mobile' ? '#ffffff' : '#475569',
                     }}
                   >
-                    📱 Mobile
+                    Mobile
                   </button>
                 </div>
               </div>
@@ -1969,7 +1984,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={serpLoading}
                   style={{ ...primaryBtnStyle, opacity: serpLoading ? 0.7 : 1 }}
                 >
-                  {serpLoading ? 'Simulating SERP...' : '🔍 Simulate Google SERP'}
+                  {serpLoading ? 'Simulating SERP...' : 'Simulate Google SERP'}
                 </button>
                 <button
                   type="button"
@@ -1992,7 +2007,7 @@ export const SEOToolsPanel: React.FC = () => {
                     onClick={() => handleCopy(`${serpResult.rendered_title}\n${serpResult.url}\n${serpResult.rendered_description}`, 'serp')}
                     style={copyBtnStyle}
                   >
-                    {copiedKey === 'serp' ? '✓ Copied' : '📋 Copy Text'}
+                    {copiedKey === 'serp' ? 'Copied' : 'Copy Text'}
                   </button>
                 )}
               </div>
@@ -2014,7 +2029,7 @@ export const SEOToolsPanel: React.FC = () => {
                   >
                     {/* Breadcrumb */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#202124', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '14px' }}>🌐</span>
+                      <Globe size={14} color="#774DA9" />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90%' }}>
                         {serpResult.breadcrumb || serpResult.url}
                       </span>
@@ -2144,8 +2159,8 @@ export const SEOToolsPanel: React.FC = () => {
                   onChange={(e) => setPsStrategy(e.target.value as 'mobile' | 'desktop')}
                   style={selectStyle}
                 >
-                  <option value="mobile">📱 Mobile (Moto G Power emulation, 4G throttling)</option>
-                  <option value="desktop">🖥️ Desktop (High-speed desktop)</option>
+                  <option value="mobile">Mobile (Moto G Power emulation, 4G throttling)</option>
+                  <option value="desktop">Desktop (High-speed desktop)</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
@@ -2155,7 +2170,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={psLoading}
                   style={{ ...primaryBtnStyle, opacity: psLoading ? 0.7 : 1 }}
                 >
-                  {psLoading ? 'Querying PageSpeed Insights...' : '⚡ Run PageSpeed Audit'}
+                  {psLoading ? 'Querying PageSpeed Insights...' : 'Run PageSpeed Audit'}
                 </button>
                 <button
                   type="button"
@@ -2178,7 +2193,7 @@ export const SEOToolsPanel: React.FC = () => {
                     onClick={() => handleCopy(JSON.stringify(psResult, null, 2), 'pagespeed')}
                     style={copyBtnStyle}
                   >
-                    {copiedKey === 'pagespeed' ? '✓ Copied' : '📋 Copy JSON'}
+                    {copiedKey === 'pagespeed' ? 'Copied' : 'Copy JSON'}
                   </button>
                 )}
               </div>
@@ -2299,7 +2314,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={blLoading}
                   style={{ ...primaryBtnStyle, opacity: blLoading ? 0.7 : 1 }}
                 >
-                  {blLoading ? 'Scanning Links...' : '🔗 Scan Page Links'}
+                  {blLoading ? 'Scanning Links...' : 'Scan Page Links'}
                 </button>
                 <button
                   type="button"
@@ -2324,7 +2339,7 @@ export const SEOToolsPanel: React.FC = () => {
                       onClick={() => setBlFilter('all')}
                       style={{
                         ...presetBtnStyle,
-                        backgroundColor: blFilter === 'all' ? '#2563eb' : '#f1f5f9',
+                        backgroundColor: blFilter === 'all' ? '#774DA9' : '#f1f5f9',
                         color: blFilter === 'all' ? '#ffffff' : '#475569',
                       }}
                     >
@@ -2345,7 +2360,7 @@ export const SEOToolsPanel: React.FC = () => {
                       onClick={() => handleCopy(JSON.stringify(blResult, null, 2), 'broken_links')}
                       style={copyBtnStyle}
                     >
-                      {copiedKey === 'broken_links' ? '✓ Copied' : '📋 Copy JSON'}
+                      {copiedKey === 'broken_links' ? 'Copied' : 'Copy JSON'}
                     </button>
                   </div>
                 )}
@@ -2367,9 +2382,9 @@ export const SEOToolsPanel: React.FC = () => {
                       <div style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626' }}>{blResult.summary.broken_links}</div>
                       <div style={{ fontSize: '11px', color: '#dc2626' }}>Broken</div>
                     </div>
-                    <div style={{ border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#eff6ff' }}>
-                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#2563eb' }}>{blResult.summary.internal_links} / {blResult.summary.external_links}</div>
-                      <div style={{ fontSize: '11px', color: '#2563eb' }}>Int / Ext</div>
+                    <div style={{ border: '1px solid #dac8ee', borderRadius: '6px', padding: '8px', textAlign: 'center', backgroundColor: '#f6f2fb' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#774DA9' }}>{blResult.summary.internal_links} / {blResult.summary.external_links}</div>
+                      <div style={{ fontSize: '11px', color: '#774DA9' }}>Int / Ext</div>
                     </div>
                   </div>
 
@@ -2407,12 +2422,12 @@ export const SEOToolsPanel: React.FC = () => {
                                 {link.anchor_text}
                               </td>
                               <td style={{ padding: '6px 8px', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
+                                <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#774DA9', textDecoration: 'none' }}>
                                   {link.url}
                                 </a>
                               </td>
                               <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                                <span style={{ fontSize: '10px', color: link.is_internal ? '#3b82f6' : '#64748b' }}>
+                                <span style={{ fontSize: '10px', color: link.is_internal ? '#774DA9' : '#64748b' }}>
                                   {link.is_internal ? 'Internal' : 'External'}
                                 </span>
                               </td>
@@ -2446,7 +2461,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
                   Amharic Fidel Inputs
                 </h4>
-                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', color: '#774DA9', fontWeight: 600 }}>
                   Ge'ez Script Canonicalization
                 </span>
               </div>
@@ -2511,7 +2526,7 @@ export const SEOToolsPanel: React.FC = () => {
                   disabled={amharicLoading}
                   style={{ ...primaryBtnStyle, opacity: amharicLoading ? 0.7 : 1 }}
                 >
-                  {amharicLoading ? 'Normalizing Fidel...' : '🇪🇹 Normalize Amharic Keyword'}
+                  {amharicLoading ? 'Normalizing Fidel...' : 'Normalize Amharic Keyword'}
                 </button>
                 <button
                   type="button"
@@ -2534,7 +2549,7 @@ export const SEOToolsPanel: React.FC = () => {
                     onClick={() => handleCopy(amharicResult.normalized_text, 'amharic')}
                     style={copyBtnStyle}
                   >
-                    {copiedKey === 'amharic' ? '✓ Copied' : '📋 Copy Normalized'}
+                    {copiedKey === 'amharic' ? 'Copied' : 'Copy Normalized'}
                   </button>
                 )}
               </div>
@@ -2553,7 +2568,7 @@ export const SEOToolsPanel: React.FC = () => {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '16px' }}>{amharicResult.is_equivalent ? '✅' : '❌'}</span>
+                        <span style={{ fontSize: '16px' }}>{amharicResult.is_equivalent ? 'EQUIVALENT' : 'NOT EQUIVALENT'}</span>
                         <span style={{ fontSize: '13px', fontWeight: 700, color: amharicResult.is_equivalent ? '#065f46' : '#991b1b' }}>
                           {amharicResult.is_equivalent
                             ? 'Semantic / Fidel Equivalence Verified'
@@ -2773,7 +2788,7 @@ const selectStyle: React.CSSProperties = {
 };
 
 const primaryBtnStyle: React.CSSProperties = {
-  backgroundColor: '#2563eb',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
@@ -2796,9 +2811,9 @@ const secondaryBtnStyle: React.CSSProperties = {
 };
 
 const copyBtnStyle: React.CSSProperties = {
-  backgroundColor: '#eff6ff',
-  color: '#1d4ed8',
-  border: '1px solid #bfdbfe',
+  backgroundColor: '#f6f2fb',
+  color: '#774DA9',
+  border: '1px solid #dac8ee',
   borderRadius: '6px',
   padding: '4px 10px',
   fontSize: '12px',
@@ -2807,8 +2822,8 @@ const copyBtnStyle: React.CSSProperties = {
 };
 
 const codeBlockStyle: React.CSSProperties = {
-  backgroundColor: '#0f172a',
-  color: '#38bdf8',
+  backgroundColor: '#24143c',
+  color: '#e9d5ff',
   padding: '14px',
   borderRadius: '6px',
   fontSize: '12px',
@@ -2866,7 +2881,7 @@ const itemBoxStyle: React.CSSProperties = {
 
 const addPillBtnStyle: React.CSSProperties = {
   backgroundColor: '#f1f5f9',
-  color: '#2563eb',
+  color: '#774DA9',
   border: 'none',
   borderRadius: '4px',
   padding: '3px 8px',

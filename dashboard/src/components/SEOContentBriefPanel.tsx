@@ -206,14 +206,14 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
   const getContentTypeBadge = (type: BriefContentType) => {
     switch (type) {
       case 'landing_page':
-        return { icon: '🎯', label: 'Landing Page', bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
+        return { icon: '', label: 'Landing Page', bg: '#f6f2fb', text: '#774DA9', border: '#dac8ee' };
       case 'page_optimization':
-        return { icon: '🔄', label: 'Page Refresh & Optimization', bg: '#fef3c7', text: '#92400e', border: '#fde68a' };
+        return { icon: '', label: 'Page Refresh & Optimization', bg: '#fef3c7', text: '#92400e', border: '#fde68a' };
       case 'technical_implementation':
-        return { icon: '⚙️', label: 'Technical SEO Implementation', bg: '#fef2f2', text: '#991b1b', border: '#fecaca' };
+        return { icon: '', label: 'Technical SEO Implementation', bg: '#fef2f2', text: '#991b1b', border: '#fecaca' };
       case 'blog_post':
       default:
-        return { icon: '📝', label: 'In-Depth Article / Blog', bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe' };
+        return { icon: '', label: 'In-Depth Article / Blog', bg: '#f6f2fb', text: '#774DA9', border: '#dac8ee' };
     }
   };
 
@@ -250,14 +250,14 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                 textTransform: 'uppercase',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
-                color: '#0369a1',
-                backgroundColor: '#f0f9ff',
+                color: '#774DA9',
+                backgroundColor: '#f6f2fb',
                 padding: '3px 10px',
                 borderRadius: '6px',
-                border: '1px solid #bae6fd',
+                border: '1px solid #dac8ee',
               }}
             >
-              📋 SEO Content Briefs & Export Engine
+              SEO Content Briefs & Export Engine
             </span>
             <span
               style={{
@@ -306,7 +306,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                 }}
               >
-                📋 Copy All (MD)
+                Copy All (MD)
               </button>
 
               {/* Download Markdown */}
@@ -319,8 +319,8 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   alignItems: 'center',
                   gap: '6px',
                   backgroundColor: '#ffffff',
-                  color: '#0284c7',
-                  border: '1px solid #bae6fd',
+                  color: '#774DA9',
+                  border: '1px solid #dac8ee',
                   padding: '9px 15px',
                   borderRadius: '8px',
                   fontSize: '13px',
@@ -328,7 +328,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   cursor: isExporting ? 'not-allowed' : 'pointer',
                 }}
               >
-                ⬇️ Markdown
+                Export Markdown
               </button>
 
               {/* Download CSV */}
@@ -350,7 +350,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   cursor: isExporting ? 'not-allowed' : 'pointer',
                 }}
               >
-                📊 CSV
+                 CSV
               </button>
 
               {/* Download PDF */}
@@ -372,7 +372,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                   cursor: isExporting ? 'not-allowed' : 'pointer',
                 }}
               >
-                📄 PDF
+                 PDF
               </button>
 
               {/* Regenerate Brief Button */}
@@ -385,7 +385,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    backgroundColor: isGenerating ? '#93c5fd' : '#2563eb',
+                    backgroundColor: isGenerating ? '#c084fc' : '#774DA9',
                     color: '#ffffff',
                     border: 'none',
                     padding: '9px 16px',
@@ -393,10 +393,10 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     fontSize: '13px',
                     fontWeight: 700,
                     cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                    boxShadow: '0 2px 4px rgba(119, 77, 169, 0.2)',
                   }}
                 >
-                  {isGenerating ? '🔄 Regenerating...' : '✨ Regenerate Brief'}
+                  {isGenerating ? 'Regenerating...' : 'Regenerate Brief'}
                 </button>
               )}
 
@@ -409,7 +409,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    backgroundColor: '#10b981',
+                    backgroundColor: '#774DA9',
                     color: '#ffffff',
                     border: 'none',
                     padding: '9px 16px',
@@ -417,10 +417,10 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     fontSize: '13px',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                    boxShadow: '0 2px 4px rgba(119, 77, 169, 0.2)',
                   }}
                 >
-                  ✍️ Write SEO Draft
+                  Write SEO Draft
                 </button>
               )}
 
@@ -433,9 +433,9 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    border: '1px solid #bfdbfe',
+                    backgroundColor: '#f6f2fb',
+                    color: '#774DA9',
+                    border: '1px solid #dac8ee',
                     padding: '9px 16px',
                     borderRadius: '8px',
                     fontSize: '13px',
@@ -443,7 +443,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  ⚡ Create SEO Action
+                  Create SEO Action
                 </button>
               )}
 
@@ -469,12 +469,12 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             alignItems: 'center',
           }}
         >
-          <span>⚠️ {error}</span>
+          <span> {error}</span>
           <button
             onClick={() => setError(null)}
             style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -495,12 +495,12 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             alignItems: 'center',
           }}
         >
-          <span>✓ {toastMessage}</span>
+          <span>Check {toastMessage}</span>
           <button
             onClick={() => setToastMessage(null)}
             style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -542,12 +542,12 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     borderRadius: '8px',
                     fontSize: '13px',
                     fontWeight: isSelected ? 700 : 500,
-                    border: isSelected ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                    backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
-                    color: isSelected ? '#1e40af' : '#475569',
+                    border: isSelected ? '1px solid #774DA9' : '1px solid #cbd5e1',
+                    backgroundColor: isSelected ? '#f5f0fa' : '#ffffff',
+                    color: isSelected ? '#774DA9' : '#475569',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
-                    boxShadow: isSelected ? '0 1px 3px rgba(37,99,235,0.15)' : 'none',
+                    boxShadow: isSelected ? '0 1px 3px rgba(119,77,169,0.15)' : 'none',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -623,7 +623,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             border: '1px dashed #cbd5e1',
           }}
         >
-          <div style={{ fontSize: '36px', marginBottom: '10px' }}>📝</div>
+          <div style={{ fontSize: '36px', marginBottom: '10px' }}></div>
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
             No content briefs generated yet for this project
           </h4>
@@ -696,7 +696,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                     border: '1px solid #a7f3d0',
                   }}
                 >
-                  🎯 Target: ~{activeBrief.content_length_target} words
+                   Target: ~{activeBrief.content_length_target} words
                 </span>
               )}
             </div>
@@ -771,11 +771,11 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  🎯 Target Strategy & Positioning
+                   Target Strategy & Positioning
                 </h4>
                 <button
                   onClick={() => copyToClipboard(`Target Keyword: ${activeBrief.target_keyword}\nAudience: ${activeBrief.audience}\nContent Angle: ${activeBrief.content_angle}`, 'Strategy')}
-                  style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                  style={{ background: 'none', border: 'none', color: '#774DA9', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Copy
                 </button>
@@ -785,7 +785,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                 <div>
                   <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 600 }}>Primary Target Keyword:</span>
                   <div style={{ marginTop: '2px', fontWeight: 700, color: '#0f172a', fontSize: '15px' }}>
-                    🔍 {activeBrief.target_keyword || 'General SEO'}
+                    {activeBrief.target_keyword || 'General SEO'}
                   </div>
                 </div>
 
@@ -822,7 +822,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                 <div>
                   <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 600 }}>Editorial Angle & Value Proposition:</span>
                   <p style={{ margin: '2px 0 0 0', color: '#0f172a', lineHeight: '1.5', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '6px', border: '1px solid #f1f5f9' }}>
-                    💡 {activeBrief.content_angle}
+                     {activeBrief.content_angle}
                   </p>
                 </div>
               </div>
@@ -840,11 +840,11 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  🏷️ SEO Metadata & Snippet Spec
+                   SEO Metadata & Snippet Spec
                 </h4>
                 <button
                   onClick={() => copyToClipboard(`Title: ${activeBrief.recommended_title}\nDescription: ${activeBrief.meta_description}\nSlug: ${activeBrief.suggested_slug}`, 'Metadata')}
-                  style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                  style={{ background: 'none', border: 'none', color: '#774DA9', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Copy
                 </button>
@@ -905,7 +905,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 600 }}>Target URL:</span>
-                    <div style={{ marginTop: '2px', color: '#2563eb', wordBreak: 'break-all', fontSize: '12px' }}>
+                    <div style={{ marginTop: '2px', color: '#774DA9', wordBreak: 'break-all', fontSize: '12px' }}>
                       {activeBrief.target_url || '—'}
                     </div>
                   </div>
@@ -933,7 +933,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>📑</span>
+                <span style={{ fontSize: '18px' }}></span>
                 <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
                   Content Structure & Section Outline
                 </h3>
@@ -980,8 +980,8 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                           style={{
                             fontSize: '11px',
                             fontWeight: 800,
-                            color: sec.level === 'H1' ? '#7c3aed' : sec.level === 'H2' ? '#2563eb' : '#059669',
-                            backgroundColor: sec.level === 'H1' ? '#f3e8ff' : sec.level === 'H2' ? '#eff6ff' : '#ecfdf5',
+                            color: sec.level === 'H1' ? '#774DA9' : sec.level === 'H2' ? '#a372df' : '#64748b',
+                            backgroundColor: sec.level === 'H1' ? '#f6f2fb' : sec.level === 'H2' ? '#fbf9fd' : '#f1f5f9',
                             padding: '2px 6px',
                             borderRadius: '4px',
                           }}
@@ -992,7 +992,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                       </div>
                       <button
                         onClick={() => copyToClipboard(`${sec.heading}\n${(sec.key_points || []).map((p) => `- ${p}`).join('\n')}`, `Section "${sec.heading}"`)}
-                        style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                        style={{ background: 'none', border: 'none', color: '#774DA9', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
                       >
                         Copy Section
                       </button>
@@ -1033,7 +1033,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  🔗 Internal Linking Recommendations
+                  Internal Linking Recommendations
                 </h4>
               </div>
 
@@ -1050,7 +1050,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                         fontSize: '13px',
                       }}
                     >
-                      <div style={{ fontWeight: 600, color: '#1d4ed8', marginBottom: '2px' }}>
+                      <div style={{ fontWeight: 600, color: '#774DA9', marginBottom: '2px' }}>
                         Anchor: "{link.anchor_text}"
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>
@@ -1081,7 +1081,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  ❓ Frequently Asked Questions (Schema Target)
+                  Frequently Asked Questions (Schema Target)
                 </h4>
               </div>
 
@@ -1147,7 +1147,7 @@ export const SEOContentBriefPanel: React.FC<SEOContentBriefPanelProps> = ({
                           fontWeight: 600,
                         }}
                       >
-                        🏷️ {entity}
+                         {entity}
                       </span>
                     ))}
                   </div>

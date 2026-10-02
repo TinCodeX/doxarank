@@ -44,7 +44,7 @@ type PageFilter = 'all' | 'broken' | 'slow';
 
 const STATUS_COLORS: Record<CrawlJobStatus, string> = {
   pending: '#f59e0b',
-  running: '#3b82f6',
+  running: '#774da9',
   completed: '#10b981',
   failed: '#ef4444',
   cancelled: '#6b7280',
@@ -314,9 +314,9 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       fontWeight: 600,
       padding: '2px 8px',
       borderRadius: 20,
-      background: 'rgba(139,92,246,0.2)',
-      color: '#a78bfa',
-      border: '1px solid rgba(139,92,246,0.3)',
+      background: 'rgba(119,77,169,0.2)',
+      color: '#dac8ee',
+      border: '1px solid rgba(119,77,169,0.4)',
     },
     btn: {
       display: 'inline-flex',
@@ -331,7 +331,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       transition: 'opacity 0.15s, transform 0.1s',
     },
     btnPrimary: {
-      background: 'linear-gradient(135deg,#7c3aed,#6d28d9)',
+      background: '#774da9',
       color: '#fff',
     },
     btnSecondary: {
@@ -386,8 +386,8 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       fontWeight: 600,
       cursor: 'pointer',
       border: 'none',
-      background: active ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.05)',
-      color: active ? '#a78bfa' : '#64748b',
+      background: active ? 'rgba(119,77,169,0.3)' : 'rgba(255,255,255,0.05)',
+      color: active ? '#dac8ee' : '#64748b',
       transition: 'background 0.15s, color 0.15s',
     }),
     table: {
@@ -482,7 +482,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       <div style={s.panel}>
         <div style={s.header}>
           <div style={s.heading}>
-            <span>🔍</span> Technical SEO Crawler
+            Technical SEO Crawler
             <span style={s.badge}>PAID</span>
           </div>
         </div>
@@ -492,7 +492,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
           border: '1px dashed rgba(124,58,237,0.3)',
           borderRadius: 16,
         }}>
-          <div style={s.emptyIcon}>🔒</div>
+          <div style={s.emptyIcon}>Locked</div>
           <div style={s.emptyTitle}>Starter or Agency Plan Required</div>
           <div style={s.emptySubtitle}>
             The Technical SEO Crawler is a paid feature available on Starter and Agency plans.
@@ -518,7 +518,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       {/* Header */}
       <div style={s.header}>
         <div style={s.heading}>
-          <span>🔍</span> Technical SEO Crawler
+          Technical SEO Crawler
           <span style={s.badge}>PAID</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -527,7 +527,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
             style={{ ...s.btn, ...s.btnSecondary }}
             onClick={() => setShowConfig(v => !v)}
           >
-            ⚙️ Config
+             Config
           </button>
           <button
             id="crawl-launch-btn"
@@ -539,7 +539,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
             onClick={handleLaunch}
             disabled={!!activeJob || isLaunching}
           >
-            {isLaunching ? '⏳ Launching…' : activeJob ? '⏳ Crawl in Progress' : '🚀 Start New Crawl'}
+            {isLaunching ? 'Launching…' : activeJob ? 'Crawl in Progress' : 'Start New Crawl'}
           </button>
         </div>
       </div>
@@ -547,12 +547,12 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
       {/* Alerts */}
       {launchSuccess && (
         <div style={s.alert('success')} id="crawl-launch-success">
-          ✅ {launchSuccess}
+          Active {launchSuccess}
         </div>
       )}
       {launchError && (
         <div style={s.alert('error')} id="crawl-launch-error">
-          ⚠️ {launchError}
+           {launchError}
         </div>
       )}
 
@@ -614,7 +614,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
 
       {!isLoadingJobs && crawlJobs.length === 0 && !jobError && (
         <div style={s.emptyState}>
-          <div style={s.emptyIcon}>🕷️</div>
+          <div style={s.emptyIcon}></div>
           <div style={s.emptyTitle}>No crawls yet</div>
           <div style={s.emptySubtitle}>
             Start your first technical SEO crawl for <strong>{project.name}</strong> to detect<br />
@@ -649,7 +649,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
                       {STATUS_LABELS[job.status]}
                     </span>
                     {job.status === 'running' && (
-                      <span style={{ fontSize: 11, color: '#3b82f6', animation: 'pulse 1.5s infinite' }}>
+                      <span style={{ fontSize: 11, color: '#774da9', animation: 'pulse 1.5s infinite' }}>
                         ●
                       </span>
                     )}
@@ -677,23 +677,23 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
               {/* Summary stats */}
               {selectedJob.status === 'completed' && (
                 <div style={s.summaryGrid} id="crawl-summary-grid">
-                  <StatCard label="Pages Crawled" value={selectedJob.pages_crawled} color="#a78bfa" icon="📄" />
-                  <StatCard label="Discovered" value={selectedJob.pages_discovered} color="#60a5fa" icon="🔗" />
-                  <StatCard label="Broken Pages" value={selectedJob.broken_links_count} color="#ef4444" icon="💔" />
-                  <StatCard label="Missing Titles" value={selectedJob.missing_titles_count} color="#f59e0b" icon="📝" />
-                  <StatCard label="Missing Meta" value={selectedJob.missing_descriptions_count} color="#f59e0b" icon="ℹ️" />
-                  <StatCard label="Missing H1" value={selectedJob.missing_h1_count} color="#f97316" icon="H₁" />
-                  <StatCard label="Redirects" value={selectedJob.redirect_chains_count} color="#8b5cf6" icon="↪" />
-                  <StatCard label="Slow Pages" value={selectedJob.slow_pages_count} color="#94a3b8" icon="🐢" />
-                  <StatCard label="Dup. Titles" value={selectedJob.duplicate_titles_count} color="#6366f1" icon="⎍" />
+                  <StatCard label="Pages Crawled" value={selectedJob.pages_crawled} color="#dac8ee" icon="" />
+                  <StatCard label="Discovered" value={selectedJob.pages_discovered} color="#774da9" icon="" />
+                  <StatCard label="Broken Pages" value={selectedJob.broken_links_count} color="#ef4444" icon="" />
+                  <StatCard label="Missing Titles" value={selectedJob.missing_titles_count} color="#f59e0b" icon="" />
+                  <StatCard label="Missing Meta" value={selectedJob.missing_descriptions_count} color="#f59e0b" icon="" />
+                  <StatCard label="Missing H1" value={selectedJob.missing_h1_count} color="#f97316" icon="" />
+                  <StatCard label="Redirects" value={selectedJob.redirect_chains_count} color="#774da9" icon="" />
+                  <StatCard label="Slow Pages" value={selectedJob.slow_pages_count} color="#94a3b8" icon="" />
+                  <StatCard label="Dup. Titles" value={selectedJob.duplicate_titles_count} color="#dac8ee" icon="" />
                 </div>
               )}
 
               {/* Running/pending progress */}
               {(selectedJob.status === 'running' || selectedJob.status === 'pending') && (
                 <div style={{
-                  background: 'rgba(59,130,246,0.08)',
-                  border: '1px solid rgba(59,130,246,0.25)',
+                  background: 'rgba(119,77,169,0.1)',
+                  border: '1px solid rgba(119,77,169,0.3)',
                   borderRadius: 12,
                   padding: '16px 20px',
                   marginBottom: 24,
@@ -701,9 +701,9 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
                   alignItems: 'center',
                   gap: 12,
                 }} id="crawl-in-progress-banner">
-                  <span style={{ fontSize: 22 }}>⏳</span>
+                  <span style={{ fontSize: 14, color: '#dac8ee' }}>●</span>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#93c5fd', marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, color: '#dac8ee', marginBottom: 4 }}>
                       {selectedJob.status === 'pending' ? 'Crawl queued — worker will start shortly…' : 'Crawl in progress…'}
                     </div>
                     <div style={{ fontSize: 12, color: '#64748b' }}>
@@ -716,7 +716,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
               {/* Failed state */}
               {selectedJob.status === 'failed' && (
                 <div style={s.alert('error')} id="crawl-failed-banner">
-                  ❌ Crawl failed: {selectedJob.error_message || 'Unknown error.'}
+                  Failed Crawl failed: {selectedJob.error_message || 'Unknown error.'}
                 </div>
               )}
 
@@ -822,7 +822,7 @@ export const TechnicalCrawlerPanel: React.FC<Props> = ({
                               </td>
                               <td style={{ ...s.td, maxWidth: 260, whiteSpace: 'normal' as const }}>
                                 {page.issues.length === 0
-                                  ? <span style={{ color: '#10b981', fontSize: 11 }}>✓ OK</span>
+                                  ? <span style={{ color: '#10b981', fontSize: 11 }}>Check OK</span>
                                   : page.issues.map((issue, idx) => (
                                       <IssueBadge key={idx} issue={issue} />
                                     ))

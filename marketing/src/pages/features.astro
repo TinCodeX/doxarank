@@ -3,17 +3,19 @@ import Layout from '../layouts/Layout.astro';
 
 const featureGroups = [
   {
+    id: 'rank-tracker',
     title: 'Ethiopian SERP Rank Tracker',
-    tag: 'google.com.et',
+    tag: 'google.com.et Indexing',
     description: 'Track daily ranking positions accurately on Google Ethiopia. Monitor target keywords in Amharic, Afaan Oromoo, and English.',
     bullets: [
-      'Daily position tracking across desktop and mobile devices in Ethiopia',
+      'Daily position tracking across desktop and mobile devices inside Ethiopia',
       'Fidel normalization for Amharic spelling variations (ሀ/ሃ/ኃ, ሰ/ሠ, አ/ዐ, ጸ/ፀ)',
       'Historical rank movement charts with day-over-day and week-over-week deltas',
       'Target URL mapping and ranking cannibalization alerts',
     ],
   },
   {
+    id: 'crawler',
     title: 'Technical SEO Site Crawler',
     tag: 'Automated Auditing',
     description: 'Deep crawl your .et or global domain to detect technical issues before they hurt search visibility.',
@@ -25,6 +27,7 @@ const featureGroups = [
     ],
   },
   {
+    id: 'competitor-snapshots',
     title: 'Competitor SERP Snapshots',
     tag: 'Market Intelligence',
     description: 'Understand who is competing for your commercial keywords on Google Ethiopia and track their movements.',
@@ -36,6 +39,7 @@ const featureGroups = [
     ],
   },
   {
+    id: 'keyword-intelligence',
     title: 'Keyword Intelligence & CPC',
     tag: 'Search Demand',
     description: 'Discover high-intent search queries with localized search demand and advertiser CPC benchmarks.',
@@ -47,8 +51,9 @@ const featureGroups = [
     ],
   },
   {
-    title: 'Rule-Based Recommendations Feed',
-    tag: 'Actionable Insights',
+    id: 'recommendations',
+    title: 'Actionable Recommendations Feed',
+    tag: 'Prioritized Actions',
     description: 'Turn raw SEO data into a prioritized punch-list of technical, content, and link fixes.',
     bullets: [
       'Severity-ranked action items: High, Medium, Low, and Info',
@@ -58,6 +63,7 @@ const featureGroups = [
     ],
   },
   {
+    id: 'integrations',
     title: 'Analytics & Search Integrations',
     tag: 'Unified Telemetry',
     description: 'Connect your verified properties seamlessly for unified performance telemetry.',
@@ -72,46 +78,47 @@ const featureGroups = [
 ---
 
 <Layout title="Platform Features — DoxaRank | Ethiopia SEO SaaS" description="Explore DoxaRank's complete SEO suite: Google Ethiopia rank tracking, Amharic keyword intelligence, technical site crawler, and analytics integrations.">
-  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+  <div class="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="text-center max-w-3xl mx-auto mb-20">
-      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
+    <div class="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#f3eef9] border border-[#dac8ee] text-[#774DA9] text-xs font-bold uppercase tracking-wider mb-4">
+        <img src="/doxa-logo.png" alt="Doxa" class="h-3.5 w-3.5 object-contain rounded-full" />
         Platform Capabilities
       </div>
-      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#24143C] mb-4">
         Purpose-built tools for Ethiopian search optimization
       </h1>
-      <p class="text-lg text-slate-600">
+      <p class="text-base sm:text-lg text-slate-600 leading-relaxed">
         Every tool in DoxaRank was designed to solve the real challenges of ranking websites on Google Ethiopia and optimizing Ethiopian digital presence.
       </p>
     </div>
 
-    <!-- Feature Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 mb-20">
+    <!-- Feature Grid (2 Columns, High Information Density) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-16">
       {featureGroups.map((feature, idx) => (
-        <div class="bg-white border border-slate-200/90 rounded-3xl p-8 hover:shadow-lg transition-all duration-200 flex flex-col justify-between">
+        <div id={feature.id} class="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-7 hover:border-[#774DA9]/60 hover:shadow-lg transition-all flex flex-col justify-between">
           <div>
-            <div class="flex items-center justify-between gap-4 mb-4">
-              <span class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+            <div class="flex items-center justify-between gap-4 mb-3.5">
+              <span class="px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#f3eef9] text-[#774DA9] border border-[#dac8ee]">
                 {feature.tag}
               </span>
-              <span class="text-xs font-mono font-medium text-slate-400">
+              <span class="text-xs font-mono font-bold text-slate-400">
                 0{idx + 1}
               </span>
             </div>
             
-            <h2 class="text-2xl font-bold tracking-tight text-slate-900 mb-3">
+            <h2 class="text-xl font-bold tracking-tight text-[#24143C] mb-2.5">
               {feature.title}
             </h2>
             
-            <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+            <p class="text-xs sm:text-sm text-slate-600 mb-5 leading-relaxed">
               {feature.description}
             </p>
 
-            <ul class="space-y-3 text-sm text-slate-700">
+            <ul class="space-y-2.5 text-xs sm:text-sm text-slate-700">
               {feature.bullets.map((bullet) => (
                 <li class="flex items-start gap-2.5">
-                  <svg class="w-4 h-4 text-emerald-600 shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4 text-[#774DA9] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                   </svg>
                   <span>{bullet}</span>
@@ -120,9 +127,9 @@ const featureGroups = [
             </ul>
           </div>
 
-          <div class="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
-            <span class="text-xs font-medium text-slate-500">Available across all paid plans</span>
-            <a href="/signup" class="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group">
+          <div class="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-500">Live on Google Ethiopia</span>
+            <a href="/signup" class="text-xs font-bold text-[#774DA9] hover:text-[#673f97] flex items-center gap-1 group">
               Try now 
               <span class="group-hover:translate-x-0.5 transition-transform">&rarr;</span>
             </a>
@@ -131,19 +138,21 @@ const featureGroups = [
       ))}
     </div>
 
-    <!-- Bottom CTA -->
-    <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-10 sm:p-14 text-center text-white">
-      <h2 class="text-2xl sm:text-3xl font-bold mb-4">
+    <!-- Bottom CTA Card in Doxa Deep Purple -->
+    <div class="bg-[#24143C] rounded-2xl p-8 sm:p-12 text-center text-white border border-[#3b1d5f] relative overflow-hidden">
+      <div class="absolute -right-10 -bottom-10 w-60 h-60 bg-[#774DA9]/20 blur-[70px] rounded-full pointer-events-none"></div>
+      <img src="/doxa-logo.png" alt="Doxa" class="h-10 w-10 mx-auto mb-3 object-contain" />
+      <h2 class="text-2xl sm:text-3xl font-extrabold mb-3">
         Ready to audit and rank your website on Google Ethiopia?
       </h2>
-      <p class="text-slate-300 max-w-2xl mx-auto mb-8 text-sm sm:text-base">
-        Join Ethiopian businesses and agencies optimizing their search performance with DoxaRank.
+      <p class="text-slate-300 max-w-xl mx-auto mb-6 text-sm">
+        Join Ethiopian businesses and digital marketing agencies achieving top rankings with DoxaRank.
       </p>
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="/signup" class="w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg shadow-emerald-500/25">
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3.5">
+        <a href="/signup" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-[#774DA9] hover:bg-[#865cb8] text-white transition-all shadow-md">
           Start Free Account
         </a>
-        <a href="/pricing" class="w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition-colors">
+        <a href="/pricing" class="w-full sm:w-auto px-6 py-3 rounded-xl font-semibold bg-[#1a0c2e] hover:bg-[#3b1d5f] text-purple-200 border border-[#3b1d5f] transition-colors">
           View Pricing Plans
         </a>
       </div>

@@ -509,19 +509,19 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   // Badges & Pill Helpers
   const renderStatusBadge = (status: ActionStatus | ActionPlanStatus) => {
     const configs: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-      proposed: { bg: '#eff6ff', color: '#1d4ed8', label: 'Proposed', icon: '💡' },
-      pending_approval: { bg: '#fffbeb', color: '#b45309', label: 'Pending Approval', icon: '⏳' },
-      awaiting_approval: { bg: '#fffbeb', color: '#b45309', label: 'Awaiting Approval', icon: '⏳' },
-      reviewed: { bg: '#fef3c7', color: '#b45309', label: 'Reviewed', icon: '🔍' },
-      approved: { bg: '#dcfce7', color: '#15803d', label: 'Approved', icon: '✅' },
-      ready_to_execute: { bg: '#e0e7ff', color: '#4338ca', label: 'Ready', icon: '🚀' },
-      executing: { bg: '#fef9c3', color: '#854d0e', label: 'Executing...', icon: '⚙️' },
-      completed: { bg: '#ecfdf5', color: '#047857', label: 'Completed', icon: '✨' },
-      partially_completed: { bg: '#fef3c7', color: '#b45309', label: 'Partial', icon: '⚡' },
-      rejected: { bg: '#fee2e2', color: '#b91c1c', label: 'Rejected', icon: '❌' },
-      failed: { bg: '#fef2f2', color: '#991b1b', label: 'Failed', icon: '⚠️' },
-      cancelled: { bg: '#f1f5f9', color: '#64748b', label: 'Cancelled', icon: '🚫' },
-      draft: { bg: '#f1f5f9', color: '#475569', label: 'Draft', icon: '📝' },
+      proposed: { bg: '#f6f2fb', color: '#774DA9', label: 'Proposed', icon: '' },
+      pending_approval: { bg: '#fffbeb', color: '#b45309', label: 'Pending Approval', icon: '' },
+      awaiting_approval: { bg: '#fffbeb', color: '#b45309', label: 'Awaiting Approval', icon: '' },
+      reviewed: { bg: '#fef3c7', color: '#b45309', label: 'Reviewed', icon: '' },
+      approved: { bg: '#dcfce7', color: '#15803d', label: 'Approved', icon: 'Active' },
+      ready_to_execute: { bg: '#f6f2fb', color: '#774DA9', label: 'Ready', icon: '' },
+      executing: { bg: '#fef9c3', color: '#854d0e', label: 'Executing...', icon: '' },
+      completed: { bg: '#ecfdf5', color: '#047857', label: 'Completed', icon: '' },
+      partially_completed: { bg: '#fef3c7', color: '#b45309', label: 'Partial', icon: '' },
+      rejected: { bg: '#fee2e2', color: '#b91c1c', label: 'Rejected', icon: 'Failed' },
+      failed: { bg: '#fef2f2', color: '#991b1b', label: 'Failed', icon: '' },
+      cancelled: { bg: '#f1f5f9', color: '#64748b', label: 'Cancelled', icon: 'Blocked' },
+      draft: { bg: '#f1f5f9', color: '#475569', label: 'Draft', icon: '' },
     };
     const c = configs[status] || configs.proposed;
     return (
@@ -550,11 +550,11 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const renderVerificationBadge = (verifStatus?: VerificationStatus | string) => {
     const s = (verifStatus || 'pending').toLowerCase();
     const configs: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-      verified: { bg: '#ecfdf5', color: '#047857', label: 'Verified Live', icon: '🎯' },
-      verifying: { bg: '#eff6ff', color: '#1d4ed8', label: 'Verifying...', icon: '🔄' },
-      failed: { bg: '#fee2e2', color: '#b91c1c', label: 'Verification Mismatch', icon: '⚠️' },
-      partially_verified: { bg: '#fef3c7', color: '#b45309', label: 'Partially Verified', icon: '🟡' },
-      pending: { bg: '#f1f5f9', color: '#64748b', label: 'Pending Verification', icon: '⏱️' }
+      verified: { bg: '#ecfdf5', color: '#047857', label: 'Verified Live', icon: '' },
+      verifying: { bg: '#f6f2fb', color: '#774DA9', label: 'Verifying...', icon: '' },
+      failed: { bg: '#fee2e2', color: '#b91c1c', label: 'Verification Mismatch', icon: '' },
+      partially_verified: { bg: '#fef3c7', color: '#b45309', label: 'Partially Verified', icon: 'Warning:' },
+      pending: { bg: '#f1f5f9', color: '#64748b', label: 'Pending Verification', icon: '' }
     };
     const c = configs[s] || configs.pending;
     return (
@@ -581,14 +581,14 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
   const renderOutcomeBadge = (outcome?: SEOOutcome | PlanSEOOutcome | string, label?: string) => {
     const o = (outcome || 'unknown').toLowerCase();
     const configs: Record<string, { bg: string; color: string; icon: string; text: string }> = {
-      improved: { bg: '#ecfdf5', color: '#047857', icon: '📈', text: 'IMPROVED' },
-      effective: { bg: '#ecfdf5', color: '#047857', icon: '🏆', text: 'EFFECTIVE' },
-      partially_effective: { bg: '#eff6ff', color: '#1d4ed8', icon: '✨', text: 'PARTIAL LIFT' },
-      no_change: { bg: '#f8fafc', color: '#64748b', icon: '➖', text: 'NO CHANGE' },
-      ineffective: { bg: '#fef3c7', color: '#b45309', icon: '⚠️', text: 'INEFFECTIVE' },
-      declined: { bg: '#fef2f2', color: '#b91c1c', icon: '📉', text: 'DECLINED' },
-      insufficient_data: { bg: '#faf5ff', color: '#7e22ce', icon: '⏳', text: 'LOW DATA' },
-      unknown: { bg: '#f1f5f9', color: '#94a3b8', icon: '❓', text: 'UNMEASURED' },
+      improved: { bg: '#ecfdf5', color: '#047857', icon: '', text: 'IMPROVED' },
+      effective: { bg: '#ecfdf5', color: '#047857', icon: '', text: 'EFFECTIVE' },
+      partially_effective: { bg: '#f6f2fb', color: '#774DA9', icon: '', text: 'PARTIAL LIFT' },
+      no_change: { bg: '#f8fafc', color: '#64748b', icon: '', text: 'NO CHANGE' },
+      ineffective: { bg: '#fef3c7', color: '#b45309', icon: '', text: 'INEFFECTIVE' },
+      declined: { bg: '#fef2f2', color: '#b91c1c', icon: '', text: 'DECLINED' },
+      insufficient_data: { bg: '#f6f2fb', color: '#774DA9', icon: '', text: 'LOW DATA' },
+      unknown: { bg: '#f1f5f9', color: '#94a3b8', icon: '', text: 'UNMEASURED' },
     };
     const c = configs[o] || configs.unknown;
     return (
@@ -703,7 +703,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>🛡️</span>
+            
             <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0f172a' }}>
               Autonomous SEO Action Planning & Verification
             </h2>
@@ -748,7 +748,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                 boxShadow: viewMode === 'plans' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              ⚡ Action Plans ({plans.length})
+              Action Plans ({plans.length})
             </button>
             <button
               id="view-mode-actions-btn"
@@ -765,7 +765,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                 boxShadow: viewMode === 'actions' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
               }}
             >
-              📋 Atomic Actions ({actions.length})
+              Atomic Actions ({actions.length})
             </button>
           </div>
 
@@ -776,7 +776,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#4338ca',
+              backgroundColor: '#774DA9',
               color: '#ffffff',
               border: 'none',
               padding: '8px 14px',
@@ -787,7 +787,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
               transition: 'background-color 0.2s',
             }}
           >
-            <span>✨</span>
+            
             <span>Plan SEO Actions</span>
           </button>
         </div>
@@ -809,7 +809,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>🧠</span>
+              <span style={{ fontSize: '18px' }}></span>
               <strong style={{ fontSize: '14px', color: '#0f172a' }}>Adaptive SEO Strategy</strong>
               <span
                 style={{
@@ -819,11 +819,11 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                   borderRadius: '12px',
                   backgroundColor:
                     adaptiveStrategy.strategy_confidence === 'high' ? '#dcfce7' :
-                    adaptiveStrategy.strategy_confidence === 'medium' ? '#dbeafe' :
+                    adaptiveStrategy.strategy_confidence === 'medium' ? '#f6f2fb' :
                     adaptiveStrategy.strategy_confidence === 'low' ? '#fef3c7' : '#f1f5f9',
                   color:
                     adaptiveStrategy.strategy_confidence === 'high' ? '#15803d' :
-                    adaptiveStrategy.strategy_confidence === 'medium' ? '#1d4ed8' :
+                    adaptiveStrategy.strategy_confidence === 'medium' ? '#774DA9' :
                     adaptiveStrategy.strategy_confidence === 'low' ? '#b45309' : '#64748b',
                 }}
               >
@@ -924,7 +924,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>📊</span>
+              <span style={{ fontSize: '18px' }}></span>
               <strong style={{ fontSize: '14px', color: '#166534' }}>Empirical Outcome Measurements</strong>
               <span style={{ fontSize: '12px', color: '#15803d' }}>
                 ({historicalSignals.total_measured} Actions Measured)
@@ -936,9 +936,9 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
               </div>
               <span style={{ color: '#86efac' }}>|</span>
               <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
-                <span style={{ color: '#16a34a', fontWeight: 700 }}>📈 {historicalSignals.improved} Improved</span>
-                <span style={{ color: '#64748b', fontWeight: 700 }}>➖ {historicalSignals.no_change} Neutral</span>
-                <span style={{ color: '#dc2626', fontWeight: 700 }}>📉 {historicalSignals.declined} Declined</span>
+                <span style={{ color: '#16a34a', fontWeight: 700 }}> {historicalSignals.improved} Improved</span>
+                <span style={{ color: '#64748b', fontWeight: 700 }}>{historicalSignals.no_change} Neutral</span>
+                <span style={{ color: '#dc2626', fontWeight: 700 }}>{historicalSignals.declined} Declined</span>
               </div>
             </div>
           </div>
@@ -980,9 +980,9 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
             borderRadius: '8px',
             fontSize: '13px',
             fontWeight: 600,
-            backgroundColor: feedbackMsg.type === 'success' ? '#ecfdf5' : feedbackMsg.type === 'error' ? '#fef2f2' : '#eff6ff',
-            color: feedbackMsg.type === 'success' ? '#065f46' : feedbackMsg.type === 'error' ? '#991b1b' : '#1e40af',
-            border: `1px solid ${feedbackMsg.type === 'success' ? '#a7f3d0' : feedbackMsg.type === 'error' ? '#fca5a5' : '#bfdbfe'}`,
+            backgroundColor: feedbackMsg.type === 'success' ? '#ecfdf5' : feedbackMsg.type === 'error' ? '#fef2f2' : '#f6f2fb',
+            color: feedbackMsg.type === 'success' ? '#065f46' : feedbackMsg.type === 'error' ? '#991b1b' : '#774DA9',
+            border: `1px solid ${feedbackMsg.type === 'success' ? '#a7f3d0' : feedbackMsg.type === 'error' ? '#fca5a5' : '#dac8ee'}`,
           }}
         >
           {feedbackMsg.text}
@@ -998,15 +998,15 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
             borderRadius: '8px',
             fontSize: '12px',
             fontWeight: 600,
-            backgroundColor: '#eff6ff',
-            color: '#1e40af',
-            border: '1px solid #bfdbfe',
+            backgroundColor: '#f6f2fb',
+            color: '#774DA9',
+            border: '1px solid #dac8ee',
             display: 'flex',
             alignItems: 'center',
             gap: '8px'
           }}
         >
-          <span>🔄</span>
+          
           <span>
             {isGenerating && 'Synthesizing evidence & generating action plan...'}
             {isExecuting && 'Executing approved mutations safely in staging environment...'}
@@ -1032,7 +1032,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
               <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>Loading plans...</div>
             ) : plans.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
-                <span style={{ fontSize: '28px' }}>💡</span>
+                <span style={{ fontSize: '28px' }}></span>
                 <p style={{ margin: '8px 0 4px 0', fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>No Action Plans Yet</p>
                 <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Click "Plan SEO Actions" to synthesize audit and GSC opportunities.</p>
               </div>
@@ -1047,14 +1047,14 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                       style={{
                         padding: '14px',
                         borderRadius: '12px',
-                        border: isSelected ? '2px solid #4338ca' : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? '#f5f3ff' : '#ffffff',
+                        border: isSelected ? '2px solid #774DA9' : '1px solid #e2e8f0',
+                        backgroundColor: isSelected ? '#f6f2fb' : '#ffffff',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#4338ca' }}>Plan #{p.id}</span>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#774DA9' }}>Plan #{p.id}</span>
                         {renderStatusBadge(p.status)}
                       </div>
                       <h4 style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', lineHeight: '1.4' }}>
@@ -1066,7 +1066,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                         {renderOutcomeBadge(p.seo_outcome, p.seo_outcome_display)}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b' }}>
-                        <span>⚡ {p.total_actions_count || p.actions?.length || 0} actions</span>
+                        <span>{p.total_actions_count || p.actions?.length || 0} actions</span>
                         <span>Confidence: {Math.round(p.confidence_score * 100)}%</span>
                       </div>
                     </div>
@@ -1085,7 +1085,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#4338ca' }}>PLAN #{activePlan.id}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#774DA9' }}>PLAN #{activePlan.id}</span>
                         {renderStatusBadge(activePlan.status)}
                         {renderRiskBadge(activePlan.risk_level)}
                         {renderVerificationBadge(activePlan.verification_status)}
@@ -1109,7 +1109,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                             disabled={isUpdating}
                             style={btnSuccessStyle}
                           >
-                            ✅ Approve Plan
+                            Active Approve Plan
                           </button>
                           <button
                             id="plan-reject-btn"
@@ -1117,7 +1117,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                             disabled={isUpdating}
                             style={btnDangerStyle}
                           >
-                            ❌ Reject
+                            Failed Reject
                           </button>
                         </>
                       )}
@@ -1129,7 +1129,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           disabled={isExecuting}
                           style={btnPrimaryStyle}
                         >
-                          🚀 Execute Plan
+                          Execute Plan
                         </button>
                       )}
 
@@ -1140,7 +1140,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           disabled={isVerifying}
                           style={btnVerifyStyle}
                         >
-                          🎯 Verify Live State
+                           Verify Live State
                         </button>
                       )}
 
@@ -1151,7 +1151,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                           disabled={isMeasuring}
                           style={btnOutcomeStyle}
                         >
-                          📈 {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
+                           {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
                         </button>
                       )}
 
@@ -1160,7 +1160,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                         style={btnGhostDangerStyle}
                         title="Delete Plan"
                       >
-                        🗑️
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -1182,7 +1182,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>📊</span>
+                        <span style={{ fontSize: '18px' }}></span>
                         <strong style={{ fontSize: '14px', color: '#065f46' }}>Aggregate SEO Outcome Scorecard</strong>
                         {renderOutcomeBadge(activePlan.seo_outcome, activePlan.seo_outcome_display)}
                       </div>
@@ -1366,8 +1366,8 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                         style={{
                           padding: '12px',
                           borderRadius: '10px',
-                          border: isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                          backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                          border: isSelected ? '2px solid #774DA9' : '1px solid #e2e8f0',
+                          backgroundColor: isSelected ? '#f6f2fb' : '#ffffff',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                         }}
@@ -1395,7 +1395,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                                 border: `1px solid ${act.strategy_reasoning.learning_signal === 'positive' ? '#bbf7d0' : act.strategy_reasoning.learning_signal === 'negative' ? '#fecaca' : '#e2e8f0'}`,
                               }}
                             >
-                              🧠 {act.strategy_reasoning.learning_signal === 'positive' ? 'Boosted' : act.strategy_reasoning.learning_signal === 'negative' ? 'Deprioritized' : 'Adaptive'} ({act.strategy_reasoning.historical_adjustment > 0 ? '+' : ''}{(act.strategy_reasoning.historical_adjustment * 100).toFixed(0)}%)
+                               {act.strategy_reasoning.learning_signal === 'positive' ? 'Boosted' : act.strategy_reasoning.learning_signal === 'negative' ? 'Deprioritized' : 'Adaptive'} ({act.strategy_reasoning.historical_adjustment > 0 ? '+' : ''}{(act.strategy_reasoning.historical_adjustment * 100).toFixed(0)}%)
                             </span>
                           )}
                         </div>
@@ -1415,7 +1415,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#3b82f6' }}>ACTION #{activeAction.id}</span>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#774DA9' }}>ACTION #{activeAction.id}</span>
                           {renderStatusBadge(activeAction.status)}
                           {renderRiskBadge(activeAction.risk_level)}
                           {renderVerificationBadge(activeAction.verification_status)}
@@ -1432,35 +1432,35 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                       {/* Action Controls */}
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button onClick={() => handlePreviewAction(activeAction.id)} disabled={isPreviewLoading} style={btnSecondaryStyle}>
-                          {isPreviewLoading ? 'Loading Preview...' : '🔍 Preview Diff'}
+                          {isPreviewLoading ? 'Loading Preview...' : 'Preview Diff'}
                         </button>
 
                         {activeAction.status === 'proposed' && (
                           <button onClick={() => handleReviewAction(activeAction.id)} style={btnSecondaryStyle}>
-                            🔍 Mark Reviewed
+                            Mark Reviewed
                           </button>
                         )}
 
                         {(activeAction.status === 'proposed' || activeAction.status === 'pending_approval' || activeAction.status === 'reviewed') && (
                           <>
                             <button onClick={() => handleApproveAction(activeAction.id)} style={btnSuccessStyle}>
-                              ✅ Approve
+                              Active Approve
                             </button>
                             <button onClick={() => handleOpenRejectModal(activeAction.id)} style={btnDangerStyle}>
-                              ❌ Reject
+                              Failed Reject
                             </button>
                           </>
                         )}
 
                         {activeAction.status === 'approved' && (
                           <button onClick={() => handleExecuteAction(activeAction.id)} style={btnPrimaryStyle}>
-                            🚀 Execute
+                            Execute
                           </button>
                         )}
 
                         {(activeAction.status === 'completed' || activeAction.status === 'approved') && (
                           <button onClick={() => handleVerifyAction(activeAction.id)} style={btnVerifyStyle}>
-                            🎯 Verify Live State
+                             Verify Live State
                           </button>
                         )}
 
@@ -1471,18 +1471,18 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                             disabled={isMeasuring}
                             style={btnOutcomeStyle}
                           >
-                            📈 {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
+                             {isMeasuring ? 'Measuring...' : 'Measure SEO Outcome'}
                           </button>
                         )}
 
                         {activeAction.status !== 'cancelled' && activeAction.status !== 'completed' && activeAction.status !== 'rejected' && (
                           <button onClick={() => handleCancelAction(activeAction.id)} style={btnSecondaryStyle}>
-                            🚫 Cancel
+                            Blocked Cancel
                           </button>
                         )}
 
                         <button onClick={() => handleDeleteAction(activeAction.id)} style={btnGhostDangerStyle}>
-                          🗑️
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -1504,7 +1504,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '15px' }}>🧠</span>
+                          <span style={{ fontSize: '15px' }}></span>
                           <strong style={{ fontSize: '13px', color: '#1e293b' }}>Adaptive Planning Prioritization</strong>
                           <span
                             style={{
@@ -1553,7 +1553,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                       Verification Proof
                     </button>
                     <button onClick={() => setActiveTab('outcome')} style={activeTab === 'outcome' ? activeTabStyle : tabStyle}>
-                      📈 SEO Outcome & Lift
+                       SEO Outcome & Lift
                     </button>
                     <button onClick={() => setActiveTab('execution')} style={activeTab === 'execution' ? activeTabStyle : tabStyle}>
                       Execution Logs
@@ -1601,7 +1601,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                     <div style={{ padding: '16px', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '18px' }}>📈</span>
+                          <span style={{ fontSize: '18px' }}></span>
                           <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>Empirical SEO Outcome Measurement</h4>
                           {renderOutcomeBadge(activeAction.seo_outcome, activeAction.seo_outcome_display)}
                         </div>
@@ -1707,7 +1707,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
                               disabled={isMeasuring}
                               style={btnOutcomeStyle}
                             >
-                              📈 {isMeasuring ? 'Measuring...' : 'Measure Outcome Now'}
+                               {isMeasuring ? 'Measuring...' : 'Measure Outcome Now'}
                             </button>
                           )}
                         </div>
@@ -1843,7 +1843,7 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
           <div style={{ ...modalDialogStyle, maxWidth: '700px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}>Non-Destructive Visual Diff Preview</h3>
-              <button onClick={() => setPreviewModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+              <button onClick={() => setPreviewModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>X</button>
             </div>
             <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px' }}>{previewData.summary}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1867,12 +1867,12 @@ export const SEOActionsPanel: React.FC<SEOActionsPanelProps> = ({
         <div style={modalBackdropStyle}>
           <div style={{ ...modalDialogStyle, maxWidth: '700px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}>🎯 Real-World Verification Result</h3>
-              <button onClick={() => setVerificationModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800 }}> Real-World Verification Result</h3>
+              <button onClick={() => setVerificationModalOpen(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}>X</button>
             </div>
             <div style={{ marginBottom: '14px' }}>
               <p style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700, color: verificationData.verified ? '#065f46' : '#991b1b' }}>
-                {verificationData.verified ? '✅ Verified in Live DOM' : '⚠️ Verification Mismatch / Incomplete'}
+                {verificationData.verified ? 'Active Verified in Live DOM' : ' Verification Mismatch / Incomplete'}
               </p>
               <p style={{ margin: 0, fontSize: '13px', color: '#475569' }}>
                 {verificationData.explanation || 'Verified using empirical crawler inspection.'}
@@ -1933,7 +1933,7 @@ const textareaStyle: React.CSSProperties = {
 const btnPrimaryStyle: React.CSSProperties = {
   padding: '7px 14px',
   borderRadius: '7px',
-  backgroundColor: '#4338ca',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   fontSize: '12px',
@@ -1977,7 +1977,7 @@ const btnDangerStyle: React.CSSProperties = {
 const btnVerifyStyle: React.CSSProperties = {
   padding: '7px 14px',
   borderRadius: '7px',
-  backgroundColor: '#059669',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   fontSize: '12px',
@@ -1988,7 +1988,7 @@ const btnVerifyStyle: React.CSSProperties = {
 const btnOutcomeStyle: React.CSSProperties = {
   padding: '7px 14px',
   borderRadius: '7px',
-  backgroundColor: '#047857',
+  backgroundColor: '#774DA9',
   color: '#ffffff',
   border: 'none',
   fontSize: '12px',
@@ -2023,8 +2023,8 @@ const tabStyle: React.CSSProperties = {
 
 const activeTabStyle: React.CSSProperties = {
   ...tabStyle,
-  backgroundColor: '#eff6ff',
-  color: '#1d4ed8',
+  backgroundColor: '#f6f2fb',
+  color: '#774DA9',
   fontWeight: 700,
 };
 

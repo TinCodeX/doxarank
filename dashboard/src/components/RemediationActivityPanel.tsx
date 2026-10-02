@@ -516,8 +516,8 @@ export const RemediationActivityPanel: React.FC<RemediationActivityPanelProps> =
           letter-spacing: 0.4px;
         }
         .badge-success { background: #dcfce7; color: #15803d; }
-        .badge-info { background: #e0f2fe; color: #0369a1; }
-        .badge-primary { background: #dbeafe; color: #1d4ed8; }
+        .badge-info { background: #f6f2fb; color: #593285; }
+        .badge-primary { background: #f3eef9; color: #774da9; }
         .badge-warning { background: #fef3c7; color: #b45309; }
         .badge-danger { background: #fee2e2; color: #b91c1c; }
         .badge-dark { background: #e2e8f0; color: #334155; }
@@ -538,8 +538,8 @@ export const RemediationActivityPanel: React.FC<RemediationActivityPanelProps> =
           padding: 2px 6px;
           border-radius: 4px;
         }
-        .mode-auto { background: #eff6ff; color: #2563eb; }
-        .mode-hitl { background: #faf5ff; color: #7e22ce; }
+        .mode-auto { background: #f6f2fb; color: #774da9; }
+        .mode-hitl { background: #f3eef9; color: #593285; }
         .url-cell {
           max-width: 220px;
           overflow: hidden;

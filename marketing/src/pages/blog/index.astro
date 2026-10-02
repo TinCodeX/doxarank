@@ -27,26 +27,27 @@ const articles = [
 ---
 
 <Layout title="SEO Insights & Resources — DoxaRank Blog" description="Actionable guides, search intelligence insights, and technical advice for ranking websites on Google Ethiopia.">
-  <div class="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+  <div class="py-12 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
     <!-- Header -->
-    <div class="text-center max-w-3xl mx-auto mb-16">
-      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-semibold uppercase tracking-wider mb-4">
-        Knowledge Base
+    <div class="text-center max-w-3xl mx-auto mb-12">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#f3eef9] border border-[#dac8ee] text-[#774DA9] text-xs font-bold uppercase tracking-wider mb-4">
+        <img src="/doxa-logo.png" alt="Doxa" class="h-3.5 w-3.5 object-contain rounded-full" />
+        Search Engineering Blog
       </div>
-      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-6">
-        Ethiopia SEO Insights & Engineering
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#24143C] mb-3">
+        Ethiopia SEO Insights &amp; Research
       </h1>
-      <p class="text-lg text-slate-600">
+      <p class="text-base text-slate-600">
         Practical research, technical guides, and SERP analysis curated by search practitioners in Addis Ababa.
       </p>
     </div>
 
     <!-- Articles List -->
-    <div class="space-y-8 mb-16">
+    <div class="space-y-6 mb-16">
       {articles.map((post) => (
-        <article class="bg-white border border-slate-200/80 rounded-3xl p-8 hover:shadow-md transition-shadow">
-          <div class="flex items-center gap-3 text-xs text-slate-500 mb-3">
-            <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200/60">
+        <article class="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-7 hover:border-[#774DA9]/60 hover:shadow-md transition">
+          <div class="flex items-center gap-3 text-xs text-slate-500 mb-2.5">
+            <span class="px-2.5 py-0.5 rounded-full bg-[#f3eef9] text-[#774DA9] font-bold border border-[#dac8ee]">
               {post.category}
             </span>
             <span>&bull;</span>
@@ -55,40 +56,19 @@ const articles = [
             <span>{post.readTime}</span>
           </div>
 
-          <h2 class="text-2xl font-bold tracking-tight text-slate-900 mb-3 hover:text-emerald-700 transition-colors cursor-pointer">
+          <h2 class="text-xl font-bold tracking-tight text-[#24143C] mb-2 hover:text-[#774DA9] transition-colors cursor-pointer">
             {post.title}
           </h2>
 
-          <p class="text-slate-600 text-sm leading-relaxed mb-6">
+          <p class="text-xs sm:text-sm text-slate-600 leading-relaxed mb-4">
             {post.excerpt}
           </p>
 
-          <div class="flex items-center gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800">
-            <span>Read complete guide</span>
-            <span>&rarr;</span>
-          </div>
+          <a href="/signup" class="inline-flex items-center text-xs font-bold text-[#774DA9] hover:text-[#673f97]">
+            Read full technical guide &rarr;
+          </a>
         </article>
       ))}
-    </div>
-
-    <!-- Newsletter CTA -->
-    <div class="bg-slate-50 border border-slate-200/80 rounded-3xl p-8 text-center">
-      <h3 class="text-xl font-bold text-slate-900 mb-2">Subscribe to Ethiopian SERP Updates</h3>
-      <p class="text-sm text-slate-600 mb-6 max-w-md mx-auto">Get monthly analysis of Google algorithm updates and search patterns across Ethiopia.</p>
-      <form class="flex flex-col sm:flex-row gap-3 max-w-md mx-auto" onsubmit="event.preventDefault(); alert('Subscribed to SERP updates.');">
-        <input 
-          type="email" 
-          placeholder="Enter your email" 
-          required 
-          class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-        <button 
-          type="submit" 
-          class="px-5 py-2.5 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-500 text-sm transition-colors"
-        >
-          Subscribe
-        </button>
-      </form>
     </div>
   </div>
 </Layout>

@@ -193,9 +193,9 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                 fontWeight: 600,
                 padding: '3px 8px',
                 borderRadius: '6px',
-                backgroundColor: '#ede9fe',
-                color: '#6d28d9',
-                border: '1px solid #ddd6fe',
+                backgroundColor: '#f6f2fb',
+                color: '#774da9',
+                border: '1px solid #dac8ee',
               }}
             >
               Agency · Weekly google.com.et
@@ -233,7 +233,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                 backgroundColor:
                   activeJob && (activeJob.status === 'pending' || activeJob.status === 'running')
                     ? '#94a3b8'
-                    : '#7c3aed',
+                    : '#774da9',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '8px',
@@ -248,7 +248,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                 gap: '6px',
               }}
             >
-              ⚡ {triggering ? 'Queuing...' : 'Run Snapshot Check'}
+              {triggering ? 'Queuing...' : 'Run Snapshot Check'}
             </button>
           </div>
         )}
@@ -266,18 +266,18 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '28px', marginBottom: '8px' }}>🔒</div>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#581c87', margin: '0 0 6px 0' }}>
+          <div style={{ fontSize: '28px', marginBottom: '8px' }}>Locked</div>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#24143c', margin: '0 0 6px 0' }}>
             Competitor SERP Snapshots is an Agency Feature
           </h3>
-          <p style={{ fontSize: '14px', color: '#6b21a8', margin: '0 0 16px 0', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto' }}>
+          <p style={{ fontSize: '14px', color: '#593285', margin: '0 0 16px 0', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto' }}>
             Upgrade to the Agency Plan to track weekly competitor rankings on Google Ethiopia across all your project keywords.
           </p>
           <button
             onClick={() => (window.location.href = '/subscription')}
             style={{
               padding: '8px 18px',
-              backgroundColor: '#7c3aed',
+              backgroundColor: '#774da9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -305,7 +305,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                 marginBottom: '16px',
               }}
             >
-              ⚠️ {error}
+               {error}
             </div>
           )}
 
@@ -320,7 +320,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                 marginBottom: '16px',
               }}
             >
-              ✓ {successMsg}
+              Check {successMsg}
             </div>
           )}
 
@@ -330,8 +330,8 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
               id="competitor-job-active-banner"
               style={{
                 padding: '14px 18px',
-                backgroundColor: '#f5f3ff',
-                border: '1px solid #ddd6fe',
+                backgroundColor: '#f6f2fb',
+                border: '1px solid #dac8ee',
                 borderRadius: '8px',
                 marginBottom: '20px',
                 display: 'flex',
@@ -342,12 +342,12 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '18px', animation: 'spin 1s linear infinite' }}>🔄</span>
+                
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#5b21b6' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#24143c' }}>
                     Snapshot Job #{activeJob.id} is {activeJob.status.toUpperCase()}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6d28d9' }}>
+                  <div style={{ fontSize: '12px', color: '#593285' }}>
                     Processed {activeJob.completed_keywords} of {activeJob.total_keywords} keywords
                     {activeJob.failed_keywords > 0 && ` (${activeJob.failed_keywords} failed)`}...
                   </div>
@@ -358,7 +358,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                   fontSize: '12px',
                   fontWeight: 600,
                   padding: '4px 10px',
-                  backgroundColor: '#7c3aed',
+                  backgroundColor: '#774da9',
                   color: '#ffffff',
                   borderRadius: '6px',
                 }}
@@ -474,7 +474,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
             >
               {competitors.length === 0
                 ? 'Add at least one competitor to begin tracking SERP visibility.'
-                : 'No snapshot observations recorded yet. Click "⚡ Run Snapshot Check" to fetch Google Ethiopia rankings.'}
+                : 'No snapshot observations recorded yet. Click "Run Snapshot Check" to fetch Google Ethiopia rankings.'}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -517,9 +517,9 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                                 borderRadius: '8px',
                                 fontWeight: 800,
                                 fontSize: '13px',
-                                backgroundColor: isTop3 ? '#fef3c7' : isTop10 ? '#dbeafe' : '#f1f5f9',
-                                color: isTop3 ? '#92400e' : isTop10 ? '#1e40af' : '#475569',
-                                border: isTop3 ? '1px solid #fcd34d' : isTop10 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                backgroundColor: isTop3 ? '#fef3c7' : isTop10 ? '#f3eef9' : '#f1f5f9',
+                                color: isTop3 ? '#92400e' : isTop10 ? '#774da9' : '#475569',
+                                border: isTop3 ? '1px solid #fcd34d' : isTop10 ? '1px solid #dac8ee' : '1px solid #e2e8f0',
                               }}
                             >
                               #{pos}
@@ -594,7 +594,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
-                                color: '#2563eb',
+                                color: '#774da9',
                                 fontSize: '11px',
                                 textDecoration: 'none',
                                 overflow: 'hidden',
@@ -605,7 +605,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                               }}
                               title={item.ranking_url}
                             >
-                              🔗 {item.ranking_url}
+                              {item.ranking_url}
                             </a>
                           ) : (
                             <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>
@@ -670,7 +670,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                   marginBottom: '14px',
                 }}
               >
-                ⚠️ {addError}
+                 {addError}
               </div>
             )}
             <form onSubmit={handleAddCompetitor}>
@@ -739,7 +739,7 @@ export const CompetitorSnapshotsPanel: React.FC<CompetitorSnapshotsPanelProps> =
                   disabled={creating}
                   style={{
                     padding: '8px 16px',
-                    backgroundColor: '#7c3aed',
+                    backgroundColor: '#774da9',
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '6px',

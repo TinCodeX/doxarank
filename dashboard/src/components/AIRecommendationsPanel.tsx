@@ -138,14 +138,14 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   const getPriorityStyle = (priority: RecommendationPriority) => {
     switch (priority) {
       case 'critical':
-        return { bg: '#fef2f2', text: '#991b1b', border: '#fecaca', label: 'Critical Priority', icon: '🚨' };
+        return { bg: '#fef2f2', text: '#991b1b', border: '#fecaca', label: 'Critical Priority', icon: '' };
       case 'high':
-        return { bg: '#fffbeb', text: '#92400e', border: '#fde68a', label: 'High Priority', icon: '⚠️' };
+        return { bg: '#fffbeb', text: '#92400e', border: '#fde68a', label: 'High Priority', icon: '' };
       case 'medium':
-        return { bg: '#ecfdf5', text: '#065f46', border: '#a7f3d0', label: 'Medium Priority', icon: '💡' };
+        return { bg: '#f6f2fb', text: '#774DA9', border: '#dac8ee', label: 'Medium Priority', icon: '' };
       case 'low':
       default:
-        return { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe', label: 'Low Priority', icon: 'ℹ️' };
+        return { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0', label: 'Low Priority', icon: '' };
     }
   };
 
@@ -189,14 +189,14 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                 textTransform: 'uppercase',
                 fontWeight: 800,
                 letterSpacing: '0.05em',
-                color: '#7c3aed',
-                backgroundColor: '#f5f3ff',
+                color: '#774DA9',
+                backgroundColor: '#f6f2fb',
                 padding: '3px 10px',
                 borderRadius: '6px',
-                border: '1px solid #ddd6fe',
+                border: '1px solid #dac8ee',
               }}
             >
-              🤖 AI SEO Agent
+               AI SEO Agent
             </span>
             <span
               style={{
@@ -232,7 +232,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: isGenerating ? '#c4b5fd' : '#7c3aed',
+              backgroundColor: isGenerating ? '#dac8ee' : '#774DA9',
               color: '#ffffff',
               border: 'none',
               padding: '10px 20px',
@@ -246,12 +246,12 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           >
             {isGenerating ? (
               <>
-                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>🔄</span>
+                
                 Synthesizing AI Plans...
               </>
             ) : (
               <>
-                <span>✨</span>
+                
                 Generate Recommendations
               </>
             )}
@@ -276,12 +276,12 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
             alignItems: 'center',
           }}
         >
-          <span>⚠️ {error}</span>
+          <span> {error}</span>
           <button
             onClick={() => setError(null)}
             style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -303,12 +303,12 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
             alignItems: 'center',
           }}
         >
-          <span>✓ {successToast}</span>
+          <span>Check {successToast}</span>
           <button
             onClick={() => setSuccessToast(null)}
             style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            X
           </button>
         </div>
       )}
@@ -336,7 +336,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>🚨 Critical</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}> Critical</span>
             <span style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 700, backgroundColor: '#fef2f2', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#991b1b', marginTop: '6px' }}>
@@ -358,7 +358,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}>⚠️ High</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}> High</span>
             <span style={{ fontSize: '11px', color: '#b45309', fontWeight: 700, backgroundColor: '#fffbeb', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#92400e', marginTop: '6px' }}>
@@ -373,15 +373,15 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '12px',
-            border: selectedPriority === 'medium' && selectedStatus === 'pending_review' ? '2px solid #10b981' : '1px solid #a7f3d0',
+            border: selectedPriority === 'medium' && selectedStatus === 'pending_review' ? '2px solid #774DA9' : '1px solid #dac8ee',
             padding: '16px',
             cursor: 'pointer',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#065f46' }}>💡 Medium</span>
-            <span style={{ fontSize: '11px', color: '#047857', fontWeight: 700, backgroundColor: '#ecfdf5', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#774DA9' }}> Medium</span>
+            <span style={{ fontSize: '11px', color: '#774DA9', fontWeight: 700, backgroundColor: '#f6f2fb', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#065f46', marginTop: '6px' }}>
             {mediumCount}
@@ -395,17 +395,17 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '12px',
-            border: selectedPriority === 'low' && selectedStatus === 'pending_review' ? '2px solid #3b82f6' : '1px solid #bfdbfe',
+            border: selectedPriority === 'low' && selectedStatus === 'pending_review' ? '2px solid #774DA9' : '1px solid #e2e8f0',
             padding: '16px',
             cursor: 'pointer',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>ℹ️ Low</span>
-            <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 700, backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Low</span>
+            <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700, backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#1e40af', marginTop: '6px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: '#0f172a', marginTop: '6px' }}>
             {lowCount}
           </div>
         </div>
@@ -417,15 +417,15 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
           style={{
             backgroundColor: '#f8fafc',
             borderRadius: '12px',
-            border: selectedPriority === 'all' && selectedStatus === 'pending_review' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+            border: selectedPriority === 'all' && selectedStatus === 'pending_review' ? '2px solid #774DA9' : '1px solid #e2e8f0',
             padding: '16px',
             cursor: 'pointer',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>📋 To Review</span>
-            <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 700, backgroundColor: '#f5f3ff', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>To Review</span>
+            <span style={{ fontSize: '11px', color: '#774DA9', fontWeight: 700, backgroundColor: '#f6f2fb', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
           </div>
           <div style={{ fontSize: '28px', fontWeight: 800, color: '#0f172a', marginTop: '6px' }}>
             {pendingCount}
@@ -462,8 +462,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                   borderRadius: '8px',
                   fontSize: '13px',
                   fontWeight: isSelected ? 700 : 500,
-                  border: isSelected ? '1px solid #7c3aed' : '1px solid #cbd5e1',
-                  backgroundColor: isSelected ? '#7c3aed' : '#ffffff',
+                  border: isSelected ? '1px solid #774DA9' : '1px solid #cbd5e1',
+                  backgroundColor: isSelected ? '#774DA9' : '#ffffff',
                   color: isSelected ? '#ffffff' : '#475569',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -558,7 +558,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
             border: '1px dashed #cbd5e1',
           }}
         >
-          <div style={{ fontSize: '36px', marginBottom: '10px' }}>✨</div>
+          
           <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
             {recommendations.length === 0 ? 'No AI recommendations generated yet' : 'No recommendations matching filters'}
           </h4>
@@ -573,7 +573,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
               onClick={handleGenerateAll}
               disabled={isGenerating}
               style={{
-                backgroundColor: '#7c3aed',
+                backgroundColor: '#774DA9',
                 color: '#ffffff',
                 border: 'none',
                 padding: '9px 18px',
@@ -590,8 +590,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
               onClick={() => { setSelectedPriority('all'); setSelectedStatus('pending_review'); }}
               style={{
                 backgroundColor: '#ffffff',
-                color: '#7c3aed',
-                border: '1px solid #ddd6fe',
+                color: '#774DA9',
+                border: '1px solid #dac8ee',
                 padding: '8px 16px',
                 borderRadius: '8px',
                 fontSize: '13px',
@@ -624,8 +624,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                       : rec.priority === 'high'
                       ? '#f59e0b'
                       : rec.priority === 'medium'
-                      ? '#10b981'
-                      : '#3b82f6'
+                      ? '#774DA9'
+                      : '#94a3b8'
                   }`,
                   borderRadius: '12px',
                   padding: '22px 24px',
@@ -668,8 +668,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         fontWeight: 600,
                         padding: '3px 8px',
                         borderRadius: '6px',
-                        backgroundColor: '#f5f3ff',
-                        color: '#6d28d9',
+                        backgroundColor: '#f6f2fb',
+                        color: '#774DA9',
                       }}
                     >
                       {formatTypeLabel(rec.recommendation_type)}
@@ -686,7 +686,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           rec.status === 'applied'
                             ? '#dcfce7'
                             : rec.status === 'reviewed'
-                            ? '#e0e7ff'
+                            ? '#f6f2fb'
                             : rec.status === 'dismissed'
                             ? '#f1f5f9'
                             : '#fef3c7',
@@ -694,7 +694,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           rec.status === 'applied'
                             ? '#15803d'
                             : rec.status === 'reviewed'
-                            ? '#3730a3'
+                            ? '#774DA9'
                             : rec.status === 'dismissed'
                             ? '#475569'
                             : '#b45309',
@@ -742,7 +742,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                     fontSize: '13px',
                   }}
                 >
-                  <span style={{ fontSize: '14px' }}>🔍</span>
+                  
                   <span style={{ color: '#64748b' }}>Originating Insight:</span>
                   <strong style={{ color: '#1e293b' }}>{rec.insight_title}</strong>
                   <span
@@ -763,20 +763,20 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                 {/* Recommended Action Box */}
                 <div
                   style={{
-                    backgroundColor: '#eff6ff',
-                    border: '1px solid #bfdbfe',
+                    backgroundColor: '#f6f2fb',
+                    border: '1px solid #dac8ee',
                     borderRadius: '8px',
                     padding: '14px 16px',
                     marginBottom: '14px',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    <span style={{ fontSize: '16px' }}>🛠️</span>
+                    <span style={{ fontSize: '16px' }}></span>
                     <div>
-                      <strong style={{ fontSize: '13px', color: '#1e3a8a', display: 'block', marginBottom: '4px' }}>
+                      <strong style={{ fontSize: '13px', color: '#774DA9', display: 'block', marginBottom: '4px' }}>
                         Action Plan:
                       </strong>
-                      <div style={{ fontSize: '13px', color: '#1e40af', lineHeight: '1.6', whiteSpace: 'pre-line' }}>
+                      <div style={{ fontSize: '13px', color: '#334155', lineHeight: '1.6', whiteSpace: 'pre-line' }}>
                         {rec.recommended_action}
                       </div>
                     </div>
@@ -787,27 +787,27 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                 {rec.generated_content && (rec.generated_content.proposed_title || rec.generated_content.proposed_meta_description || rec.generated_content.action_checklist) && (
                   <div
                     style={{
-                      backgroundColor: '#faf5ff',
-                      border: '1px solid #e9d5ff',
+                      backgroundColor: '#fbf9fd',
+                      border: '1px solid #dac8ee',
                       borderRadius: '8px',
                       padding: '14px 16px',
                       marginBottom: '14px',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '15px' }}>✨</span>
-                      <strong style={{ fontSize: '13px', color: '#6b21a8' }}>AI Generated Copy & Assets:</strong>
+                      
+                      <strong style={{ fontSize: '13px', color: '#774DA9' }}>AI Generated Copy & Assets:</strong>
                     </div>
 
                     {rec.generated_content.proposed_title && (
                       <div style={{ marginBottom: '8px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#774DA9', textTransform: 'uppercase' }}>
                           Suggested Title Tag:
                         </span>
                         <div
                           style={{
                             backgroundColor: '#ffffff',
-                            border: '1px solid #ddd6fe',
+                            border: '1px solid #dac8ee',
                             borderRadius: '6px',
                             padding: '6px 10px',
                             fontSize: '13px',
@@ -823,13 +823,13 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
 
                     {rec.generated_content.proposed_meta_description && (
                       <div style={{ marginBottom: '8px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#774DA9', textTransform: 'uppercase' }}>
                           Suggested Meta Description ({rec.generated_content.proposed_meta_description.length} chars):
                         </span>
                         <div
                           style={{
                             backgroundColor: '#ffffff',
-                            border: '1px solid #ddd6fe',
+                            border: '1px solid #dac8ee',
                             borderRadius: '6px',
                             padding: '6px 10px',
                             fontSize: '13px',
@@ -844,7 +844,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
 
                     {rec.generated_content.action_checklist && rec.generated_content.action_checklist.length > 0 && (
                       <div style={{ marginTop: '8px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#774DA9', textTransform: 'uppercase' }}>
                           Step-by-Step Execution Checklist:
                         </span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
@@ -882,7 +882,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                     <div>
                       <strong style={{ fontSize: '12px', color: '#0f172a', textTransform: 'uppercase' }}>Expected Realistic Impact:</strong>
                       <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#065f46', lineHeight: '1.5' }}>
-                        📈 {rec.expected_impact}
+                         {rec.expected_impact}
                       </p>
                     </div>
                   </div>
@@ -911,7 +911,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           borderRadius: '6px',
                         }}
                       >
-                        🏷️ Keyword: <strong>{rec.affected_keyword}</strong>
+                         Keyword: <strong>{rec.affected_keyword}</strong>
                       </span>
                     )}
 
@@ -922,8 +922,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         rel="noreferrer"
                         style={{
                           fontSize: '12px',
-                          color: '#2563eb',
-                          backgroundColor: '#eff6ff',
+                          color: '#774DA9',
+                          backgroundColor: '#f6f2fb',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           textDecoration: 'none',
@@ -933,7 +933,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        🔗 {rec.affected_url}
+                        {rec.affected_url}
                       </a>
                     )}
 
@@ -942,14 +942,14 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#6366f1',
+                        color: '#774DA9',
                         fontSize: '12px',
                         fontWeight: 600,
                         cursor: 'pointer',
                         padding: 0,
                       }}
                     >
-                      {isExpanded ? '▲ Hide Details' : '▼ Read Full Rationale'}
+                      {isExpanded ? 'Hide Details' : 'Read Full Rationale'}
                     </button>
                   </div>
 
@@ -960,9 +960,9 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         id={`generate-brief-rec-${rec.id}`}
                         onClick={() => onGenerateBrief(rec.id)}
                         style={{
-                          backgroundColor: '#f0f9ff',
-                          color: '#0369a1',
-                          border: '1px solid #bae6fd',
+                          backgroundColor: '#f6f2fb',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 10px',
                           borderRadius: '6px',
                           fontSize: '12px',
@@ -973,7 +973,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           gap: '4px',
                         }}
                       >
-                        📋 Brief
+                        Brief
                       </button>
                     )}
 
@@ -982,9 +982,9 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         id={`create-action-rec-${rec.id}`}
                         onClick={() => onCreateAction(rec.id)}
                         style={{
-                          backgroundColor: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px solid #bfdbfe',
+                          backgroundColor: '#774DA9',
+                          color: '#ffffff',
+                          border: 'none',
                           padding: '5px 10px',
                           borderRadius: '6px',
                           fontSize: '12px',
@@ -995,7 +995,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           gap: '4px',
                         }}
                       >
-                        ⚡ Action
+                        Action
                       </button>
                     )}
 
@@ -1006,8 +1006,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         onClick={() => handleStatusChange(rec.id, 'reviewed')}
                         style={{
                           backgroundColor: '#ffffff',
-                          color: '#4338ca',
-                          border: '1px solid #c7d2fe',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 10px',
                           borderRadius: '6px',
                           fontSize: '12px',
@@ -1015,7 +1015,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        ✓ Mark Reviewed
+                        Check Mark Reviewed
                       </button>
                     )}
 
@@ -1034,7 +1034,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        🚀 Mark Applied
+                        Mark Applied
                       </button>
                     )}
 
@@ -1044,8 +1044,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         onClick={() => handleStatusChange(rec.id, 'pending_review')}
                         style={{
                           backgroundColor: '#ffffff',
-                          color: '#6366f1',
-                          border: '1px solid #c7d2fe',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 10px',
                           borderRadius: '6px',
                           fontSize: '12px',
@@ -1053,7 +1053,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        ↺ Reopen
+                        Reopen
                       </button>
                     )}
 
@@ -1080,8 +1080,8 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                         onClick={() => handleStatusChange(rec.id, 'pending_review')}
                         style={{
                           backgroundColor: '#ffffff',
-                          color: '#6366f1',
-                          border: '1px solid #c7d2fe',
+                          color: '#774DA9',
+                          border: '1px solid #dac8ee',
                           padding: '5px 8px',
                           borderRadius: '6px',
                           fontSize: '12px',
