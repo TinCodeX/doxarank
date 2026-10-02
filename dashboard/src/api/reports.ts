@@ -1,7 +1,5 @@
-import { apiFetch, getStoredTokens } from './client';
+import { apiFetch, getStoredTokens, API_BASE_URL } from './client';
 import type { SEOReport, GenerateReportPayload } from '../types/report';
-
-const API_BASE_URL = 'http://127.0.0.1:8000';
 
 export async function getReports(projectId?: number): Promise<SEOReport[]> {
   const query = projectId ? `?project_id=${projectId}` : '';

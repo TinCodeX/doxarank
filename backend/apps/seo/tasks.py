@@ -1229,6 +1229,7 @@ def run_project_rank_check(self, project_id: int, job_id: Optional[int] = None) 
     """
     Asynchronously run rank checks for all active keywords of a project.
     Updates RankCheckJob progress and transitions cleanly on completion or failure.
+    Applies controlled exponential backoff retries for transient network/concurrency errors.
     """
     from apps.projects.models import Project
     from apps.subscriptions.services import PlanEntitlementService
@@ -1243,7 +1244,7 @@ def run_project_rank_check(self, project_id: int, job_id: Optional[int] = None) 
     job = None
     if job_id:
         try:
-            job = RankCheckJob.objects.select_for_update().get(id=job_id)
+            job = RankCheckJob.objects.get(id=job_id)
         except RankCheckJob.DoesNotExist:
             logger.warning(f"[RankTrackerTask] RankCheckJob #{job_id} not found.")
 
@@ -1263,6 +1264,12 @@ def run_project_rank_check(self, project_id: int, job_id: Optional[int] = None) 
         )
         return job.id if job else len(snapshots)
     except Exception as exc:
+        is_transient = isinstance(exc, RETRYABLE_EXCEPTIONS) or "httpx" in getattr(type(exc), '__module__', '')
+        if is_transient and self.request.retries < self.max_retries:
+            logger.warning(
+                f"[RankTrackerTask] Transient error in project #{project_id} rank check (retry {self.request.retries + 1}/{self.max_retries}): {exc}"
+            )
+            raise self.retry(exc=exc, countdown=5 * (2 ** self.request.retries))
         logger.exception(f"[RankTrackerTask] Fatal error in project #{project_id} rank check: {exc}")
         if job:
             _mark_rank_check_job_failed(job, f"Rank check failed: {exc}")
@@ -1278,6 +1285,7 @@ def run_daily_rank_checks() -> Dict[str, Any]:
     - Scans active keywords for Starter and Agency users (Free users skipped).
     - Idempotency: skips keywords that already have a ranking snapshot recorded today.
     - Error isolation: failures on one keyword do not abort remaining keywords.
+    - Politeness throttling: avoids concurrent request bursts.
     """
     from apps.subscriptions.services import PlanEntitlementService
     from apps.subscriptions.models import FeatureCode

@@ -662,3 +662,590 @@ class RankTrackerAPITests(TestCase):
         # Ordered by -recorded_at
         self.assertEqual(res.data[0]['id'], r2.id)
         self.assertEqual(res.data[1]['id'], r1.id)
+
+
+# =============================================================================
+# PRODUCTION FIXTURE-BASED PARSER TEST SUITE (16 Scenarios)
+# =============================================================================
+
+FIXTURE_1_ENGLISH_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>addis ababa business directory - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://ethiopianbusiness.com/directory"><h3>Ethiopian Business Directory</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/business"><h3>Addis Insight Business Guide</h3></a></div>
+      <div class="g"><a href="https://shega.co/directory"><h3>Shega Tech Directory</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_2_AMHARIC_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>የኢትዮጵያ ቱሪዝም እና ሆቴሎች - የGoogle ፍለጋ</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://ethiopianreporter.com/tourism"><h3>የኢትዮጵያ ቱሪዝም መረጃ</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/am/tourism"><h3>አዲስ ኢንሳይት - የኢትዮጵያ ቱሪዝም እና ሆቴሎች</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_3_OROMO_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>hoteela gaarii Finfinnee - Barbaacha Google</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://bbc.com/afaanoromoo/tourism"><h3>Oduu fi Daawwanna Itoophiyaa</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/om/hotels"><h3>Addis Insight - Hoteelota Gaarii Finfinnee</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_4_ADS_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>hotels in ethiopia - Google Search</title></head>
+<body>
+  <div id="search">
+    <!-- Top ads container -->
+    <div id="tads">
+      <div class="uEierd">
+        <span class="ad-label">Sponsored</span>
+        <a href="https://booking.com/addis"><h3>Booking.com Addis Hotels</h3></a>
+      </div>
+      <div class="uEierd">
+        <span class="ad-label">Ad</span>
+        <a href="https://agoda.com/ethiopia"><h3>Agoda Hotels in Ethiopia</h3></a>
+      </div>
+    </div>
+    <!-- Organic results -->
+    <div id="rso">
+      <div class="g"><a href="https://tripadvisor.com/ethiopia"><h3>Tripadvisor: Ethiopia</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/hotels"><h3>Addis Insight Hotel Guide</h3></a></div>
+    </div>
+    <!-- Bottom ads container -->
+    <div id="bottomads">
+      <div class="uEierd">
+        <span>ማስታወቂያ</span>
+        <a href="https://hotelscombined.com"><h3>HotelsCombined Discount</h3></a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_5_PAA_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>travel to addis ababa - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://wikitravel.org/en/Addis_Ababa"><h3>Addis Ababa Travel Guide - Wikitravel</h3></a></div>
+      <!-- People Also Ask widget (must NOT be counted) -->
+      <div class="related-question-pair">
+        <div>People also ask</div>
+        <div data-q="Is Addis Ababa safe?">
+          <a href="https://travelsafe.com/ethiopia"><h3>Is Addis Ababa safe to visit?</h3></a>
+        </div>
+      </div>
+      <div class="g"><a href="https://addisinsight.net/travel"><h3>Addis Insight: Essential Addis Ababa Guide</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_6_FEATURED_SNIPPET_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>best time to visit ethiopia - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <!-- Featured snippet container -->
+      <div class="g c2xzTb">
+        <div class="xpdOpen">
+          <a href="https://addisinsight.net/best-time-to-visit">
+            <h3>The Best Time to Visit Ethiopia: Weather & Festival Guide</h3>
+          </a>
+          <div>The dry season from October to February is generally considered the best time to visit Ethiopia...</div>
+          <a href="https://support.google.com/websearch/answer/6371484">About featured snippets</a>
+        </div>
+      </div>
+      <div class="g"><a href="https://lonelyplanet.com/ethiopia"><h3>Lonely Planet Ethiopia Guide</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_7_MISSING_KEYWORD_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>aerospace engineering addis ababa - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://aau.edu.et/technology"><h3>AAU Technology Faculty</h3></a></div>
+      <div class="g"><a href="https://ethiopianairlines.com/aviation-academy"><h3>Ethiopian Aviation Academy</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_8_MULTIPLE_ORGANIC_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>ethiopia coffee exporters - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://site1.com"><h3>Coffee Exporter 1</h3></a></div>
+      <div class="g"><a href="https://site2.com"><h3>Coffee Exporter 2</h3></a></div>
+      <div class="g"><a href="https://site3.com"><h3>Coffee Exporter 3</h3></a></div>
+      <div class="g"><a href="https://site4.com"><h3>Coffee Exporter 4</h3></a></div>
+      <div class="g"><a href="https://site5.com"><h3>Coffee Exporter 5</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/coffee"><h3>Addis Insight Coffee Guide</h3></a></div>
+      <div class="g"><a href="https://site7.com"><h3>Coffee Exporter 7</h3></a></div>
+      <div class="g"><a href="https://site8.com"><h3>Coffee Exporter 8</h3></a></div>
+      <div class="g"><a href="https://site9.com"><h3>Coffee Exporter 9</h3></a></div>
+      <div class="g"><a href="https://site10.com"><h3>Coffee Exporter 10</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_9_DUPLICATE_URLS_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>ethiopian telecom news - Google Search</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g">
+        <a href="https://addisinsight.net/telecom-update/"><h3>Addis Insight Telecom Update</h3></a>
+        <div class="sitelinks">
+          <a href="https://addisinsight.net/telecom-update/#section1"><h3>Section 1</h3></a>
+          <a href="https://addisinsight.net/telecom-update/"><h3>Duplicate Link</h3></a>
+        </div>
+      </div>
+      <div class="g"><a href="https://ethiotel.et"><h3>Ethio Telecom Official</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_10_UNICODE_PUNCTUATION_SERP = """
+<!DOCTYPE html>
+<html>
+<head><title>የኢትዮጵያ፡ባህል፡እና፡ታሪክ - የGoogle ፍለጋ</title></head>
+<body>
+  <div id="search">
+    <div id="rso">
+      <div class="g"><a href="https://culture.gov.et"><h3>የባህልና፡ስፖርት፡ሚኒስቴር።</h3></a></div>
+      <div class="g"><a href="https://addisinsight.net/am/culture/"><h3>አዲስ፡ኢንሳይት፤ የኢትዮጵያ፡ባህልና፡ታሪክ።</h3></a></div>
+      <div class="g"><a href="https://oromia.gov.et/aadaa"><h3>Aadaa fi Seenaa Oromiyaa'n</h3></a></div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+FIXTURE_11_CONSENT_PAGE = """
+<!DOCTYPE html>
+<html>
+<head><title>Before you continue to Google Search</title></head>
+<body>
+  <form action="https://consent.google.com/save">
+    <h1>Before you continue to Google</h1>
+    <p>We use cookies and data to deliver and maintain Google services...</p>
+    <button type="submit">I agree</button>
+  </form>
+</body>
+</html>
+"""
+
+FIXTURE_12_MALFORMED_HTML = """
+<!DOCTYPE html>
+<html>
+<head><title>502 Bad Gateway</title></head>
+<body>
+  <h1>Server Error 502</h1>
+  <p>The upstream server was not available.</p>
+</body>
+</html>
+"""
+
+FIXTURE_13_EMPTY_SERP = "   \n\t   "
+
+
+class ProductionSerpParserTestSuite(TestCase):
+    """
+    Realistic fixture-based parser tests covering all 16 required production scenarios.
+    """
+
+    def test_1_normal_english_google_ethiopia_serp(self):
+        """Scenario 1: Normal English Google Ethiopia SERP."""
+        res = SerpParser.parse_google_serp(FIXTURE_1_ENGLISH_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)
+        self.assertEqual(res.url, 'https://addisinsight.net/business')
+        self.assertIn('Addis Insight Business Guide', res.title)
+
+    def test_2_amharic_serp(self):
+        """Scenario 2: Amharic SERP with Fidel characters."""
+        res = SerpParser.parse_google_serp(FIXTURE_2_AMHARIC_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)
+        self.assertEqual(res.url, 'https://addisinsight.net/am/tourism')
+        self.assertIn('አዲስ ኢንሳይት', res.title)
+
+    def test_3_oromo_serp(self):
+        """Scenario 3: Oromo SERP with Afaan Oromoo search results."""
+        res = SerpParser.parse_google_serp(FIXTURE_3_OROMO_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)
+        self.assertEqual(res.url, 'https://addisinsight.net/om/hotels')
+        self.assertIn('Hoteelota Gaarii Finfinnee', res.title)
+
+    def test_4_serp_containing_advertisements(self):
+        """Scenario 4: Top and bottom ads are filtered out and do not shift organic position."""
+        res = SerpParser.parse_google_serp(FIXTURE_4_ADS_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)  # Organic #2, not displaced by Booking.com/Agoda ads
+        self.assertEqual(res.url, 'https://addisinsight.net/hotels')
+
+    def test_5_serp_containing_paa(self):
+        """Scenario 5: People Also Ask (PAA) question blocks are ignored as organic results."""
+        res = SerpParser.parse_google_serp(FIXTURE_5_PAA_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)  # Organic #2, not displaced by PAA accordion link
+
+    def test_6_featured_snippet(self):
+        """Scenario 6: Featured snippet is captured as rank #1 organic result without duplication."""
+        res = SerpParser.parse_google_serp(FIXTURE_6_FEATURED_SNIPPET_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 1)
+        self.assertEqual(res.url, 'https://addisinsight.net/best-time-to-visit')
+
+    def test_7_missing_keyword(self):
+        """Scenario 7: Keyword not present in top results returns NOT_FOUND with position=None."""
+        res = SerpParser.parse_google_serp(FIXTURE_7_MISSING_KEYWORD_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.NOT_FOUND)
+        self.assertIsNone(res.position)
+        self.assertIsNone(res.url)
+
+    def test_8_multiple_organic_results(self):
+        """Scenario 8: Multiple organic results preserve exact 1-based ranking sequence."""
+        res = SerpParser.parse_google_serp(FIXTURE_8_MULTIPLE_ORGANIC_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 6)
+        self.assertEqual(res.total_organic_found, 10)
+
+    def test_9_duplicate_looking_urls(self):
+        """Scenario 9: Sitelinks and duplicate URLs on the same page are cleanly deduplicated."""
+        items = SerpParser.parse_organic_results(FIXTURE_9_DUPLICATE_URLS_SERP)
+        urls = [url for url, _ in items]
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertEqual(urls[0], 'https://addisinsight.net/telecom-update/')
+
+    def test_10_unicode_punctuation(self):
+        """Scenario 10: Amharic and Oromo punctuation in SERP preserved without corruption."""
+        res = SerpParser.parse_google_serp(FIXTURE_10_UNICODE_PUNCTUATION_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)
+        self.assertIn('አዲስ፡ኢንሳይት፤', res.title)
+
+    def test_11_google_block_consent_page(self):
+        """Scenario 11: Google consent/interstitial page classified as ERROR."""
+        res = SerpParser.parse_google_serp(FIXTURE_11_CONSENT_PAGE, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.ERROR)
+        self.assertIsNone(res.position)
+        self.assertIn('consent', res.error_message.lower())
+
+    def test_12_malformed_unexpected_html(self):
+        """Scenario 12: Malformed HTML missing SERP landmarks classified as ERROR."""
+        res = SerpParser.parse_google_serp(FIXTURE_12_MALFORMED_HTML, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.ERROR)
+        self.assertIsNone(res.position)
+        self.assertIn('landmarks', res.error_message.lower())
+
+    def test_13_empty_serp(self):
+        """Scenario 13: Empty or whitespace HTML classified as ERROR."""
+        res = SerpParser.parse_google_serp(FIXTURE_13_EMPTY_SERP, 'https://addisinsight.net')
+        self.assertEqual(res.status, RankingResultStatus.ERROR)
+        self.assertIsNone(res.position)
+
+    @patch('httpx.Client.get')
+    def test_14_http_error(self, mock_get):
+        """Scenario 14: Outbound HTTP 500/404 error is caught and stored as ERROR snapshot."""
+        import httpx
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("500 Server Error", request=MagicMock(), response=mock_resp)
+        mock_get.return_value = mock_resp
+
+        client = GoogleEtSerpClient(max_retries=0)
+        with self.assertRaises(Exception):
+            client.fetch_serp("hotels addis")
+
+    @patch('httpx.Client.get')
+    def test_15_timeout(self, mock_get):
+        """Scenario 15: Outbound request timeout is caught and surfaced safely."""
+        import httpx
+        mock_get.side_effect = httpx.TimeoutException("Connection timed out after 15s")
+
+        client = GoogleEtSerpClient(max_retries=0)
+        with self.assertRaises(RuntimeError) as ctx:
+            client.fetch_serp("hotels addis")
+        self.assertIn("timed out", str(ctx.exception).lower())
+
+    @patch('httpx.Client.get')
+    def test_16_rate_limit_response(self, mock_get):
+        """Scenario 16: HTTP 429 rate limit triggers bounded retry then raises RuntimeError."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_get.return_value = mock_resp
+
+        client = GoogleEtSerpClient(max_retries=1, politeness_delay=0.01)
+        with self.assertRaises(RuntimeError) as ctx:
+            client.fetch_serp("hotels addis")
+        self.assertIn("rate limit", str(ctx.exception).lower())
+
+
+# =============================================================================
+# PRODUCTION RANK TRACKER SERVICE TESTS (Requirement 15)
+# =============================================================================
+
+class ProductionRankTrackerServiceTests(TestCase):
+    """
+    Comprehensive service tests covering single, multiple, mixed language,
+    device preservation, failure modes, tenant isolation, and subscription limits.
+    """
+
+    def setUp(self):
+        self.user_a = User.objects.create_user(
+            email='user_a@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='A'
+        )
+        self.user_b = User.objects.create_user(
+            email='user_b@doxarank.com',
+            password='Password123!',
+            first_name='User',
+            last_name='B'
+        )
+        self.project_a = Project.objects.create(
+            owner=self.user_a,
+            name='Addis Insight Project',
+            website_url='https://addisinsight.net'
+        )
+        self.project_b = Project.objects.create(
+            owner=self.user_b,
+            name='Shega Project',
+            website_url='https://shega.co'
+        )
+        SubscriptionService.bootstrap_default_plans()
+        SubscriptionService.assign_plan(self.user_a, PlanCode.STARTER)
+        SubscriptionService.assign_plan(self.user_b, PlanCode.AGENCY)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=FIXTURE_1_ENGLISH_SERP)
+    def test_service_one_keyword(self, mock_fetch):
+        """Single keyword check persists snapshot with correct position and metadata."""
+        kw = Keyword.objects.create(
+            project=self.project_a,
+            keyword='addis business guide',
+            language=Language.EN,
+            device=Device.DESKTOP
+        )
+        service = RankTrackerService()
+        snapshot = service.check_keyword(kw)
+
+        self.assertEqual(snapshot.position, 2)
+        self.assertEqual(snapshot.result_status, RankingResultStatus.FOUND)
+        self.assertEqual(snapshot.ranking_url, 'https://addisinsight.net/business')
+        self.assertEqual(snapshot.device, Device.DESKTOP)
+        self.assertEqual(snapshot.country, Country.ET)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=FIXTURE_1_ENGLISH_SERP)
+    def test_service_multiple_keywords(self, mock_fetch):
+        """Batch project check executes across multiple keywords with progress updates."""
+        kw1 = Keyword.objects.create(project=self.project_a, keyword='guide 1')
+        kw2 = Keyword.objects.create(project=self.project_a, keyword='guide 2')
+
+        job = RankCheckJob.objects.create(
+            project=self.project_a,
+            status=RankCheckJobStatus.PENDING,
+            total_keywords=2
+        )
+        client = GoogleEtSerpClient(politeness_delay=0.0)
+        service = RankTrackerService(serp_client=client)
+        snapshots = service.check_project_keywords(self.project_a, job=job)
+
+        self.assertEqual(len(snapshots), 2)
+        job.refresh_from_db()
+        self.assertEqual(job.status, RankCheckJobStatus.COMPLETED)
+        self.assertEqual(job.completed_keywords, 2)
+        self.assertEqual(job.failed_keywords, 0)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp')
+    def test_service_mixed_english_amharic_oromo(self, mock_fetch):
+        """Service processes English, Amharic, and Oromo keywords in a single project."""
+        kw_en = Keyword.objects.create(project=self.project_a, keyword='addis directory', language=Language.EN)
+        kw_am = Keyword.objects.create(project=self.project_a, keyword='የኢትዮጵያ ቱሪዝም', language=Language.AM)
+        kw_om = Keyword.objects.create(project=self.project_a, keyword='hoteela gaarii', language=Language.OM)
+
+        mock_fetch.side_effect = [
+            FIXTURE_1_ENGLISH_SERP,
+            FIXTURE_2_AMHARIC_SERP,
+            FIXTURE_3_OROMO_SERP,
+        ]
+
+        client = GoogleEtSerpClient(politeness_delay=0.0)
+        service = RankTrackerService(serp_client=client)
+        snapshots = service.check_project_keywords(self.project_a)
+
+        self.assertEqual(len(snapshots), 3)
+        self.assertEqual(snapshots[0].language, Language.EN)
+        self.assertEqual(snapshots[1].language, Language.AM)
+        self.assertEqual(snapshots[2].language, Language.OM)
+        for snap in snapshots:
+            self.assertEqual(snap.result_status, RankingResultStatus.FOUND)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=FIXTURE_1_ENGLISH_SERP)
+    def test_service_desktop_and_mobile_device_preservation(self, mock_fetch):
+        """Keywords configured for desktop and mobile consistently preserve device context."""
+        kw_desk = Keyword.objects.create(project=self.project_a, keyword='hotels', device=Device.DESKTOP)
+        kw_mob = Keyword.objects.create(project=self.project_a, keyword='hotels mob', device=Device.MOBILE)
+
+        service = RankTrackerService(serp_client=GoogleEtSerpClient(politeness_delay=0.0))
+        snap_desk = service.check_keyword(kw_desk)
+        snap_mob = service.check_keyword(kw_mob)
+
+        self.assertEqual(snap_desk.device, Device.DESKTOP)
+        self.assertEqual(snap_mob.device, Device.MOBILE)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=FIXTURE_7_MISSING_KEYWORD_SERP)
+    def test_service_not_found_status(self, mock_fetch):
+        """When keyword is outside the top 100, status is NOT_FOUND and position is None."""
+        kw = Keyword.objects.create(project=self.project_a, keyword='aerospace addis')
+        service = RankTrackerService()
+        snapshot = service.check_keyword(kw)
+
+        self.assertEqual(snapshot.result_status, RankingResultStatus.NOT_FOUND)
+        self.assertIsNone(snapshot.position)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', side_effect=RuntimeError("Google CAPTCHA block"))
+    def test_service_error_status(self, mock_fetch):
+        """Network/block failure results in ERROR status with sanitized diagnostic message."""
+        kw = Keyword.objects.create(project=self.project_a, keyword='blocked kw')
+        service = RankTrackerService()
+        snapshot = service.check_keyword(kw)
+
+        self.assertEqual(snapshot.result_status, RankingResultStatus.ERROR)
+        self.assertIsNone(snapshot.position)
+        self.assertIn("CAPTCHA", snapshot.error_message)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp')
+    def test_service_partial_project_failure(self, mock_fetch):
+        """Partial failure in a project check transitions job to PARTIAL_FAILURE."""
+        kw1 = Keyword.objects.create(project=self.project_a, keyword='kw 1')
+        kw2 = Keyword.objects.create(project=self.project_a, keyword='kw 2')
+
+        mock_fetch.side_effect = [
+            FIXTURE_1_ENGLISH_SERP,
+            RuntimeError("Network timeout on Google Ethiopia"),
+        ]
+
+        job = RankCheckJob.objects.create(project=self.project_a, total_keywords=2)
+        service = RankTrackerService(serp_client=GoogleEtSerpClient(politeness_delay=0.0))
+        snapshots = service.check_project_keywords(self.project_a, job=job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, RankCheckJobStatus.PARTIAL_FAILURE)
+        self.assertEqual(job.completed_keywords, 1)
+        self.assertEqual(job.failed_keywords, 1)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', side_effect=RuntimeError("Google completely unreachable"))
+    def test_service_complete_project_failure(self, mock_fetch):
+        """Complete failure in a project check transitions job to FAILED."""
+        kw1 = Keyword.objects.create(project=self.project_a, keyword='kw 1')
+        job = RankCheckJob.objects.create(project=self.project_a, total_keywords=1)
+
+        service = RankTrackerService(serp_client=GoogleEtSerpClient(politeness_delay=0.0))
+        snapshots = service.check_project_keywords(self.project_a, job=job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, RankCheckJobStatus.FAILED)
+        self.assertEqual(job.failed_keywords, 1)
+        self.assertEqual(job.completed_keywords, 0)
+
+    @patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=FIXTURE_1_ENGLISH_SERP)
+    def test_service_historical_snapshots_immutable(self, mock_fetch):
+        """Historical ranking snapshots remain immutable when a new check is recorded."""
+        kw = Keyword.objects.create(project=self.project_a, keyword='historical kw')
+        now = timezone.now()
+        past_snapshot = KeywordRanking.objects.create(
+            keyword=kw,
+            position=15,
+            result_status=RankingResultStatus.FOUND,
+            recorded_at=now - timezone.timedelta(days=7)
+        )
+
+        service = RankTrackerService()
+        new_snapshot = service.check_keyword(kw)
+
+        past_snapshot.refresh_from_db()
+        self.assertEqual(past_snapshot.position, 15)  # Historical snapshot unchanged
+        self.assertEqual(new_snapshot.position, 2)
+        self.assertEqual(kw.rankings.count(), 2)
+
+    def test_service_tenant_isolation(self):
+        """User A cannot access or check rankings belonging to User B."""
+        kw_b = Keyword.objects.create(project=self.project_b, keyword='shega kw')
+
+        client = APIClient()
+        client.force_authenticate(user=self.user_a)
+
+        # User A tries to get rankings for User B's keyword
+        res = client.get(f'/api/seo/rankings/?keyword_id={kw_b.id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 0)
+
+        # User A tries to trigger check for User B's keyword
+        res = client.post('/api/seo/rankings/check/', {'keyword_id': kw_b.id})
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_service_subscription_limits(self):
+        """Free user is blocked from rank tracking; Starter has 50 limit; Agency has 500."""
+        user_free = User.objects.create_user(email='free_p@doxarank.com', password='Password123!')
+        SubscriptionService.assign_plan(user_free, PlanCode.FREE)
+        proj_free = Project.objects.create(owner=user_free, name='Free Proj', website_url='https://free.com')
+        kw_free = Keyword.objects.create(project=proj_free, keyword='free kw')
+
+        client = APIClient()
+        client.force_authenticate(user=user_free)
+
+        # Free user blocked from triggering rank check
+        res = client.post('/api/seo/rankings/check/', {'keyword_id': kw_free.id})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+

@@ -1,6 +1,7 @@
 import type { AuthTokens } from '../types/auth';
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+export const API_BASE_URL: string =
+  (import.meta.env.VITE_API_URL as string) || 'http://127.0.0.1:8000';
 
 const ACCESS_TOKEN_KEY = 'doxarank_access_token';
 const REFRESH_TOKEN_KEY = 'doxarank_refresh_token';

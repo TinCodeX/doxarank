@@ -1,4 +1,4 @@
-import { apiFetch, getStoredTokens } from './client';
+import { apiFetch, getStoredTokens, API_BASE_URL } from './client';
 import type {
   SEOContentBrief,
   BriefContentType,
@@ -6,8 +6,6 @@ import type {
   GenerateContentBriefPayload,
   UpdateContentBriefPayload
 } from '../types/seoContentBrief';
-
-const API_BASE_URL = 'http://127.0.0.1:8000';
 
 export interface SEOContentBriefFilterParams {
   project_id?: number;

@@ -72,34 +72,64 @@ class SerpResult:
 
 class SerpParser:
     """
-    Resilient Google SERP HTML parser.
+    Resilient Google SERP HTML parser for Google Ethiopia (google.com.et).
     Extracts organic results while filtering ads, sponsored elements, knowledge panels,
-    featured snippets, and related question blocks.
+    featured snippets, related question blocks (PAA), and navigation widgets.
     """
 
     # Elements and CSS identifiers that represent non-organic content
     NON_ORGANIC_CONTAINERS = [
         '#tads',
         '#bottomads',
+        '#taw',
         'div[data-text-ad]',
+        'div.uEierd',
+        '.commercial-unit-desktop-top',
+        '.commercial-unit-desktop-rhs',
+        '.commercial-unit-mobile-top',
+        '.commercial-unit-mobile-bottom',
+        'div[data-ad-slot]',
+        'div[aria-label="Ads"]',
+        'div[aria-label="Sponsored"]',
+        'div[aria-label="ማስታወቂያ"]',
+        'div[aria-label="Beeksisa"]',
         '.kp-wholepage',
         '.knowledge-panel',
         '.osrp-blk',
+        '#rhs',
+        '#rhs_block',
+        '#wp-tabs-container',
         '.related-question-pair',
         'div[data-initq]',
+        'div[data-q]',
+        'div.match-mod-horizontal',
+        'div[jsname="yEVEwb"]',
+        'div[jsname="N760b"]',
         '#extrares',
-        '.commercial-unit-desktop-top',
-        '.commercial-unit-desktop-rhs',
+        '#searchform',
+        '#top_nav',
+        '#hdtb',
+        '#foot',
+        '#navcnt',
+        '#fbar',
+        '#footcnt',
+        'g-scrolling-carousel',
+        'div[data-attrid="images universal"]',
+        '.ivg-i',
+        'div[data-attrid="video universal"]',
+        'div.o6juwe',
     ]
 
-    # Non-organic indicators in snippet text (English and Amharic)
+    # Non-organic indicators in snippet text (English, Amharic, and Oromo)
     AD_LABELS = {
         'sponsored',
         'ad',
         'ads',
         'ማስታወቂያ',
+        'beeksisa',
+        'beeksisaa',
     }
-    AD_PATTERN = re.compile(r'\b(sponsored|ad|ads|ማስታወቂያ)\b', re.IGNORECASE)
+    AD_PATTERN = re.compile(r'\b(sponsored|ad|ads|ማስታወቂያ|beeksisa|beeksisaa)\b', re.IGNORECASE)
 
     # Domains to ignore as organic results (Google internal/service URLs)
     IGNORED_HOSTS = {
@@ -121,22 +151,25 @@ class SerpParser:
     @classmethod
     def clean_google_url(cls, raw_url: str) -> Optional[str]:
         """
-        Extract destination URL if wrapped in Google redirect (/url?q=...).
+        Extract destination URL if wrapped in Google redirect (/url?q=... or /url?url=...).
         Returns cleaned absolute HTTP/HTTPS URL or None if internal/invalid.
         """
         if not raw_url:
             return None
 
-        # Google redirect handler: /url?q=https://example.com&sa=U...
+        # Google redirect handler: /url?q=https://example.com&sa=U... or /url?url=...
         if raw_url.startswith('/url?'):
             parsed = urllib.parse.urlparse(raw_url)
             query_params = urllib.parse.parse_qs(parsed.query)
-            target = query_params.get('q', [None])[0]
+            target = query_params.get('q', [None])[0] or query_params.get('url', [None])[0]
             if target:
                 raw_url = target
 
         if not raw_url.startswith(('http://', 'https://')):
             return None
+
+        # Strip URL fragments
+        raw_url = raw_url.split('#')[0]
 
         parsed_target = urllib.parse.urlparse(raw_url)
         hostname = (parsed_target.hostname or '').lower()
@@ -161,9 +194,10 @@ class SerpParser:
             text = f"https://{text}"
 
         parsed = urllib.parse.urlparse(text)
-        host = (parsed.hostname or '').lower()
+        host = (parsed.hostname or '').lower().strip()
         if host.startswith('www.'):
             host = host[4:]
+        host = host.split(':')[0].rstrip('.')
         return host
 
     @classmethod
@@ -187,31 +221,106 @@ class SerpParser:
         )
 
     @classmethod
+    def validate_serp_response(cls, html: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate whether HTTP response contains a legitimate Google SERP structure
+        rather than a consent screen, CAPTCHA, bot block, or malformed/unexpected HTML.
+        Returns (is_valid, error_message).
+        """
+        if not html or not html.strip():
+            return False, "Empty SERP HTML received."
+
+        html_lower = html.lower()
+
+        # 1. Detect Google Bot Block / CAPTCHA / Unusual Traffic
+        if (
+            "detected unusual traffic" in html_lower
+            or 'id="captcha-form"' in html
+            or 'recaptcha' in html_lower
+            or '/sorry/index' in html_lower
+            or "unusual traffic from your computer network" in html_lower
+        ):
+            return False, "Google automated query block / CAPTCHA detected."
+
+        # 2. Detect Google Cookie Consent / Interstitial
+        if (
+            "consent.google.com" in html_lower
+            or "before you continue to google" in html_lower
+            or "consent-bump" in html_lower
+            or 'action="https://consent.google.com' in html
+            or 'id="cookiebubble"' in html_lower
+        ):
+            return False, "Google cookie consent interstitial returned instead of SERP."
+
+        # 3. Detect Rate Limit / 429 indicators
+        if "rate limit" in html_lower and "google" in html_lower:
+            return False, "Google search rate limit response received."
+
+        # 4. Check for valid Google SERP landmarks or valid zero-result indicators
+        has_serp_landmarks = any(
+            marker in html for marker in (
+                'id="search"',
+                'id="rso"',
+                'id="center_col"',
+                'id="rcnt"',
+                'id="res"',
+                'class="g"',
+                'class="MjjYud"',
+                'data-sokoban-container',
+                'id="taw"',
+                'id="tads"',
+            )
+        ) or (('<h3>' in html_lower or '<h3 ' in html_lower) and '<a' in html_lower)
+
+        has_query_form = (
+            ('<form' in html_lower and 'action="/search"' in html_lower)
+            or 'name="q"' in html
+        )
+
+        has_no_results_marker = any(
+            marker in html for marker in (
+                "did not match any documents",
+                "ምንም ውጤት አልተገኘም",
+                "wanta walsimatu homaa hin arganne",
+                "No results found for",
+            )
+        )
+
+        if not (has_serp_landmarks or (has_query_form and has_no_results_marker)):
+            return False, "Malformed or unexpected HTML: missing Google SERP landmarks."
+
+        return True, None
+
+    @classmethod
     def parse_organic_results(cls, html: str) -> List[Tuple[str, str]]:
         """
         Parse all organic (URL, title) entries from Google SERP HTML in ranking order.
-        Filters ads, navigation, and non-organic widgets.
+        Filters ads, navigation, PAA, and non-organic widgets.
         """
         if not html:
             return []
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # 1. Remove obvious ad and non-organic containers from the DOM
+        # 1. Remove obvious ad, PAA, knowledge panel, and non-organic containers from the DOM
         for selector in cls.NON_ORGANIC_CONTAINERS:
             for el in soup.select(selector):
                 el.decompose()
+
+        # Decompose any elements containing explicit ad labels
+        for ad_el in soup.find_all(attrs={'aria-label': re.compile(r'^(Ads|Sponsored|ማስታወቂያ|Beeksisa)', re.I)}):
+            ad_el.decompose()
 
         results: List[Tuple[str, str]] = []
         seen_urls = set()
 
         # 2. Strategy A: Standard Google organic containers (div.g, div.MjjYud, div[data-sokoban-container])
-        containers = soup.select('div.g, div[data-sokoban-container], div.MjjYud')
+        containers = soup.select('div#rso div.g, div#rso div[data-sokoban-container], div#rso div.MjjYud, div.g, div[data-sokoban-container], div.MjjYud')
 
         for container in containers:
             # Check if container has ad badges or text
             text_preview = container.get_text(separator=' ', strip=True)
-            if cls.AD_PATTERN.search(text_preview[:50]):
+            if cls.AD_PATTERN.search(text_preview[:80]):
                 continue
 
             # Find main ranking link with title
@@ -238,6 +347,10 @@ class SerpParser:
                 if not h3:
                     continue
 
+                parent_text = (a_tag.parent.get_text(separator=' ', strip=True) if a_tag.parent else '')[:80]
+                if cls.AD_PATTERN.search(parent_text):
+                    continue
+
                 clean_url = cls.clean_google_url(a_tag['href'])
                 if not clean_url or clean_url in seen_urls:
                     continue
@@ -254,24 +367,16 @@ class SerpParser:
         """
         Find position and metadata of target website in Google Ethiopia SERP.
         Returns SerpResult with position 1-100 if found, or None with 'not_found' status.
+        If HTML is invalid, blocked, or malformed, returns 'error' status.
         """
-        if not html:
+        is_valid, validation_error = cls.validate_serp_response(html)
+        if not is_valid:
             return SerpResult(
                 position=None,
                 url=None,
                 title=None,
                 status=RankingResultStatus.ERROR,
-                error_message="Empty SERP HTML received."
-            )
-
-        # Detect Google bot block / CAPTCHA page
-        if "detected unusual traffic" in html or "id=\"captcha-form\"" in html or "recaptcha" in html:
-            return SerpResult(
-                position=None,
-                url=None,
-                title=None,
-                status=RankingResultStatus.ERROR,
-                error_message="Google CAPTCHA / automated query block detected."
+                error_message=validation_error or "SERP validation failed."
             )
 
         organic_items = cls.parse_organic_results(html)
@@ -301,13 +406,17 @@ class SerpParser:
 class GoogleEtSerpClient:
     """
     Dedicated client for fetching SERP pages from Google Ethiopia (google.com.et).
-    Enforces safe network boundaries, configurable politeness delays, and bounded retries.
+    Enforces safe network boundaries, configurable politeness delays, explicit timeouts,
+    and bounded retries.
     """
 
     def __init__(
         self,
         search_domain: str = 'google.com.et',
         timeout_seconds: float = 15.0,
+        connect_timeout: float = 5.0,
+        read_timeout: float = 10.0,
+        write_timeout: float = 5.0,
         politeness_delay: float = 0.5,
         max_retries: int = 2
     ):
@@ -316,6 +425,9 @@ class GoogleEtSerpClient:
             raise ValueError(f"Target search domain '{search_domain}' is not in approved Google hosts.")
 
         self.timeout_seconds = timeout_seconds
+        self.connect_timeout = connect_timeout
+        self.read_timeout = read_timeout
+        self.write_timeout = write_timeout
         self.politeness_delay = politeness_delay
         self.max_retries = max_retries
 
@@ -327,19 +439,31 @@ class GoogleEtSerpClient:
     ) -> str:
         """
         Build fully-qualified Google Ethiopia search URL with correct query encoding.
-        Amharic UTF-8 keywords are safely encoded without transliteration.
+        Supports English ('en'), Amharic ('am'), and Oromo ('om') with exact UTF-8 preservation.
         """
-        # Google hl: 'am' for Amharic, 'en' for English
-        hl = 'am' if language == Language.AM else 'en'
+        clean_keyword = keyword.strip()
+        lang_code = language.lower().strip() if language else 'en'
+
+        # Google hl: 'am' for Amharic, 'om' for Oromo, 'en' for English
+        if lang_code in (Language.AM, 'am'):
+            hl = 'am'
+        elif lang_code in (Language.OM, 'om'):
+            hl = 'om'
+        else:
+            hl = 'en'
+
         params = {
-            'q': keyword.strip(),
+            'q': clean_keyword,
             'hl': hl,
             'gl': 'et',       # Ethiopia country target
             'pws': '0',       # Disable personalized results
             'num': str(min(num_results, 100)),
         }
-        encoded_query = urllib.parse.urlencode(params)
-        return f"https://www.{self.search_domain}/search?{encoded_query}"
+        encoded_query = urllib.parse.urlencode(params, encoding='utf-8')
+        host = self.search_domain
+        if not host.startswith('www.'):
+            host = f"www.{host}"
+        return f"https://{host}/search?{encoded_query}"
 
     def fetch_serp(
         self,
@@ -349,11 +473,19 @@ class GoogleEtSerpClient:
     ) -> str:
         """
         Fetch raw Google Ethiopia SERP HTML for a keyword.
-        Applies retry with exponential backoff on transient errors.
+        Applies retry with exponential backoff on transient network and rate-limit errors.
         """
         url = self.build_search_url(keyword, language=language)
-        ua = DEFAULT_MOBILE_UA if device == Device.MOBILE else DEFAULT_DESKTOP_UA
-        accept_lang = "am,en;q=0.9,en-US;q=0.8" if language == Language.AM else "en-US,en;q=0.9,am;q=0.8"
+        is_mobile = (device == Device.MOBILE)
+        ua = DEFAULT_MOBILE_UA if is_mobile else DEFAULT_DESKTOP_UA
+
+        lang_code = language.lower().strip() if language else 'en'
+        if lang_code in (Language.AM, 'am'):
+            accept_lang = "am,en;q=0.9,en-US;q=0.8"
+        elif lang_code in (Language.OM, 'om'):
+            accept_lang = "om,en;q=0.9,en-US;q=0.8"
+        else:
+            accept_lang = "en-US,en;q=0.9,am;q=0.8,om;q=0.7"
 
         headers = {
             'User-Agent': ua,
@@ -368,16 +500,30 @@ class GoogleEtSerpClient:
             'Sec-Fetch-Site': 'none',
             'Sec-Fetch-User': '?1',
         }
+        if is_mobile:
+            headers['Sec-CH-UA-Mobile'] = '?1'
+            headers['Sec-CH-UA-Platform'] = '"Android"'
+        else:
+            headers['Sec-CH-UA-Mobile'] = '?0'
+            headers['Sec-CH-UA-Platform'] = '"Windows"'
+
+        client_timeout = httpx.Timeout(
+            timeout=self.timeout_seconds,
+            connect=self.connect_timeout,
+            read=self.read_timeout,
+            write=self.write_timeout,
+        )
 
         last_error = None
         for attempt in range(self.max_retries + 1):
             if attempt > 0 and self.politeness_delay > 0:
-                time.sleep(self.politeness_delay * (2 ** (attempt - 1)))
+                backoff = self.politeness_delay * (2 ** (attempt - 1))
+                time.sleep(backoff)
 
             try:
                 with httpx.Client(
                     headers=headers,
-                    timeout=self.timeout_seconds,
+                    timeout=client_timeout,
                     follow_redirects=True
                 ) as client:
                     response = client.get(url)
@@ -436,23 +582,25 @@ class RankTrackerService:
                 url=None,
                 title=None,
                 status=RankingResultStatus.ERROR,
-                error_message=str(exc)[:1000]
+                error_message=str(exc)[:500]
             )
 
         with transaction.atomic():
-            snapshot = KeywordRanking.objects.create(
+            snapshot, _ = KeywordRanking.objects.update_or_create(
                 keyword=keyword,
-                position=serp_result.position,
-                ranking_url=serp_result.url,
-                title=serp_result.title or '',
-                result_status=serp_result.status,
                 search_engine=keyword.search_engine,
-                search_domain=keyword.search_domain or 'google.com.et',
                 country=keyword.country,
                 language=keyword.language,
                 device=keyword.device,
-                error_message=serp_result.error_message,
                 recorded_at=now,
+                defaults={
+                    'position': serp_result.position,
+                    'ranking_url': serp_result.url,
+                    'title': serp_result.title or '',
+                    'result_status': serp_result.status,
+                    'search_domain': keyword.search_domain or 'google.com.et',
+                    'error_message': serp_result.error_message,
+                }
             )
 
         return snapshot
@@ -464,7 +612,7 @@ class RankTrackerService:
     ) -> List[KeywordRanking]:
         """
         Run rank checks for all active keywords in a project.
-        Updates RankCheckJob progress incrementally with error isolation.
+        Updates RankCheckJob progress incrementally with error isolation and politeness pacing.
         """
         active_keywords = list(project.keywords.filter(is_active=True).order_by('created_at'))
         total = len(active_keywords)
@@ -479,7 +627,10 @@ class RankTrackerService:
         completed_count = 0
         failed_count = 0
 
-        for kw in active_keywords:
+        for idx, kw in enumerate(active_keywords):
+            if idx > 0 and self.serp_client.politeness_delay > 0:
+                time.sleep(self.serp_client.politeness_delay)
+
             try:
                 snapshot = self.check_keyword(kw)
                 snapshots.append(snapshot)
@@ -504,6 +655,7 @@ class RankTrackerService:
                 job.error_message = "All keyword ranking checks failed."
             elif failed_count > 0:
                 job.status = RankCheckJobStatus.PARTIAL_FAILURE
+                job.error_message = f"{failed_count} of {total} keyword checks failed."
             else:
                 job.status = RankCheckJobStatus.COMPLETED
             job.completed_at = timezone.now()

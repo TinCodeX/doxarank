@@ -14,7 +14,7 @@ from pathlib import Path
 # pyrefly: ignore [missing-import]
 import dj_database_url
 # pyrefly: ignore [missing-import]
-from decouple import config
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,9 +27,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost,testserver', cast=Csv())
+
+# CORS & CSRF Configuration
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:5173,http://127.0.0.1:5173,http://localhost:4321,http://127.0.0.1:4321',
+    cast=Csv()
+)
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='http://localhost:5173,http://127.0.0.1:5173,http://localhost:4321,http://127.0.0.1:4321',
+    cast=Csv()
+)
 
 
 from datetime import timedelta
@@ -322,4 +335,20 @@ KEYWORD_INTELLIGENCE_REFRESH_COOLDOWN_SECONDS = config('KEYWORD_INTELLIGENCE_REF
 DATAFORSEO_LOGIN = config('DATAFORSEO_LOGIN', default='')
 DATAFORSEO_PASSWORD = config('DATAFORSEO_PASSWORD', default='')
 DATAFORSEO_API_URL = config('DATAFORSEO_API_URL', default='https://api.dataforseo.com/v3')
+
+
+# ==============================================================================
+# Production Security Hardening (Enabled when DEBUG is False)
+# ==============================================================================
+if not DEBUG:
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
+    SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
+    CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True, cast=bool)
+    SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=True, cast=bool)
+
 

@@ -1,4 +1,4 @@
-import { apiFetch, getStoredTokens } from './client';
+import { apiFetch, getStoredTokens, API_BASE_URL } from './client';
 import type {
   SEOContentDraft,
   DraftStatus,
@@ -6,8 +6,6 @@ import type {
   UpdateDraftRequest
 } from '../types/seoContentDraft';
 import type { BriefContentType } from '../types/seoContentBrief';
-
-const API_BASE_URL = 'http://127.0.0.1:8000';
 
 export interface SEOContentDraftFilterParams {
   project_id?: number;

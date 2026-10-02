@@ -649,6 +649,20 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
+            {activeRankJob && activeRankJob.status === 'partial_failure' && (
+              <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>⚠️ <strong>Rank check completed with partial failures:</strong> {activeRankJob.completed_keywords} succeeded, {activeRankJob.failed_keywords} failed.</span>
+                <button onClick={() => setActiveRankJob(null)} style={{ background: 'none', border: 'none', color: '#92400e', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+              </div>
+            )}
+
+            {activeRankJob && activeRankJob.status === 'failed' && (
+              <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>❌ <strong>Rank check failed:</strong> {activeRankJob.error_message || 'Could not complete ranking check on Google Ethiopia.'}</span>
+                <button onClick={() => setActiveRankJob(null)} style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+              </div>
+            )}
+
             {keywordError && (
               <div style={errorAlertStyle}>
                 {keywordError}
@@ -740,7 +754,9 @@ export const Dashboard: React.FC = () => {
                                 #{currPos}
                               </span>
                             ) : summary?.result_status === 'not_found' ? (
-                              <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 500 }}>&gt; 100</span>
+                              <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 500, backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>Not in top 100</span>
+                            ) : summary?.result_status === 'error' ? (
+                              <span style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600, backgroundColor: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>Error</span>
                             ) : (
                               <span style={{ color: '#9ca3af', fontSize: '13px' }}>—</span>
                             )}
@@ -1190,7 +1206,7 @@ export const Dashboard: React.FC = () => {
                               >
                                 #{pos}
                               </span>
-                            ) : (
+                            ) : ranking.result_status === 'error' ? (
                               <span
                                 style={{
                                   display: 'inline-flex',
@@ -1201,9 +1217,27 @@ export const Dashboard: React.FC = () => {
                                   fontSize: '12px',
                                   backgroundColor: '#fee2e2',
                                   color: '#b91c1c',
+                                  border: '1px solid #fca5a5',
+                                }}
+                                title={ranking.error_message || 'Search error on Google Ethiopia'}
+                              >
+                                Error
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 600,
+                                  fontSize: '12px',
+                                  backgroundColor: '#f1f5f9',
+                                  color: '#64748b',
+                                  border: '1px solid #e2e8f0',
                                 }}
                               >
-                                &gt; 100
+                                Not in top 100
                               </span>
                             )}
                           </td>
