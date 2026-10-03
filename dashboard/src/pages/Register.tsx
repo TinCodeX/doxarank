@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from '../components/LanguageSelector';
 
 export const Register: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -12,6 +14,7 @@ export const Register: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,6 +45,11 @@ export const Register: React.FC = () => {
       <div style={glowStyle} />
 
       <div style={cardStyle}>
+        {/* Language Selector in Auth Card */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <LanguageSelector variant="light" />
+        </div>
+
         {/* Brand Header */}
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
@@ -70,7 +78,7 @@ export const Register: React.FC = () => {
           </div>
 
           <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>
-            Start tracking rankings on Google Ethiopia and optimizing technical SEO
+            {t('auth.register_subtitle', 'Start tracking rankings on Google Ethiopia and optimizing technical SEO')}
           </p>
         </div>
 
@@ -85,7 +93,7 @@ export const Register: React.FC = () => {
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ flex: 1 }}>
               <label htmlFor="reg-first-name" style={labelStyle}>
-                First Name
+                {t('auth.first_name', 'First Name')}
               </label>
               <input
                 id="reg-first-name"
@@ -99,7 +107,7 @@ export const Register: React.FC = () => {
             </div>
             <div style={{ flex: 1 }}>
               <label htmlFor="reg-last-name" style={labelStyle}>
-                Last Name
+                {t('auth.last_name', 'Last Name')}
               </label>
               <input
                 id="reg-last-name"
@@ -115,7 +123,7 @@ export const Register: React.FC = () => {
 
           <div>
             <label htmlFor="reg-email" style={labelStyle}>
-              Work Email Address
+              {t('auth.email', 'Work Email Address')}
             </label>
             <input
               id="reg-email"
@@ -131,7 +139,7 @@ export const Register: React.FC = () => {
 
           <div>
             <label htmlFor="reg-password" style={labelStyle}>
-              Password
+              {t('auth.password', 'Password')}
             </label>
             <input
               id="reg-password"
@@ -155,15 +163,15 @@ export const Register: React.FC = () => {
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
             }}
           >
-            {isSubmitting ? 'Creating account...' : 'Create Account & Start Free'}
+            {isSubmitting ? t('auth.creating_account', 'Creating account...') : t('auth.create_account_btn', 'Create Account & Start Free')}
           </button>
         </form>
 
         <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            Already have an account?{' '}
+            {t('auth.already_account', 'Already have an account?')}{' '}
             <Link to="/login" style={{ color: '#774DA9', fontWeight: 700, textDecoration: 'none' }}>
-              Sign in
+              {t('auth.sign_in_link', 'Sign in')}
             </Link>
           </p>
         </div>

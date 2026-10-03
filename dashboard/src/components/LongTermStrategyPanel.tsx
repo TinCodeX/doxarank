@@ -147,20 +147,20 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
   return (
     <div
       style={{
-        background: '#111827',
-        color: '#f3f4f6',
+        background: '#ffffff',
+        color: '#0f172a',
         borderRadius: '12px',
         padding: '24px',
-        marginTop: '24px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
-        border: '1px solid #1f2937',
+        marginTop: '20px',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+        border: '1px solid #e2e8f0',
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0, color: '#f9fafb' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#24143C' }}>
               Long-Term SEO Strategy
             </h2>
             {activeStrategy && (
@@ -169,7 +169,7 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                   padding: '4px 10px',
                   borderRadius: '9999px',
                   fontSize: '0.75rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   textTransform: 'uppercase',
                   ...getHealthBadgeStyle(activeStrategy.health),
                 }}
@@ -178,17 +178,17 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
               </span>
             )}
             {activeStrategy && (
-              <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
+              <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
                 v{activeStrategy.version} ({activeStrategy.status})
               </span>
             )}
             {isLoading && (
-              <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontStyle: 'italic' }}>
+              <span style={{ fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
                 (Updating...)
               </span>
             )}
           </div>
-          <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem', color: '#9ca3af' }}>
+          <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem', color: '#64748b' }}>
             Evidence-backed multi-horizon strategy, objective progress tracking, and governed adaptation cycles.
           </p>
         </div>
@@ -204,11 +204,12 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
               padding: '8px 16px',
               borderRadius: '6px',
               cursor: isActionLoading ? 'not-allowed' : 'pointer',
-              fontWeight: 500,
+              fontWeight: 600,
               fontSize: '0.85rem',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              boxShadow: '0 2px 4px rgba(119, 77, 169, 0.2)',
             }}
           >
             {isActionLoading ? 'Evaluating...' : 'Trigger Review Cycle'}
@@ -220,13 +221,14 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
       {errorMessage && (
         <div
           style={{
-            background: '#7f1d1d',
-            border: '1px solid #b91c1c',
-            color: '#fecaca',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
             padding: '10px 14px',
             borderRadius: '6px',
             marginBottom: '16px',
             fontSize: '0.85rem',
+            fontWeight: 500,
           }}
         >
           {errorMessage}
@@ -235,13 +237,14 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
       {successMessage && (
         <div
           style={{
-            background: '#064e3b',
-            border: '1px solid #059669',
-            color: '#a7f3d0',
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            color: '#166534',
             padding: '10px 14px',
             borderRadius: '6px',
             marginBottom: '16px',
             fontSize: '0.85rem',
+            fontWeight: 500,
           }}
         >
           {successMessage}
@@ -252,8 +255,8 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
       {pendingReview && proposedStrategy && (
         <div
           style={{
-            background: '#24143c',
-            border: '1px solid #774da9',
+            background: '#faf5ff',
+            border: '1px solid #c084fc',
             borderRadius: '8px',
             padding: '16px',
             marginBottom: '20px',
@@ -274,10 +277,10 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
               >
                 HITL APPROVAL REQUIRED
               </span>
-              <strong style={{ fontSize: '0.95rem' }}>
+              <strong style={{ fontSize: '0.95rem', color: '#581c87' }}>
                 Strategic Adaptation Proposed: Version {proposedStrategy.version}
               </strong>
-              <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem', color: '#c7d2fe' }}>
+              <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem', color: '#6b21a8' }}>
                 {proposedStrategy.rationale || 'Strategic adaptation review triggered changes to objectives or priorities.'}
               </p>
             </div>
@@ -329,33 +332,33 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
             marginBottom: '20px',
           }}
         >
-          <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Active Objectives</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f9fafb' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Active Objectives</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#24143C' }}>
               {metrics.active_objectives} / {metrics.total_objectives}
             </div>
           </div>
-          <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Avg Progress</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#10b981' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Avg Progress</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669' }}>
               {metrics.average_objective_progress_pct}%
             </div>
           </div>
-          <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Achieved Goals</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#10b981' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Achieved Goals</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669' }}>
               {metrics.achieved_objectives}
             </div>
           </div>
-          <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Active Initiatives</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f59e0b' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Active Initiatives</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#d97706' }}>
               {metrics.active_initiatives}
             </div>
           </div>
-          <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Strategy Versions</span>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#dac8ee' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Strategy Versions</span>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#774da9' }}>
               v{metrics.current_strategy_version} ({metrics.total_strategy_versions})
             </div>
           </div>
@@ -363,30 +366,30 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
       )}
 
       {/* Grid: Objectives & Initiatives */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Column 1: Strategic Objectives */}
-        <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: '0 0 12px 0', color: '#f3f4f6' }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 12px 0', color: '#24143C' }}>
             Strategic Objectives ({objectives.length})
           </h3>
           {objectives.length === 0 ? (
-            <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>No strategic objectives formulated yet.</p>
+            <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No strategic objectives formulated yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {objectives.map((obj) => (
                 <div
                   key={obj.id}
                   style={{
-                    background: '#111827',
+                    background: '#ffffff',
                     padding: '12px',
                     borderRadius: '6px',
-                    border: '1px solid #374151',
+                    border: '1px solid #e2e8f0',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <strong style={{ fontSize: '0.9rem', color: '#f9fafb' }}>{obj.name}</strong>
-                      <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{obj.name}</strong>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                         Metric: {obj.metric} | Baseline: {obj.baseline} → Target: {obj.target}
                       </div>
                     </div>
@@ -395,14 +398,19 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                         padding: '2px 6px',
                         borderRadius: '4px',
                         fontSize: '0.7rem',
-                        fontWeight: 600,
+                        fontWeight: 700,
                         background:
                           obj.status === 'achieved'
-                            ? '#059669'
+                            ? '#dcfce7'
                             : obj.status === 'at_risk'
-                            ? '#d97706'
+                            ? '#fef3c7'
+                            : '#f3eef9',
+                        color:
+                          obj.status === 'achieved'
+                            ? '#15803d'
+                            : obj.status === 'at_risk'
+                            ? '#b45309'
                             : '#774da9',
-                        color: '#ffffff',
                       }}
                     >
                       {obj.status.toUpperCase()}
@@ -411,11 +419,11 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
 
                   {/* Progress Bar */}
                   <div style={{ marginTop: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '3px' }}>
-                      <span>Current: {obj.current_value}</span>
-                      <span>{Math.round(obj.progress * 100)}%</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginBottom: '3px' }}>
+                      <span>Current: <strong>{obj.current_value}</strong></span>
+                      <span style={{ fontWeight: 600 }}>{Math.round(obj.progress * 100)}%</span>
                     </div>
-                    <div style={{ background: '#374151', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ background: '#e2e8f0', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
                       <div
                         style={{
                           background: obj.status === 'achieved' ? '#10b981' : obj.status === 'at_risk' ? '#f59e0b' : '#774da9',
@@ -433,28 +441,28 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
         </div>
 
         {/* Column 2: Strategic Initiatives */}
-        <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: '0 0 12px 0', color: '#f3f4f6' }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 12px 0', color: '#24143C' }}>
             Active Initiatives ({initiatives.length})
           </h3>
           {initiatives.length === 0 ? (
-            <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>No initiatives currently active.</p>
+            <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No initiatives currently active.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {initiatives.map((init) => (
                 <div
                   key={init.id}
                   style={{
-                    background: '#111827',
+                    background: '#ffffff',
                     padding: '12px',
                     borderRadius: '6px',
-                    border: '1px solid #374151',
+                    border: '1px solid #e2e8f0',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <strong style={{ fontSize: '0.9rem', color: '#f9fafb' }}>{init.name}</strong>
-                      <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{init.name}</strong>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                         Horizon: {init.horizon.replace('_', ' ')} | Priority: {init.priority}
                       </div>
                     </div>
@@ -463,9 +471,9 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                         padding: '2px 6px',
                         borderRadius: '4px',
                         fontSize: '0.7rem',
-                        fontWeight: 600,
-                        background: init.status === 'completed' ? '#059669' : '#4b5563',
-                        color: '#ffffff',
+                        fontWeight: 700,
+                        background: init.status === 'completed' ? '#dcfce7' : '#f1f5f9',
+                        color: init.status === 'completed' ? '#15803d' : '#475569',
                       }}
                     >
                       {init.status.toUpperCase()}
@@ -473,16 +481,17 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
                   </div>
 
                   {init.target_action_types && init.target_action_types.length > 0 && (
-                    <div style={{ marginTop: '6px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                       {init.target_action_types.map((type, idx) => (
                         <span
                           key={idx}
                           style={{
-                            background: '#374151',
-                            color: '#d1d5db',
+                            background: '#f1f5f9',
+                            color: '#475569',
                             fontSize: '0.7rem',
-                            padding: '1px 6px',
+                            padding: '2px 6px',
                             borderRadius: '4px',
+                            border: '1px solid #e2e8f0',
                           }}
                         >
                           {type}
@@ -499,44 +508,45 @@ export const LongTermStrategyPanel: React.FC<LongTermStrategyPanelProps> = ({ pr
 
       {/* Historical Versions & Decisions */}
       {versions.length > 1 && (
-        <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: '0 0 10px 0', color: '#f3f4f6' }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 10px 0', color: '#24143C' }}>
             Historical Strategy Versions ({versions.length})
           </h3>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #374151', color: '#9ca3af' }}>
-                  <th style={{ padding: '8px' }}>Version</th>
-                  <th style={{ padding: '8px' }}>Status</th>
-                  <th style={{ padding: '8px' }}>Health</th>
-                  <th style={{ padding: '8px' }}>Effective Period</th>
-                  <th style={{ padding: '8px' }}>Rationale Summary</th>
+                <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#475569', background: '#f1f5f9' }}>
+                  <th style={{ padding: '8px 12px' }}>Version</th>
+                  <th style={{ padding: '8px 12px' }}>Status</th>
+                  <th style={{ padding: '8px 12px' }}>Health</th>
+                  <th style={{ padding: '8px 12px' }}>Effective Period</th>
+                  <th style={{ padding: '8px 12px' }}>Rationale Summary</th>
                 </tr>
               </thead>
               <tbody>
                 {versions.map((ver) => (
-                  <tr key={ver.id} style={{ borderBottom: '1px solid #1f2937' }}>
-                    <td style={{ padding: '8px', fontWeight: 600 }}>v{ver.version}</td>
-                    <td style={{ padding: '8px' }}>
+                  <tr key={ver.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0f172a' }}>v{ver.version}</td>
+                    <td style={{ padding: '8px 12px' }}>
                       <span
                         style={{
                           padding: '2px 6px',
                           borderRadius: '4px',
                           fontSize: '0.7rem',
-                          background: ver.status === 'active' ? '#059669' : '#4b5563',
-                          color: '#ffffff',
+                          fontWeight: 700,
+                          background: ver.status === 'active' ? '#dcfce7' : '#f1f5f9',
+                          color: ver.status === 'active' ? '#15803d' : '#475569',
                         }}
                       >
                         {ver.status}
                       </span>
                     </td>
-                    <td style={{ padding: '8px' }}>{ver.health}</td>
-                    <td style={{ padding: '8px', color: '#9ca3af' }}>
+                    <td style={{ padding: '8px 12px', color: '#334155' }}>{ver.health}</td>
+                    <td style={{ padding: '8px 12px', color: '#64748b' }}>
                       {new Date(ver.effective_from).toLocaleDateString()} –{' '}
                       {ver.effective_until ? new Date(ver.effective_until).toLocaleDateString() : 'Current'}
                     </td>
-                    <td style={{ padding: '8px', color: '#d1d5db', maxWidth: '300px' }}>
+                    <td style={{ padding: '8px 12px', color: '#334155', maxWidth: '300px' }}>
                       {ver.rationale.substring(0, 120)}...
                     </td>
                   </tr>

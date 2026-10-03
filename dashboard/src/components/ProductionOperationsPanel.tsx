@@ -114,51 +114,54 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
   };
 
   return (
-    <div style={{ padding: '24px', background: '#0f172a', color: '#f8fafc', borderRadius: '12px', border: '1px solid #1e293b', marginBottom: '24px' }}>
+    <div style={{ padding: '24px', background: '#ffffff', color: '#0f172a', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px 0 rgba(36, 20, 60, 0.06)', marginBottom: '24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-             Production Agent Platform
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#24143C', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            System Platform Health
             <span style={{
               fontSize: '0.75rem',
+              fontWeight: 700,
               padding: '2px 8px',
               borderRadius: '9999px',
-              background: health?.status === 'healthy' ? '#059669' : '#dc2626',
-              color: '#fff'
+              background: health?.status === 'healthy' ? '#ecfdf5' : '#fef2f2',
+              color: health?.status === 'healthy' ? '#065f46' : '#991b1b',
+              border: `1px solid ${health?.status === 'healthy' ? '#a7f3d0' : '#fecaca'}`,
             }}>
               {health?.status ? health.status.toUpperCase() : 'CHECKING'}
             </span>
           </h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
-            Milestone 6.7 — Observability, circuit breakers, recovery & resource governance
+          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+            Observability, operational circuit breakers, and platform resource governance.
           </p>
         </div>
         <button
           onClick={loadData}
           disabled={isLoading}
           style={{
-            background: '#1e293b',
-            color: '#dac8ee',
-            border: '1px solid #334155',
+            background: '#ffffff',
+            color: '#334155',
+            border: '1px solid #cbd5e1',
             padding: '6px 14px',
-            borderRadius: '6px',
+            borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '0.85rem'
+            fontSize: '0.85rem',
+            fontWeight: 600,
           }}
         >
-          {isLoading ? 'Refreshing...' : 'Refresh'}
+          {isLoading ? 'Refreshing...' : '↻ Refresh'}
         </button>
       </div>
 
       {actionMessage && (
-        <div style={{ padding: '10px 14px', background: '#1e293b', borderLeft: '4px solid #774da9', borderRadius: '4px', marginBottom: '16px', fontSize: '0.85rem' }}>
+        <div style={{ padding: '10px 14px', background: '#f6f2fb', borderLeft: '4px solid #774da9', border: '1px solid #dac8ee', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem', color: '#593285', fontWeight: 500 }}>
           {actionMessage}
         </div>
       )}
 
       {/* System Health Component Cards */}
-      <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>System Health</h3>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#24143C', marginBottom: '10px' }}>Core Subsystems</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         {health?.components && [
           { name: 'Database', status: health.components.database.status, detail: `${health.components.database.latency_ms || 0}ms` },
@@ -168,8 +171,8 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
           { name: 'Agent Runtime', status: health.components.agent_runtime.status, detail: `${health.components.agent_runtime.registered_tools || 0} tools` },
           { name: 'Subsystems', status: health.components.external_subsystem.status, detail: `${health.components.external_subsystem.tripped_breakers.length} tripped` },
         ].map((item, idx) => (
-          <div key={idx} style={{ background: '#1e293b', padding: '12px', borderRadius: '8px', border: '1px solid #334155' }}>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.name}</div>
+          <div key={idx} style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>{item.name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
               <span style={{
                 width: '8px',
@@ -177,7 +180,7 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
                 borderRadius: '50%',
                 background: item.status === 'healthy' ? '#10b981' : item.status === 'degraded' ? '#f59e0b' : '#ef4444'
               }} />
-              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#f8fafc' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>
                 {item.status.toUpperCase()}
               </span>
             </div>
@@ -187,81 +190,82 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
       </div>
 
       {/* Runtime Telemetry Metrics */}
-      <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>Agent Runtime Metrics</h3>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#24143C', marginBottom: '10px' }}>Platform Runtime Metrics</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '24px' }}>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dac8ee' }}>{metrics?.active_runs || 0}</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active Runs</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#774DA9' }}>{metrics?.active_runs || 0}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Active Runs</div>
         </div>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#e2e8f0' }}>{metrics?.queued_tasks || 0}</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Queued Tasks</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{metrics?.queued_tasks || 0}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Queued Tasks</div>
         </div>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#10b981' }}>{metrics?.success_rate_pct || 100}%</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Success Rate</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>{metrics?.success_rate_pct || 100}%</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Success Rate</div>
         </div>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#a372df' }}>{metrics?.recovered_runs || 0}</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Recovered Runs</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#774DA9' }}>{metrics?.recovered_runs || 0}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Recovered Runs</div>
         </div>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f59e0b' }}>{metrics?.total_tool_calls || 0}</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tool Invocations</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#d97706' }}>{metrics?.total_tool_calls || 0}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Tool Calls</div>
         </div>
-        <div style={{ background: '#1e293b', padding: '10px', borderRadius: '6px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#64748b' }}>{metrics?.average_run_duration_sec || 0}s</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Avg Runtime</div>
+        <div style={{ background: '#f8fafc', padding: '12px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#64748b' }}>{metrics?.average_run_duration_sec || 0}s</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Avg Duration</div>
         </div>
       </div>
 
       {/* Circuit Breakers */}
-      <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>External Dependency Circuit Breakers</h3>
-      <div style={{ background: '#1e293b', borderRadius: '8px', overflow: 'hidden', marginBottom: '24px', border: '1px solid #334155' }}>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#24143C', marginBottom: '10px' }}>External Dependency Circuit Breakers</h3>
+      <div style={{ background: '#ffffff', borderRadius: '8px', overflow: 'hidden', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
           <thead>
-            <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-              <th style={{ padding: '10px 14px' }}>Service</th>
-              <th style={{ padding: '10px 14px' }}>Status</th>
-              <th style={{ padding: '10px 14px' }}>Failures</th>
-              <th style={{ padding: '10px 14px' }}>Lifetime Trips</th>
-              <th style={{ padding: '10px 14px' }}>Diagnostics</th>
-              <th style={{ padding: '10px 14px', textAlign: 'right' }}>Operator Controls</th>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#334155' }}>
+              <th style={{ padding: '10px 14px', fontWeight: 700 }}>Service</th>
+              <th style={{ padding: '10px 14px', fontWeight: 700 }}>Status</th>
+              <th style={{ padding: '10px 14px', fontWeight: 700 }}>Failures</th>
+              <th style={{ padding: '10px 14px', fontWeight: 700 }}>Lifetime Trips</th>
+              <th style={{ padding: '10px 14px', fontWeight: 700 }}>Diagnostics</th>
+              <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>Controls</th>
             </tr>
           </thead>
           <tbody>
             {breakers.map((b) => (
-              <tr key={b.id} style={{ borderBottom: '1px solid #334155' }}>
-                <td style={{ padding: '10px 14px', fontWeight: 600, color: '#f8fafc' }}>{b.service_name.toUpperCase()}</td>
+              <tr key={b.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0f172a' }}>{b.service_name.toUpperCase()}</td>
                 <td style={{ padding: '10px 14px' }}>
                   <span style={{
                     padding: '2px 8px',
                     borderRadius: '4px',
                     fontSize: '0.75rem',
-                    fontWeight: 600,
-                    background: b.state === 'closed' ? '#065f46' : b.state === 'half_open' ? '#92400e' : '#991b1b',
-                    color: b.state === 'closed' ? '#34d399' : b.state === 'half_open' ? '#fbbf24' : '#f87171'
+                    fontWeight: 700,
+                    background: b.state === 'closed' ? '#ecfdf5' : b.state === 'half_open' ? '#fffbeb' : '#fef2f2',
+                    color: b.state === 'closed' ? '#065f46' : b.state === 'half_open' ? '#92400e' : '#991b1b',
+                    border: `1px solid ${b.state === 'closed' ? '#a7f3d0' : b.state === 'half_open' ? '#fde68a' : '#fecaca'}`,
                   }}>
                     {b.state.toUpperCase()}
                   </span>
                 </td>
-                <td style={{ padding: '10px 14px', color: '#cbd5e1' }}>{b.failure_count} / {b.failure_threshold}</td>
-                <td style={{ padding: '10px 14px', color: '#cbd5e1' }}>{b.trip_count}</td>
-                <td style={{ padding: '10px 14px', color: '#94a3b8', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 14px', color: '#334155' }}>{b.failure_count} / {b.failure_threshold}</td>
+                <td style={{ padding: '10px 14px', color: '#334155' }}>{b.trip_count}</td>
+                <td style={{ padding: '10px 14px', color: '#64748b', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {b.opened_reason || 'Operating nominally'}
                 </td>
                 <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                   {b.state !== 'closed' ? (
                     <button
                       onClick={() => handleBreakerAction(b.service_name, 'reset')}
-                      style={{ background: '#774da9', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                      style={{ background: '#774da9', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                     >
                       Reset
                     </button>
                   ) : (
                     <button
                       onClick={() => handleBreakerAction(b.service_name, 'trip')}
-                      style={{ background: '#7f1d1d', color: '#fca5a5', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                      style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                     >
                       Trip Breaker
                     </button>
@@ -274,82 +278,82 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
       </div>
 
       {/* Operator Controls */}
-      <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>Operator Controls & Governance</h3>
-      <div style={{ background: '#1e293b', padding: '16px', borderRadius: '8px', border: '1px solid #334155', marginBottom: '24px' }}>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#24143C', marginBottom: '10px' }}>Platform Controls & Governance</h3>
+      <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
         <div style={{ marginBottom: '12px' }}>
-          <label style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
-            Operator Rationale (Required for Audit Logging):
+          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '4px' }}>
+            Administrative Rationale (Required for Audit Logging):
           </label>
           <input
             type="text"
             value={operatorRationale}
             onChange={(e) => setOperatorRationale(e.target.value)}
             placeholder="Reason for administrative intervention..."
-            style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '0.85rem' }}
+            style={{ width: '100%', padding: '8px 12px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', fontSize: '0.85rem', boxSizing: 'border-box' }}
           />
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={() => handleOperatorAction('pause_continuous_ops')}
-            style={{ background: '#b45309', color: '#fef3c7', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#f59e0b', color: '#ffffff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
           >
-            Pause Continuous Ops
+            Pause Recurring Ops
           </button>
           <button
             onClick={() => handleOperatorAction('resume_continuous_ops')}
-            style={{ background: '#774da9', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#774da9', color: '#ffffff', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
           >
-            Resume Continuous Ops
+            Resume Recurring Ops
           </button>
           <button
             onClick={() => handleOperatorAction('compact_data')}
-            style={{ background: '#334155', color: '#e2e8f0', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
           >
-            Compact Ephemeral Data
+            Compact Cache Data
           </button>
         </div>
       </div>
 
       {/* Run Inspection Drilldown */}
-      <h3 style={{ fontSize: '1rem', color: '#cbd5e1', marginBottom: '10px' }}>Run Inspector (Correlation & Verification Hierarchy)</h3>
-      <div style={{ background: '#1e293b', padding: '16px', borderRadius: '8px', border: '1px solid #334155', marginBottom: '24px' }}>
+      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#24143C', marginBottom: '10px' }}>Run Inspector & Diagnostics</h3>
+      <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
         <form onSubmit={handleInspectRun} style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
           <input
             type="number"
             value={inspectRunId}
             onChange={(e) => setInspectRunId(e.target.value)}
             placeholder="Enter AgentRun ID to inspect..."
-            style={{ flex: 1, padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#f8fafc', fontSize: '0.85rem' }}
+            style={{ flex: 1, padding: '8px 12px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', fontSize: '0.85rem' }}
           />
           <button
             type="submit"
             disabled={isInspecting || !inspectRunId}
-            style={{ background: '#774da9', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+            style={{ background: '#774da9', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
           >
             {isInspecting ? 'Inspecting...' : 'Inspect Run'}
           </button>
         </form>
 
         {inspectionData && (
-          <div style={{ background: '#0f172a', padding: '16px', borderRadius: '8px', fontSize: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '8px', marginBottom: '12px' }}>
+          <div style={{ background: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '12px' }}>
               <div>
-                <span style={{ fontWeight: 700, color: '#dac8ee' }}>Run #{inspectionData.run.id}</span> — {inspectionData.run.goal}
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                <span style={{ fontWeight: 700, color: '#24143C' }}>Run #{inspectionData.run.id}</span> — {inspectionData.run.goal}
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
                   Correlation ID: <code>{inspectionData.run.correlation_id || 'N/A'}</code> | Status: {inspectionData.run.status} | Worker: {inspectionData.run.worker_id || 'unassigned'}
                 </div>
               </div>
-              <span style={{ color: '#10b981', fontWeight: 600 }}>Steps: {inspectionData.steps.length} | Ext Ops: {inspectionData.external_operations.length}</span>
+              <span style={{ color: '#059669', fontWeight: 700 }}>Steps: {inspectionData.steps.length} | Ext Ops: {inspectionData.external_operations.length}</span>
             </div>
 
             {/* Steps & Tool hierarchy */}
-            <h4 style={{ fontSize: '0.9rem', color: '#cbd5e1', margin: '8px 0' }}>Step Hierarchy:</h4>
+            <h4 style={{ fontSize: '0.9rem', color: '#24143C', fontWeight: 700, margin: '8px 0' }}>Step Hierarchy:</h4>
             {inspectionData.steps.map((s) => (
-              <div key={s.step_number} style={{ marginBottom: '10px', paddingLeft: '12px', borderLeft: '2px solid #774da9' }}>
-                <div style={{ fontWeight: 600, color: '#e2e8f0' }}>Step #{s.step_number} [{s.action_type}] — {s.status}</div>
-                <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontStyle: 'italic', margin: '2px 0' }}>{s.thought}</div>
+              <div key={s.step_number} style={{ marginBottom: '10px', paddingLeft: '12px', borderLeft: '3px solid #774da9' }}>
+                <div style={{ fontWeight: 600, color: '#0f172a' }}>Step #{s.step_number} [{s.action_type}] — {s.status}</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', fontStyle: 'italic', margin: '2px 0' }}>{s.thought}</div>
                 {s.tool_calls.map((tc) => (
-                  <div key={tc.id} style={{ marginLeft: '12px', fontSize: '0.75rem', color: tc.error ? '#f87171' : '#34d399' }}>
+                  <div key={tc.id} style={{ marginLeft: '12px', fontSize: '0.75rem', color: tc.error ? '#dc2626' : '#059669' }}>
                     ↳ Tool: <code>{tc.tool_name}</code> ({tc.duration_ms}ms) {tc.error && `[ERROR: ${tc.error}]`}
                   </div>
                 ))}
@@ -358,9 +362,9 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
 
             {inspectionData.external_operations.length > 0 && (
               <>
-                <h4 style={{ fontSize: '0.9rem', color: '#cbd5e1', margin: '12px 0 6px' }}>Correlated External Operations:</h4>
+                <h4 style={{ fontSize: '0.9rem', color: '#24143C', fontWeight: 700, margin: '12px 0 6px' }}>External Operations:</h4>
                 {inspectionData.external_operations.map((op) => (
-                  <div key={op.id} style={{ marginLeft: '12px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                  <div key={op.id} style={{ marginLeft: '12px', fontSize: '0.75rem', color: '#334155' }}>
                     ↳ Op #{op.id}: <b>{op.operation_type}</b> (Status: {op.status}, Verified: {op.verification_status})
                   </div>
                 ))}
@@ -373,17 +377,17 @@ export const ProductionOperationsPanel: React.FC<ProductionOperationsPanelProps>
       {/* Active Alerts */}
       {alerts.length > 0 && (
         <>
-          <h3 style={{ fontSize: '1rem', color: '#f87171', marginBottom: '10px' }}>Active Platform Alerts ({alerts.length})</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#dc2626', marginBottom: '10px' }}>Active Platform Alerts ({alerts.length})</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
             {alerts.map((al) => (
-              <div key={al.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#271515', border: '1px solid #7f1d1d', padding: '10px 14px', borderRadius: '6px' }}>
+              <div key={al.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '8px' }}>
                 <div>
-                  <span style={{ fontWeight: 700, color: '#fca5a5' }}>[{al.severity.toUpperCase()}] {al.alert_type}</span>: {al.message}
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(al.created_at).toLocaleString()}</div>
+                  <span style={{ fontWeight: 700, color: '#991b1b' }}>[{al.severity.toUpperCase()}] {al.alert_type}</span>: <span style={{ color: '#0f172a' }}>{al.message}</span>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(al.created_at).toLocaleString()}</div>
                 </div>
                 <button
                   onClick={() => handleResolveAlert(al.id)}
-                  style={{ background: '#334155', color: '#f8fafc', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ background: '#ffffff', color: '#334155', border: '1px solid #cbd5e1', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                 >
                   Acknowledge
                 </button>

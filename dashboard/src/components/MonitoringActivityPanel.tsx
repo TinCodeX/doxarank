@@ -129,10 +129,10 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         <div>
           <h2 className="panel-title">
             <span className="pulse-dot-emerald" />
-            Autonomous SEO Monitoring (Milestone 6.3)
+            Autonomous SEO Monitoring
           </h2>
           <p className="panel-subtitle">
-            Continuous background health inspection, deterministic change detection, anomaly suppression, and recovery alerting.
+            Continuous background health inspection, change detection, and proactive alerts.
           </p>
         </div>
         <div className="header-actions">
@@ -524,12 +524,13 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
       {/* Inline Styles */}
       <style>{`
         .monitoring-activity-panel {
-          margin-top: 2rem;
-          background: #0b132b;
-          border: 1px solid #1c2541;
+          margin-top: 1.5rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 12px;
           padding: 1.5rem;
-          color: #f8fafc;
+          color: #0f172a;
+          box-shadow: 0 1px 3px 0 rgba(36, 20, 60, 0.06);
         }
         .panel-header {
           display: flex;
@@ -541,24 +542,24 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         }
         .panel-title {
           font-size: 1.25rem;
-          font-weight: 700;
+          font-weight: 800;
           display: flex;
           align-items: center;
           gap: 0.5rem;
           margin: 0;
-          color: #f1f5f9;
+          color: #24143C;
         }
         .pulse-dot-emerald {
           width: 8px;
           height: 8px;
           border-radius: 50%;
           background: #10b981;
-          box-shadow: 0 0 8px #10b981;
+          box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
           display: inline-block;
         }
         .panel-subtitle {
           font-size: 0.85rem;
-          color: #94a3b8;
+          color: #64748b;
           margin-top: 0.25rem;
           margin-bottom: 0;
         }
@@ -573,8 +574,8 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           margin-bottom: 1.25rem;
         }
         .metric-card {
-          background: #111e38;
-          border: 1px solid #1e293b;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
           border-radius: 8px;
           padding: 0.75rem 1rem;
           display: flex;
@@ -582,30 +583,31 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         }
         .metric-label {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #64748b;
           text-transform: uppercase;
+          font-weight: 600;
           letter-spacing: 0.05em;
         }
         .metric-value {
           font-size: 1.4rem;
-          font-weight: 700;
-          color: #f1f5f9;
+          font-weight: 800;
+          color: #0f172a;
           margin: 0.2rem 0;
         }
         .metric-sub {
-          font-size: 0.7rem;
+          font-size: 0.75rem;
           color: #64748b;
         }
         .tab-bar {
           display: flex;
           gap: 0.5rem;
-          border-bottom: 1px solid #1e293b;
+          border-bottom: 1px solid #e2e8f0;
           margin-bottom: 1rem;
         }
         .tab-btn {
           background: transparent;
           border: none;
-          color: #94a3b8;
+          color: #64748b;
           font-size: 0.875rem;
           font-weight: 600;
           padding: 0.5rem 1rem;
@@ -614,11 +616,11 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           transition: all 0.2s;
         }
         .tab-btn:hover {
-          color: #f1f5f9;
+          color: #24143C;
         }
         .tab-btn.active {
-          color: #10b981;
-          border-bottom-color: #10b981;
+          color: #774DA9;
+          border-bottom-color: #774DA9;
         }
         .filter-toolbar {
           display: flex;
@@ -626,21 +628,27 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           margin-bottom: 1rem;
           align-items: center;
           flex-wrap: wrap;
+          background: #f8fafc;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
         }
         .filter-group {
           display: flex;
           align-items: center;
           gap: 0.5rem;
           font-size: 0.85rem;
-          color: #94a3b8;
+          color: #334155;
+          font-weight: 500;
         }
         .filter-group select {
-          background: #1e293b;
-          border: 1px solid #334155;
-          color: #f1f5f9;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          color: #0f172a;
           border-radius: 6px;
           padding: 0.35rem 0.6rem;
           font-size: 0.85rem;
+          outline: none;
         }
         .table-responsive {
           overflow-x: auto;
@@ -653,61 +661,63 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         .monitoring-table th {
           text-align: left;
           padding: 0.6rem 0.75rem;
-          background: #0f172a;
-          color: #94a3b8;
-          font-weight: 600;
-          border-bottom: 1px solid #1e293b;
+          background: #f8fafc;
+          color: #334155;
+          font-weight: 700;
+          border-bottom: 1px solid #e2e8f0;
         }
         .monitoring-table td {
           padding: 0.6rem 0.75rem;
-          border-bottom: 1px solid #1e293b;
-          color: #cbd5e1;
+          border-bottom: 1px solid #f1f5f9;
+          color: #0f172a;
         }
         .monitoring-table tr:hover {
-          background: rgba(255, 255, 255, 0.02);
+          background: #f8fafc;
         }
         .badge {
           display: inline-block;
           padding: 0.2rem 0.5rem;
           border-radius: 4px;
           font-size: 0.75rem;
-          font-weight: 600;
+          font-weight: 700;
         }
         .badge-healthy {
-          background: rgba(16, 185, 129, 0.15);
-          color: #34d399;
-          border: 1px solid rgba(16, 185, 129, 0.3);
+          background: #ecfdf5;
+          color: #065f46;
+          border: 1px solid #a7f3d0;
         }
         .badge-warning {
-          background: rgba(245, 158, 11, 0.15);
-          color: #fbbf24;
-          border: 1px solid rgba(245, 158, 11, 0.3);
+          background: #fffbeb;
+          color: #92400e;
+          border: 1px solid #fde68a;
         }
         .badge-anomaly {
-          background: rgba(239, 68, 68, 0.15);
-          color: #f87171;
-          border: 1px solid rgba(239, 68, 68, 0.3);
+          background: #fef2f2;
+          color: #991b1b;
+          border: 1px solid #fecaca;
         }
         .badge-recovered {
-          background: rgba(5, 150, 105, 0.2);
-          color: #6ee7b7;
-          border: 1px solid rgba(5, 150, 105, 0.4);
+          background: #ecfdf5;
+          color: #059669;
+          border: 1px solid #a7f3d0;
         }
         .badge-monitor-type {
-          background: #1e293b;
-          color: #dac8ee;
+          background: #f6f2fb;
+          color: #774DA9;
+          border: 1px solid #dac8ee;
           padding: 0.2rem 0.5rem;
           border-radius: 4px;
           font-size: 0.75rem;
-          font-weight: 500;
+          font-weight: 600;
         }
         .badge-neutral {
-          background: #1e293b;
-          color: #94a3b8;
+          background: #f1f5f9;
+          color: #475569;
+          border: 1px solid #e2e8f0;
         }
         .btn {
-          border-radius: 6px;
-          padding: 0.45rem 0.9rem;
+          border-radius: 8px;
+          padding: 0.5rem 1rem;
           font-size: 0.85rem;
           font-weight: 600;
           cursor: pointer;
@@ -722,19 +732,22 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           background: #059669;
         }
         .btn-secondary {
-          background: #1e293b;
-          color: #e2e8f0;
-          border: 1px solid #334155;
+          background: #ffffff;
+          color: #334155;
+          border: 1px solid #cbd5e1;
         }
         .btn-secondary:hover {
-          background: #334155;
+          background: #f8fafc;
+          border-color: #94a3b8;
         }
         .btn-details {
-          background: #1e293b;
-          color: #dac8ee;
-          border: 1px solid #334155;
-          padding: 0.2rem 0.5rem;
+          background: #f6f2fb;
+          color: #774DA9;
+          border: 1px solid #dac8ee;
+          padding: 0.2rem 0.6rem;
           border-radius: 4px;
+          font-size: 0.8rem;
+          font-weight: 600;
           cursor: pointer;
         }
         .alert {
@@ -744,22 +757,22 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           font-size: 0.85rem;
         }
         .alert-danger {
-          background: rgba(239, 68, 68, 0.15);
-          color: #f87171;
-          border: 1px solid rgba(239, 68, 68, 0.3);
+          background: #fef2f2;
+          color: #991b1b;
+          border: 1px solid #fecaca;
         }
         .alert-success {
-          background: rgba(16, 185, 129, 0.15);
-          color: #34d399;
-          border: 1px solid rgba(16, 185, 129, 0.3);
+          background: #ecfdf5;
+          color: #065f46;
+          border: 1px solid #a7f3d0;
         }
-        .text-emerald { color: #10b981; }
-        .text-success { color: #34d399; }
-        .text-danger { color: #f87171; }
-        .text-amber { color: #fbbf24; }
-        .text-blue { color: #dac8ee; }
-        .text-purple { color: #a372df; }
-        .text-cyan { color: #22d3ee; }
+        .text-emerald { color: #059669; }
+        .text-success { color: #059669; }
+        .text-danger { color: #dc2626; }
+        .text-amber { color: #d97706; }
+        .text-blue { color: #2563eb; }
+        .text-purple { color: #774da9; }
+        .text-cyan { color: #0891b2; }
         .text-muted { color: #64748b; }
         .font-mono { font-family: monospace; }
         .modal-backdrop {
@@ -768,21 +781,23 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
+          background: rgba(36, 20, 60, 0.65);
+          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
+          z-index: 1050;
         }
         .modal-content {
-          background: #0f172a;
-          border: 1px solid #334155;
-          border-radius: 12px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
           padding: 1.5rem;
           max-width: 600px;
           width: 90%;
           max-height: 85vh;
           overflow-y: auto;
+          box-shadow: 0 20px 25px -5px rgba(36, 20, 60, 0.15);
         }
         .modal-header {
           display: flex;
@@ -791,16 +806,17 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
           margin-bottom: 1rem;
         }
         .modal-title {
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: #f1f5f9;
+          font-size: 1.15rem;
+          font-weight: 800;
+          color: #24143C;
           margin: 0;
         }
         .btn-close {
           background: none;
           border: none;
-          color: #94a3b8;
-          font-size: 1.5rem;
+          color: #64748b;
+          font-size: 1.25rem;
+          font-weight: 700;
           cursor: pointer;
         }
         .detail-grid {
@@ -811,17 +827,18 @@ export const MonitoringActivityPanel: React.FC<MonitoringActivityPanelProps> = (
         }
         .detail-label {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #64748b;
+          font-weight: 600;
           text-transform: uppercase;
         }
         .json-box {
           margin-top: 0.75rem;
         }
         .json-box pre {
-          background: #020617;
+          background: #0f172a;
           border: 1px solid #1e293b;
           border-radius: 6px;
-          padding: 0.5rem;
+          padding: 0.75rem;
           font-size: 0.75rem;
           color: #a5f3fc;
           overflow-x: auto;

@@ -215,12 +215,12 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
     <div
       id="continuous-seo-operations-section"
       style={{
-        background: 'var(--code-bg, #1a1b23)',
+        background: '#ffffff',
         borderRadius: '12px',
-        border: '1px solid var(--border, #2e303a)',
+        border: '1px solid #e2e8f0',
         padding: '24px',
-        marginBottom: '32px',
-        boxShadow: 'var(--shadow)',
+        marginBottom: '24px',
+        boxShadow: '0 1px 3px 0 rgba(36, 20, 60, 0.06)',
       }}
     >
       {/* Header */}
@@ -232,32 +232,31 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
           flexWrap: 'wrap',
           gap: '16px',
           marginBottom: '20px',
-          borderBottom: '1px solid var(--border, #2e303a)',
+          borderBottom: '1px solid #e2e8f0',
           paddingBottom: '16px',
         }}
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            
-            <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-h, #fff)' }}>
-              Continuous SEO Operations
+            <h2 style={{ margin: 0, fontSize: '20px', color: '#24143C', fontWeight: 800 }}>
+              Recurring SEO Operations
             </h2>
             <span
               style={{
                 fontSize: '11px',
-                fontWeight: 600,
+                fontWeight: 700,
                 textTransform: 'uppercase',
                 padding: '2px 8px',
                 borderRadius: '999px',
-                background: 'rgba(168, 85, 247, 0.2)',
-                color: '#c084fc',
-                border: '1px solid rgba(168, 85, 247, 0.4)',
+                background: '#f6f2fb',
+                color: '#774DA9',
+                border: '1px solid #dac8ee',
               }}
             >
-              Milestone 6.1
+              Active Schedules
             </span>
           </div>
-          <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: 'var(--text, #9ca3af)' }}>
+          <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#64748b' }}>
             Autonomous recurring agent lifecycle monitoring and strategy execution for <strong>{project.name}</strong>.
           </p>
         </div>
@@ -288,9 +287,9 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
       {errorMessage && (
         <div
           style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid #ef4444',
-            color: '#fca5a5',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
             padding: '10px 14px',
             borderRadius: '8px',
             fontSize: '13px',
@@ -303,9 +302,9 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
       {successMessage && (
         <div
           style={{
-            background: 'rgba(16, 185, 129, 0.15)',
-            border: '1px solid #10b981',
-            color: '#6ee7b7',
+            background: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            color: '#065f46',
             padding: '10px 14px',
             borderRadius: '8px',
             fontSize: '13px',
@@ -320,53 +319,57 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
       {isCreating && (
         <div
           style={{
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(36, 20, 60, 0.65)',
+            backdropFilter: 'blur(4px)',
             position: 'fixed',
             inset: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 1050,
+            padding: '16px',
           }}
         >
           <div
             style={{
-              background: 'var(--code-bg, #1a1b23)',
-              border: '1px solid var(--border, #2e303a)',
-              borderRadius: '12px',
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '14px',
               padding: '24px',
               width: '100%',
               maxWidth: '520px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 20px 25px -5px rgba(36, 20, 60, 0.15)',
             }}
           >
-            <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-h, #fff)' }}>Configure Continuous Operation</h3>
+            <h3 style={{ margin: '0 0 16px 0', color: '#24143C', fontSize: '18px', fontWeight: 800 }}>Configure Recurring Operation</h3>
             <form onSubmit={handleCreateOperation}>
               <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: 'var(--text, #9ca3af)' }}>
+                <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: '#334155', fontWeight: 600 }}>
                   Operational Goal / Mission
                 </label>
                 <textarea
                   value={newGoal}
                   onChange={(e) => setNewGoal(e.target.value)}
+                  placeholder="e.g. Audit top high-value Ethiopian keywords and optimize hreflang tags"
                   rows={3}
                   required
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border, #2e303a)',
-                    background: '#121318',
-                    color: '#fff',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#0f172a',
                     fontSize: '13px',
                     boxSizing: 'border-box',
+                    outline: 'none',
                   }}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: 'var(--text, #9ca3af)' }}>
+                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: '#334155', fontWeight: 600 }}>
                     Recurrence Schedule
                   </label>
                   <select
@@ -375,11 +378,12 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                     style={{
                       width: '100%',
                       padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border, #2e303a)',
-                      background: '#121318',
-                      color: '#fff',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#0f172a',
                       fontSize: '13px',
+                      boxSizing: 'border-box',
                     }}
                   >
                     <option value="interval_minutes">Every N Minutes</option>
@@ -388,7 +392,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: 'var(--text, #9ca3af)' }}>
+                  <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: '#334155', fontWeight: 600 }}>
                     Interval Value
                   </label>
                   <input
@@ -399,10 +403,10 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                     style={{
                       width: '100%',
                       padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border, #2e303a)',
-                      background: '#121318',
-                      color: '#fff',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#0f172a',
                       fontSize: '13px',
                       boxSizing: 'border-box',
                     }}
@@ -415,12 +419,13 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   type="button"
                   onClick={() => setIsCreating(false)}
                   style={{
-                    padding: '8px 14px',
-                    background: 'transparent',
-                    border: '1px solid var(--border, #2e303a)',
-                    borderRadius: '6px',
-                    color: 'var(--text, #9ca3af)',
+                    padding: '8px 16px',
+                    background: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    color: '#334155',
                     fontSize: '13px',
+                    fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
@@ -430,11 +435,11 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   type="submit"
                   disabled={isActionLoading}
                   style={{
-                    padding: '8px 16px',
+                    padding: '8px 18px',
                     background: '#774da9',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     fontSize: '13px',
                     fontWeight: 600,
                     cursor: isActionLoading ? 'not-allowed' : 'pointer',
@@ -450,22 +455,22 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
 
       {/* Main Content Area */}
       {isLoading && operations.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text, #9ca3af)' }}>
-          Loading continuous operational states...
+        <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+          Loading recurring operational states...
         </div>
       ) : operations.length === 0 ? (
         <div
           style={{
             textAlign: 'center',
             padding: '36px 20px',
-            border: '1px dashed var(--border, #2e303a)',
-            borderRadius: '8px',
+            border: '1px dashed #cbd5e1',
+            borderRadius: '10px',
+            background: '#f8fafc',
           }}
         >
-          
-          <h3 style={{ margin: '0 0 6px 0', color: 'var(--text-h, #fff)' }}>No Continuous Operation Configured</h3>
-          <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text, #9ca3af)' }}>
-            Start continuous autonomous SEO cycles to periodically audit, investigate, and plan optimizations.
+          <h3 style={{ margin: '0 0 6px 0', color: '#24143C', fontSize: '16px', fontWeight: 700 }}>No Recurring Operations Configured</h3>
+          <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#64748b' }}>
+            Configure autonomous recurring SEO cycles to periodically audit, investigate, and plan optimizations.
           </p>
           <button
             onClick={() => setIsCreating(true)}
@@ -480,7 +485,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
               cursor: 'pointer',
             }}
           >
-            Start Continuous Operation
+            Start Recurring Operation
           </button>
         </div>
       ) : (
@@ -493,14 +498,14 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   key={op.id}
                   onClick={() => setSelectedOp(op)}
                   style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
+                    padding: '6px 14px',
+                    borderRadius: '8px',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    background: selectedOp?.id === op.id ? '#774da9' : '#22232d',
-                    color: selectedOp?.id === op.id ? '#fff' : 'var(--text, #9ca3af)',
-                    border: '1px solid var(--border, #2e303a)',
+                    background: selectedOp?.id === op.id ? '#774da9' : '#f8fafc',
+                    color: selectedOp?.id === op.id ? '#fff' : '#334155',
+                    border: selectedOp?.id === op.id ? '1px solid #774da9' : '1px solid #cbd5e1',
                   }}
                 >
                   Op #{op.id} ({op.status.toUpperCase()})
@@ -513,9 +518,9 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
           {selectedOp && (
             <div
               style={{
-                background: '#121318',
-                borderRadius: '8px',
-                border: '1px solid var(--border, #2e303a)',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
                 padding: '20px',
                 marginBottom: '24px',
               }}
@@ -558,13 +563,13 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                       Status: {selectedOp.status}
                     </span>
 
-                    <span style={{ fontSize: '13px', color: 'var(--text, #9ca3af)' }}>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>
                       Schedule: {selectedOp.schedule_type_display} ({selectedOp.interval_value})
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-h, #fff)' }}>
-                    Goal: <span style={{ fontWeight: 400 }}>{selectedOp.goal}</span>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                    Goal: <span style={{ fontWeight: 400, color: '#334155' }}>{selectedOp.goal}</span>
                   </div>
                 </div>
 
@@ -612,7 +617,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                     style={{
                       padding: '6px 14px',
                       borderRadius: '6px',
-                      background: selectedOp.status === 'running' ? '#4b5563' : '#774da9',
+                      background: selectedOp.status === 'running' ? '#64748b' : '#774da9',
                       color: '#fff',
                       border: 'none',
                       fontSize: '12px',
@@ -631,50 +636,50 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                   gap: '12px',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: '#ffffff',
                   padding: '14px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.05)',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text, #9ca3af)', textTransform: 'uppercase' }}>Last Run</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-h, #fff)' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Last Run</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
                     {formatRelativeTime(selectedOp.last_run_at)}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text, #9ca3af)', textTransform: 'uppercase' }}>Next Run</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: selectedOp.status === 'paused' ? '#9ca3af' : '#dac8ee' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Next Run</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: selectedOp.status === 'paused' ? '#64748b' : '#774DA9' }}>
                     {selectedOp.status === 'paused' ? 'Paused' : formatRelativeTime(selectedOp.next_run_at)}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text, #9ca3af)', textTransform: 'uppercase' }}>Total Runs</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-h, #fff)' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Total Runs</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
                     {selectedOp.total_runs}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: '#10b981', textTransform: 'uppercase' }}>Successful</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#10b981' }}>
+                  <div style={{ fontSize: '11px', color: '#059669', textTransform: 'uppercase', fontWeight: 600 }}>Successful</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#059669' }}>
                     {selectedOp.successful_runs}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: '#ef4444', textTransform: 'uppercase' }}>Failed</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#ef4444' }}>
+                  <div style={{ fontSize: '11px', color: '#dc2626', textTransform: 'uppercase', fontWeight: 600 }}>Failed</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#dc2626' }}>
                     {selectedOp.failed_runs}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text, #9ca3af)', textTransform: 'uppercase' }}>Prevented Duplicates</div>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-h, #fff)' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Prevented Duplicates</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
                     {selectedOp.metrics?.duplicate_prevention_count || 0}
                   </div>
                 </div>
@@ -684,12 +689,12 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
 
           {/* Recent Runs Section */}
           <div>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: 'var(--text-h, #fff)' }}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: 700, color: '#24143C' }}>
               Recent Operational Runs
             </h3>
 
             {runs.length === 0 ? (
-              <div style={{ fontSize: '13px', color: 'var(--text, #9ca3af)', padding: '12px 0' }}>
+              <div style={{ fontSize: '13px', color: '#64748b', padding: '12px 0' }}>
                 No execution sessions recorded yet.
               </div>
             ) : (
@@ -702,15 +707,15 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       padding: '12px 16px',
-                      borderRadius: '6px',
-                      background: '#121318',
-                      border: '1px solid var(--border, #2e303a)',
+                      borderRadius: '8px',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
                       flexWrap: 'wrap',
                       gap: '8px',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-h, #fff)' }}>
+                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
                         Run #{run.id}
                       </span>
                       <span
@@ -726,14 +731,14 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                       >
                         {run.status.replace('_', ' ')}
                       </span>
-                      <span style={{ fontSize: '12px', color: 'var(--text, #9ca3af)' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>
                         Started: {new Date(run.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                       {run.completed_at && (
-                        <span style={{ fontSize: '12px', color: 'var(--text, #9ca3af)' }}>
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>
                           Duration: {Math.max(1, Math.round((new Date(run.completed_at).getTime() - new Date(run.created_at).getTime()) / 1000))}s
                         </span>
                       )}
@@ -742,7 +747,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                         <span
                           style={{
                             fontSize: '11px',
-                            color: '#f87171',
+                            color: '#dc2626',
                             maxWidth: '300px',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
@@ -755,7 +760,7 @@ export const ContinuousOperationsPanel: React.FC<ContinuousOperationsPanelProps>
                       )}
 
                       {run.status === 'waiting_for_approval' && (
-                        <span style={{ fontSize: '11px', color: '#fb923c', fontWeight: 600 }}>
+                        <span style={{ fontSize: '11px', color: '#d97706', fontWeight: 600 }}>
                           Action pending human approval
                         </span>
                       )}

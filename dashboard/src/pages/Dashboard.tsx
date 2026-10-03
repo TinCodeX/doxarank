@@ -44,9 +44,10 @@ import { ContinuousOperationsPanel } from '../components/ContinuousOperationsPan
 import { EventActivityPanel } from '../components/EventActivityPanel';
 import { MonitoringActivityPanel } from '../components/MonitoringActivityPanel';
 import { RemediationActivityPanel } from '../components/RemediationActivityPanel';
-import { ExternalIntegrationsPanel } from '../components/ExternalIntegrationsPanel';
 import { LongTermStrategyPanel } from '../components/LongTermStrategyPanel';
 import { ProductionOperationsPanel } from '../components/ProductionOperationsPanel';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { AIRecommendationsPanel } from '../components/AIRecommendationsPanel';
 import { SEOContentBriefPanel } from '../components/SEOContentBriefPanel';
 import { SEOContentDraftPanel } from '../components/SEOContentDraftPanel';
@@ -77,6 +78,7 @@ type DashboardTab =
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const [subscriptionSummary, setSubscriptionSummary] = useState<UserSubscriptionSummary | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
@@ -84,6 +86,11 @@ export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [keywordFilterText, setKeywordFilterText] = useState('');
+
+  // Sub-tabs for content-heavy and operations pages
+  const [recommendationsSubTab, setRecommendationsSubTab] = useState<'all' | 'feed' | 'actions' | 'insights' | 'generator'>('all');
+  const [contentSubTab, setContentSubTab] = useState<'all' | 'briefs' | 'drafts'>('all');
+  const [operationsSubTab, setOperationsSubTab] = useState<'all' | 'orchestrator' | 'continuous' | 'events' | 'monitoring' | 'remediation' | 'observability' | 'strategy'>('all');
 
   // Project state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -537,17 +544,17 @@ export const Dashboard: React.FC = () => {
 
   // Navigation Items
   const navItems: { id: DashboardTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard size={17} /> },
-    { id: 'keywords', label: 'Keywords & SERP', icon: <Search size={17} />, badge: keywords.length > 0 ? String(keywords.length) : undefined },
-    { id: 'audits', label: 'Audits & Crawler', icon: <Activity size={17} /> },
-    { id: 'competitors', label: 'Competitor Intel', icon: <Building2 size={17} /> },
-    { id: 'recommendations', label: 'Recommendations', icon: <Lightbulb size={17} /> },
-    { id: 'content', label: 'Content AI & Briefs', icon: <FileText size={17} /> },
-    { id: 'analytics', label: 'Search Analytics', icon: <TrendingUp size={17} /> },
-    { id: 'reports', label: 'White-Label Reports', icon: <FileSpreadsheet size={17} /> },
-    { id: 'tools', label: 'Free SEO Tools', icon: <Wrench size={17} /> },
-    { id: 'operations', label: 'Autonomous Agents', icon: <Zap size={17} /> },
-    { id: 'projects', label: 'Projects Manager', icon: <FolderKanban size={17} />, badge: projects.length > 0 ? String(projects.length) : undefined },
+    { id: 'overview', label: t('nav.overview', 'Executive Overview'), icon: <LayoutDashboard size={17} /> },
+    { id: 'keywords', label: t('nav.keywords', 'Keywords & SERP'), icon: <Search size={17} />, badge: keywords.length > 0 ? String(keywords.length) : undefined },
+    { id: 'audits', label: t('nav.audits', 'Audits & Crawler'), icon: <Activity size={17} /> },
+    { id: 'competitors', label: t('nav.competitors', 'Competitor Intel'), icon: <Building2 size={17} /> },
+    { id: 'recommendations', label: t('nav.recommendations', 'Recommendations'), icon: <Lightbulb size={17} /> },
+    { id: 'content', label: t('nav.content', 'Content AI & Briefs'), icon: <FileText size={17} /> },
+    { id: 'analytics', label: t('nav.analytics', 'Search Analytics'), icon: <TrendingUp size={17} /> },
+    { id: 'reports', label: t('nav.reports', 'White-Label Reports'), icon: <FileSpreadsheet size={17} /> },
+    { id: 'tools', label: t('nav.tools', 'Free SEO Tools'), icon: <Wrench size={17} /> },
+    { id: 'operations', label: t('nav.operations', 'Autonomous Agents'), icon: <Zap size={17} /> },
+    { id: 'projects', label: t('nav.projects', 'Projects Manager'), icon: <FolderKanban size={17} />, badge: projects.length > 0 ? String(projects.length) : undefined },
   ];
 
   return (
@@ -576,8 +583,8 @@ export const Dashboard: React.FC = () => {
                 </span>
                 <span style={etBadgeStyle}>ET</span>
               </div>
-              <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block' }}>
-                Ethiopia SEO Intelligence
+              <span style={{ fontSize: '11px', color: '#cbd5e1', display: 'block' }}>
+                {t('brand.subtitle', 'Ethiopia SEO Intelligence')}
               </span>
             </div>
           </div>
@@ -595,25 +602,25 @@ export const Dashboard: React.FC = () => {
         <div style={projectSelectorContainerStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#a372df', letterSpacing: '0.05em' }}>
-              Current Project
+              {t('header.current_project', 'Current Project')}
             </span>
             <button
               onClick={handleOpenCreateProjectModal}
               style={quickAddProjectBtnStyle}
               title="Add New Website Project"
             >
-              + New
+              {t('projects.new', '+ New')}
             </button>
           </div>
 
           {isLoadingProjects ? (
-            <div style={{ fontSize: '12px', color: '#94a3b8', padding: '6px 0' }}>Loading projects...</div>
+            <div style={{ fontSize: '12px', color: '#cbd5e1', padding: '6px 0' }}>{t('projects.loading', 'Loading projects...')}</div>
           ) : projects.length === 0 ? (
             <button
               onClick={handleOpenCreateProjectModal}
               style={noProjectsBoxStyle}
             >
-              + Create first website
+              {t('projects.create_first', '+ Create first website')}
             </button>
           ) : (
             <select
@@ -685,21 +692,25 @@ export const Dashboard: React.FC = () => {
                   fontWeight: 800,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
-                  color: subscriptionSummary.plan.code === 'AGENCY' ? '#c084fc' : subscriptionSummary.plan.code === 'STARTER' ? '#a372df' : '#94a3b8'
+                  color: subscriptionSummary.plan.code === 'AGENCY' ? '#c084fc' : subscriptionSummary.plan.code === 'STARTER' ? '#a372df' : '#cbd5e1'
                 }}>
                   {subscriptionSummary.plan.name} PLAN
                 </span>
-                <span style={{ fontSize: '10px', color: '#a372df', fontWeight: 600 }}>Manage &rarr;</span>
+                <span style={{ fontSize: '10px', color: '#a372df', fontWeight: 600 }}>{t('header.manage', 'Manage')} &rarr;</span>
               </div>
-              <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+              <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
                 Sites: <strong style={{ color: '#ffffff' }}>{subscriptionSummary.usage.projects.current}</strong>/{subscriptionSummary.usage.projects.limit}
-                <span style={{ margin: '0 6px', color: '#475569' }}>|</span>
+                <span style={{ margin: '0 6px', color: '#64748b' }}>|</span>
                 KWs: <strong style={{ color: '#ffffff' }}>{subscriptionSummary.usage.keywords.current}</strong>/{subscriptionSummary.usage.keywords.limit}
               </div>
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px' }}>
+          <div style={{ padding: '0 0 10px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '8px' }}>
+            <LanguageSelector variant="dark" />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
               <div style={userAvatarStyle}>
                 {(user?.first_name?.[0] || user?.email?.[0] || 'D').toUpperCase()}
@@ -708,7 +719,7 @@ export const Dashboard: React.FC = () => {
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {user?.full_name || 'DoxaRank User'}
                 </div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                <div style={{ fontSize: '11px', color: '#cbd5e1', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                   {user?.email}
                 </div>
               </div>
@@ -718,8 +729,8 @@ export const Dashboard: React.FC = () => {
               id="logout-button"
               onClick={logout}
               style={sidebarLogoutBtnStyle}
-              title="Sign Out"
-              aria-label="Sign Out"
+              title={t('header.sign_out', 'Sign Out')}
+              aria-label={t('header.sign_out', 'Sign Out')}
             >
               <LogOut size={16} />
             </button>
@@ -775,8 +786,10 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Quick Action Buttons */}
+          {/* Quick Action Buttons & Language Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LanguageSelector variant="light" />
+
             <button
               id="nav-seo-tools-btn"
               onClick={() => {
@@ -790,7 +803,7 @@ export const Dashboard: React.FC = () => {
               title="Free Ethiopian SEO Utilities"
             >
               <Wrench size={14} />
-              <span>Tools</span>
+              <span>{t('header.tools', 'Tools')}</span>
             </button>
 
             {selectedProject && (
@@ -810,7 +823,7 @@ export const Dashboard: React.FC = () => {
                   title="Run automated rank check across google.com.et"
                 >
                   <Zap size={14} />
-                  <span>{isCheckingRankings ? 'Checking...' : 'Check SERP'}</span>
+                  <span>{isCheckingRankings ? t('header.checking', 'Checking...') : t('header.check_serp', 'Check SERP')}</span>
                 </button>
 
                 <button
@@ -820,7 +833,7 @@ export const Dashboard: React.FC = () => {
                   title="Track new search query on Google Ethiopia"
                 >
                   <Plus size={14} />
-                  <span>Track Keyword</span>
+                  <span>{t('header.track_keyword', 'Track Keyword')}</span>
                 </button>
               </>
             )}
@@ -830,7 +843,7 @@ export const Dashboard: React.FC = () => {
               onClick={() => setIsSubscriptionModalOpen(true)}
               style={headerBillingBtnStyle}
             >
-              Upgrade
+              {t('header.upgrade', 'Upgrade')}
             </button>
           </div>
         </header>
@@ -879,7 +892,7 @@ export const Dashboard: React.FC = () => {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                           <span style={doxaPillBadgeStyle}>Google Ethiopia Live Context</span>
-                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>ID: #{selectedProject.id}</span>
+                          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>ID: #{selectedProject.id}</span>
                         </div>
                         <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0 }}>
                           {selectedProject.name}
@@ -915,7 +928,7 @@ export const Dashboard: React.FC = () => {
                   {/* 4 Compact KPI Metric Cards */}
                   <div style={kpiGridStyle}>
                     <div style={kpiCardStyle}>
-                      <div style={kpiLabelStyle}>Visibility Score</div>
+                      <div style={kpiLabelStyle}>{t('kpi.avg_position', 'Visibility Score')}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                         <span style={{ fontSize: '26px', fontWeight: 800, color: '#24143C' }}>
                           {kpiStats.visibilityScore}%
@@ -926,29 +939,29 @@ export const Dashboard: React.FC = () => {
                     </div>
 
                     <div style={kpiCardStyle}>
-                      <div style={kpiLabelStyle}>Top 3 Rankings</div>
+                      <div style={kpiLabelStyle}>{t('kpi.top_3', 'Top 3 Rankings')}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                         <span style={{ fontSize: '26px', fontWeight: 800, color: '#774DA9' }}>
                           {kpiStats.inTop3}
                         </span>
                         <span style={{ fontSize: '12px', color: '#64748b' }}>Podium spots</span>
                       </div>
-                      <span style={kpiSubtextStyle}>Highest CTR positions on google.com.et</span>
+                      <span style={kpiSubtextStyle}>{t('kpi.prime_visibility', 'Highest CTR positions on google.com.et')}</span>
                     </div>
 
                     <div style={kpiCardStyle}>
-                      <div style={kpiLabelStyle}>Total Tracked Keywords</div>
+                      <div style={kpiLabelStyle}>{t('kpi.total_keywords', 'Total Tracked Keywords')}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                         <span style={{ fontSize: '26px', fontWeight: 800, color: '#0f172a' }}>
                           {kpiStats.totalKeywords}
                         </span>
                         <span style={{ fontSize: '12px', color: '#64748b' }}>active queries</span>
                       </div>
-                      <span style={kpiSubtextStyle}>Amharic, Afaan Oromoo &amp; English</span>
+                      <span style={kpiSubtextStyle}>{t('kpi.multilingual_demand', 'Amharic, Afaan Oromoo & English')}</span>
                     </div>
 
                     <div style={kpiCardStyle}>
-                      <div style={kpiLabelStyle}>Aggregate Search Demand</div>
+                      <div style={kpiLabelStyle}>{t('kpi.search_demand', 'Aggregate Search Demand')}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
                         <span style={{ fontSize: '26px', fontWeight: 800, color: '#10b981' }}>
                           {kpiStats.totalSearchVolume > 0 ? kpiStats.totalSearchVolume.toLocaleString() : 'Live'}
@@ -1027,7 +1040,7 @@ export const Dashboard: React.FC = () => {
                                           #{currPos}
                                         </span>
                                       ) : (
-                                        <span style={{ color: '#94a3b8' }}>—</span>
+                                        <span style={{ color: '#64748b' }}>—</span>
                                       )}
                                     </td>
                                     <td style={{ padding: '8px 10px', fontSize: '12px' }}>
@@ -1037,7 +1050,7 @@ export const Dashboard: React.FC = () => {
                                           <span>{change > 0 ? `+${change}` : `${change}`}</span>
                                         </span>
                                       ) : (
-                                        <span style={{ color: '#94a3b8' }}>0</span>
+                                        <span style={{ color: '#64748b' }}>0</span>
                                       )}
                                     </td>
                                     <td style={{ padding: '8px 10px', color: '#64748b' }}>
@@ -1273,7 +1286,7 @@ export const Dashboard: React.FC = () => {
                                     #{currPos}
                                   </span>
                                 ) : (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                  <span style={{ color: '#64748b' }}>—</span>
                                 )}
                               </td>
                               <td style={tdStyle}>
@@ -1283,21 +1296,21 @@ export const Dashboard: React.FC = () => {
                                     <span>{change > 0 ? `+${change}` : `${change}`}</span>
                                   </span>
                                 ) : (
-                                  <span style={{ color: '#94a3b8' }}>0</span>
+                                  <span style={{ color: '#64748b' }}>0</span>
                                 )}
                               </td>
                               <td style={tdStyle}>
                                 {intel?.search_volume !== null && intel?.search_volume !== undefined ? (
                                   <span style={{ fontWeight: 600, color: '#334155' }}>{intel.search_volume.toLocaleString()}</span>
                                 ) : (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                  <span style={{ color: '#64748b' }}>—</span>
                                 )}
                               </td>
                               <td style={tdStyle}>
                                 {intel?.cpc ? (
                                   <span style={{ fontWeight: 700, color: '#10b981' }}>${intel.cpc}</span>
                                 ) : (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                  <span style={{ color: '#64748b' }}>—</span>
                                 )}
                               </td>
                               <td style={tdStyle}>
@@ -1389,7 +1402,7 @@ export const Dashboard: React.FC = () => {
                           ? selectedKeyword.intelligence.search_volume.toLocaleString()
                           : 'N/A'}
                       </span>
-                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>google.com.et demand</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>google.com.et demand</span>
                     </div>
 
                     <div style={subMetricCardStyle}>
@@ -1397,7 +1410,7 @@ export const Dashboard: React.FC = () => {
                       <span style={{ ...subMetricValStyle, color: '#10b981' }}>
                         {selectedKeyword.intelligence?.cpc ? `$${selectedKeyword.intelligence.cpc} USD` : 'N/A'}
                       </span>
-                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>Est. commercial bid</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>Est. commercial bid</span>
                     </div>
 
                     <div style={subMetricCardStyle}>
@@ -1405,7 +1418,7 @@ export const Dashboard: React.FC = () => {
                       <span style={{ ...subMetricValStyle, color: '#774DA9', textTransform: 'capitalize' }}>
                         {selectedKeyword.intelligence?.intent || 'Commercial'}
                       </span>
-                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>Intent classification</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>Intent classification</span>
                     </div>
 
                     <div style={subMetricCardStyle}>
@@ -1548,72 +1561,143 @@ export const Dashboard: React.FC = () => {
 
           {/* TAB 5: RECOMMENDATIONS & AI ACTIONS */}
           {activeTab === 'recommendations' && selectedProject && (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <SEORecommendationsPanel project={selectedProject} />
-              <div id="seo-actions-section">
-                <SEOActionsPanel
+            <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Sub-tab navigation */}
+              <div style={subTabNavContainerStyle}>
+                <button
+                  onClick={() => setRecommendationsSubTab('all')}
+                  style={getSubTabBtnStyle(recommendationsSubTab === 'all')}
+                >
+                  All Views
+                </button>
+                <button
+                  onClick={() => setRecommendationsSubTab('feed')}
+                  style={getSubTabBtnStyle(recommendationsSubTab === 'feed')}
+                >
+                  Audit Feed
+                </button>
+                <button
+                  onClick={() => setRecommendationsSubTab('actions')}
+                  style={getSubTabBtnStyle(recommendationsSubTab === 'actions')}
+                >
+                  Action Plan &amp; Tasks
+                </button>
+                <button
+                  onClick={() => setRecommendationsSubTab('insights')}
+                  style={getSubTabBtnStyle(recommendationsSubTab === 'insights')}
+                >
+                  SERP Insights
+                </button>
+                <button
+                  onClick={() => setRecommendationsSubTab('generator')}
+                  style={getSubTabBtnStyle(recommendationsSubTab === 'generator')}
+                >
+                  AI Strategy Generator
+                </button>
+              </div>
+
+              {(recommendationsSubTab === 'all' || recommendationsSubTab === 'feed') && (
+                <SEORecommendationsPanel project={selectedProject} />
+              )}
+              {(recommendationsSubTab === 'all' || recommendationsSubTab === 'actions' || actionTargetRecId !== null) && (
+                <div id="seo-actions-section">
+                  <SEOActionsPanel
+                    project={selectedProject}
+                    targetRecommendationId={actionTargetRecId}
+                    targetDraftId={actionTargetDraftId}
+                    targetBriefId={actionTargetBriefId}
+                    onClearTargets={() => {
+                      setActionTargetRecId(null);
+                      setActionTargetDraftId(null);
+                      setActionTargetBriefId(null);
+                    }}
+                  />
+                </div>
+              )}
+              {(recommendationsSubTab === 'all' || recommendationsSubTab === 'insights') && (
+                <SEOInsightsPanel project={selectedProject} />
+              )}
+              {(recommendationsSubTab === 'all' || recommendationsSubTab === 'generator') && (
+                <AIRecommendationsPanel
                   project={selectedProject}
-                  targetRecommendationId={actionTargetRecId}
-                  targetDraftId={actionTargetDraftId}
-                  targetBriefId={actionTargetBriefId}
-                  onClearTargets={() => {
-                    setActionTargetRecId(null);
-                    setActionTargetDraftId(null);
-                    setActionTargetBriefId(null);
+                  onGenerateBrief={(recId: number) => {
+                    setBriefTargetRecId(recId);
+                    setActiveTab('content');
+                    setContentSubTab('briefs');
+                  }}
+                  onCreateAction={(recId: number) => {
+                    setActionTargetRecId(recId);
+                    setRecommendationsSubTab('actions');
                   }}
                 />
-              </div>
-              <SEOInsightsPanel project={selectedProject} />
-              <AIRecommendationsPanel
-                project={selectedProject}
-                onGenerateBrief={(recId: number) => {
-                  setBriefTargetRecId(recId);
-                  setActiveTab('content');
-                }}
-                onCreateAction={(recId: number) => {
-                  setActionTargetRecId(recId);
-                }}
-              />
+              )}
             </section>
           )}
 
           {/* TAB 6: CONTENT AI & BRIEFS */}
           {activeTab === 'content' && selectedProject && (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div id="seo-content-briefs-section">
-                <SEOContentBriefPanel
-                  project={selectedProject}
-                  selectedRecommendationId={briefTargetRecId}
-                  onClearSelectedRecId={() => setBriefTargetRecId(null)}
-                  onSelectBriefForDraft={(briefId: number) => {
-                    setDraftTargetBriefId(briefId);
-                  }}
-                  onCreateAction={(briefId: number) => {
-                    setActionTargetBriefId(briefId);
-                    setActiveTab('recommendations');
-                  }}
-                />
+            <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={subTabNavContainerStyle}>
+                <button
+                  onClick={() => setContentSubTab('all')}
+                  style={getSubTabBtnStyle(contentSubTab === 'all')}
+                >
+                  All Content
+                </button>
+                <button
+                  onClick={() => setContentSubTab('briefs')}
+                  style={getSubTabBtnStyle(contentSubTab === 'briefs')}
+                >
+                  Content Briefs &amp; Outlines
+                </button>
+                <button
+                  onClick={() => setContentSubTab('drafts')}
+                  style={getSubTabBtnStyle(contentSubTab === 'drafts')}
+                >
+                  Drafts &amp; Generated Articles
+                </button>
               </div>
-              <div id="seo-content-drafts-section">
-                <SEOContentDraftPanel
-                  currentProject={selectedProject}
-                  targetBriefId={draftTargetBriefId}
-                  onClearTargetBrief={() => setDraftTargetBriefId(null)}
-                  onCreateAction={(draftId: number) => {
-                    setActionTargetDraftId(draftId);
-                    setActiveTab('recommendations');
-                  }}
-                />
-              </div>
+
+              {(contentSubTab === 'all' || contentSubTab === 'briefs' || briefTargetRecId !== null) && (
+                <div id="seo-content-briefs-section">
+                  <SEOContentBriefPanel
+                    project={selectedProject}
+                    selectedRecommendationId={briefTargetRecId}
+                    onClearSelectedRecId={() => setBriefTargetRecId(null)}
+                    onSelectBriefForDraft={(briefId: number) => {
+                      setDraftTargetBriefId(briefId);
+                      setContentSubTab('drafts');
+                    }}
+                    onCreateAction={(briefId: number) => {
+                      setActionTargetBriefId(briefId);
+                      setActiveTab('recommendations');
+                      setRecommendationsSubTab('actions');
+                    }}
+                  />
+                </div>
+              )}
+              {(contentSubTab === 'all' || contentSubTab === 'drafts' || draftTargetBriefId !== null) && (
+                <div id="seo-content-drafts-section">
+                  <SEOContentDraftPanel
+                    currentProject={selectedProject}
+                    targetBriefId={draftTargetBriefId}
+                    onClearTargetBrief={() => setDraftTargetBriefId(null)}
+                    onCreateAction={(draftId: number) => {
+                      setActionTargetDraftId(draftId);
+                      setActiveTab('recommendations');
+                      setRecommendationsSubTab('actions');
+                    }}
+                  />
+                </div>
+              )}
             </section>
           )}
 
-          {/* TAB 7: SEARCH ANALYTICS & INTEGRATIONS */}
+          {/* TAB 7: SEARCH ANALYTICS */}
           {activeTab === 'analytics' && selectedProject && (
             <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <SearchConsolePanel project={selectedProject} onConnectionChange={setGscConnection} />
               <SearchConsoleAnalyticsPanel project={selectedProject} connection={gscConnection} />
-              <ExternalIntegrationsPanel project={selectedProject} />
             </section>
           )}
 
@@ -1637,23 +1721,89 @@ export const Dashboard: React.FC = () => {
 
           {/* TAB 10: AUTONOMOUS OPERATIONS */}
           {activeTab === 'operations' && selectedProject && (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <AgentOrchestratorPanel
-                project={selectedProject}
-                onActionCreated={() => {
-                  setActiveTab('recommendations');
-                  setTimeout(() => {
-                    const el = document.getElementById('seo-actions-section');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }, 50);
-                }}
-              />
-              <ContinuousOperationsPanel project={selectedProject} />
-              <EventActivityPanel project={selectedProject} />
-              <MonitoringActivityPanel project={selectedProject} />
-              <RemediationActivityPanel project={selectedProject} />
-              <ProductionOperationsPanel project={selectedProject} />
-              <LongTermStrategyPanel project={selectedProject} />
+            <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={subTabNavContainerStyle}>
+                <button
+                  onClick={() => setOperationsSubTab('all')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'all')}
+                >
+                  All Operations
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('orchestrator')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'orchestrator')}
+                >
+                  Specialized Agents
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('continuous')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'continuous')}
+                >
+                  Continuous Ops
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('events')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'events')}
+                >
+                  Event Logs
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('monitoring')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'monitoring')}
+                >
+                  Live Monitoring
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('remediation')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'remediation')}
+                >
+                  Auto-Remediation
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('observability')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'observability')}
+                >
+                  Observability &amp; Sentry
+                </button>
+                <button
+                  onClick={() => setOperationsSubTab('strategy')}
+                  style={getSubTabBtnStyle(operationsSubTab === 'strategy')}
+                >
+                  Long-Term Strategy
+                </button>
+              </div>
+
+              {(operationsSubTab === 'all' || operationsSubTab === 'orchestrator') && (
+                <AgentOrchestratorPanel
+                  project={selectedProject}
+                  onActionCreated={() => {
+                    setActiveTab('recommendations');
+                    setRecommendationsSubTab('actions');
+                    setTimeout(() => {
+                      const el = document.getElementById('seo-actions-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }, 50);
+                  }}
+                />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'continuous') && (
+                <ContinuousOperationsPanel project={selectedProject} />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'events') && (
+                <EventActivityPanel project={selectedProject} />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'monitoring') && (
+                <MonitoringActivityPanel project={selectedProject} />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'remediation') && (
+                <RemediationActivityPanel project={selectedProject} />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'observability') && (
+                <ProductionOperationsPanel project={selectedProject} />
+              )}
+              {(operationsSubTab === 'all' || operationsSubTab === 'strategy') && (
+                <LongTermStrategyPanel project={selectedProject} />
+              )}
             </section>
           )}
 
@@ -2223,10 +2373,35 @@ const kpiLabelStyle: React.CSSProperties = {
 
 const kpiSubtextStyle: React.CSSProperties = {
   fontSize: '11px',
-  color: '#94a3b8',
+  color: '#64748b',
   display: 'block',
   marginTop: '4px',
 };
+
+const subTabNavContainerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  background: '#ffffff',
+  padding: '6px 8px',
+  borderRadius: '10px',
+  border: '1px solid #e2e8f0',
+  marginBottom: '8px',
+  overflowX: 'auto',
+};
+
+const getSubTabBtnStyle = (isActive: boolean): React.CSSProperties => ({
+  padding: '6px 14px',
+  borderRadius: '8px',
+  fontSize: '13px',
+  fontWeight: isActive ? 700 : 500,
+  background: isActive ? '#774DA9' : 'transparent',
+  color: isActive ? '#ffffff' : '#475569',
+  border: 'none',
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+  whiteSpace: 'nowrap',
+});
 
 const dashboardSectionCardStyle: React.CSSProperties = {
   backgroundColor: '#ffffff',

@@ -467,7 +467,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '18px' }}></span>
-            <strong style={{ fontSize: '14px', color: '#0f172a' }}>Specialized SEO Agent Team (Phase 4.7)</strong>
+            <strong style={{ fontSize: '14px', color: '#0f172a' }}>Specialized SEO Agent Team</strong>
             <span
               style={{
                 fontSize: '11px',
@@ -655,7 +655,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               gap: '6px',
             }}
           >
-            {isOrchestrating ? 'Collaborating...' : ' Run Multi-Agent Team (Phase 5.3)'}
+            {isOrchestrating ? 'Collaborating...' : ' Run Multi-Agent Team'}
           </button>
 
           <button
@@ -863,7 +863,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '18px' }}></span>
-                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Shared Working Memory (Phase 5.2)</strong>
+                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Shared Working Memory</strong>
                 <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                   Role-Projected & Bounded
                 </span>
@@ -948,7 +948,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '18px' }}></span>
-                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Dynamic Task Plan & Decomposition (Phase 5.3)</strong>
+                <strong style={{ fontSize: '14px', color: '#1e293b' }}>Dynamic Task Plan & Decomposition</strong>
                 <span style={{ fontSize: '11px', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                   DAG Validated (Cycle-Free)
                 </span>
@@ -1120,7 +1120,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   
-                  <strong style={{ fontSize: '14px', color: '#581c87' }}>Parallel Execution Batches (Phase 5.4)</strong>
+                  <strong style={{ fontSize: '14px', color: '#581c87' }}>Parallel Execution Batches</strong>
                   <span style={{ fontSize: '11px', backgroundColor: '#f6f2fb', color: '#774DA9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                     Bounded Concurrency & Overlap Telemetry
                   </span>
@@ -1222,7 +1222,7 @@ export const AgentOrchestratorPanel: React.FC<AgentOrchestratorPanelProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '18px' }}></span>
-                  <strong style={{ fontSize: '14px', color: '#14532d' }}>Adaptive Agent Selection & Routing (Phase 5.5)</strong>
+                  <strong style={{ fontSize: '14px', color: '#14532d' }}>Adaptive Agent Selection & Routing</strong>
                   <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                     Deterministic & Explainable
                   </span>

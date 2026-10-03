@@ -866,7 +866,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>Enter title and description to generate tags.</p>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Enter title and description to generate tags.</p>
                 </div>
               )}
             </div>
@@ -1096,7 +1096,7 @@ export const SEOToolsPanel: React.FC = () => {
                 <pre style={codeBlockStyle}>{schemaResult.script_tag}</pre>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>Select schema type and click generate.</p>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Select schema type and click generate.</p>
                 </div>
               )}
             </div>
@@ -1473,7 +1473,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Configure rule groups or enter test URL to evaluate robots.txt behavior.
                   </p>
                 </div>
@@ -1715,7 +1715,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Generate valid XML sitemaps or validate existing markup locally without SSRF risks.
                   </p>
                 </div>
@@ -1880,7 +1880,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Add English, Amharic, and Afaan Oromo variants to generate reciprocal hreflang annotations.
                   </p>
                 </div>
@@ -2000,7 +2000,7 @@ export const SEOToolsPanel: React.FC = () => {
             <div style={resultCardStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
-                  Google SERP Card Mockup ({serpDevice.toUpperCase()})
+                  Google SERP Card Preview ({serpDevice.toUpperCase()})
                 </h4>
                 {serpResult && (
                   <button
@@ -2118,7 +2118,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Enter title, description, and URL, then click Simulate Google SERP to inspect exact pixel widths and search card rendering.
                   </p>
                 </div>
@@ -2271,7 +2271,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Enter a public webpage URL to evaluate live Core Web Vitals, category scores, and performance diagnostics.
                   </p>
                 </div>
@@ -2439,7 +2439,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Enter a single webpage URL to scan its links and verify HTTP reachability in real time.
                   </p>
                 </div>
@@ -2639,7 +2639,7 @@ export const SEOToolsPanel: React.FC = () => {
                 </div>
               ) : (
                 <div style={placeholderBoxStyle}>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
                     Enter Amharic text to collapse Ge'ez homophones (ሀ/ሐ/ኀ, ሰ/ሠ, አ/ዓ, ጸ/ፀ) and strip Ethiopic punctuation marks.
                   </p>
                 </div>
@@ -2867,7 +2867,7 @@ const cardImagePlaceholderStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: '#94a3b8',
+  color: '#64748b',
   fontSize: '12px',
 };
 

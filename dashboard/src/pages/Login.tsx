@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageSelector } from '../components/LanguageSelector';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -10,6 +12,7 @@ export const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { login } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -47,6 +50,11 @@ export const Login: React.FC = () => {
       <div style={glowStyle} />
 
       <div style={cardStyle}>
+        {/* Language Selector in Auth Card */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <LanguageSelector variant="light" />
+        </div>
+
         {/* Brand Header */}
         <div style={{ marginBottom: '28px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
@@ -75,7 +83,7 @@ export const Login: React.FC = () => {
           </div>
 
           <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>
-            Sign in to access your Google Ethiopia SEO intelligence
+            {t('auth.login_subtitle', 'Sign in to access your Google Ethiopia SEO intelligence')}
           </p>
         </div>
 
@@ -89,7 +97,7 @@ export const Login: React.FC = () => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label htmlFor="login-email" style={labelStyle}>
-              Email Address
+              {t('auth.email', 'Email Address')}
             </label>
             <input
               id="login-email"
@@ -106,7 +114,7 @@ export const Login: React.FC = () => {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <label htmlFor="login-password" style={{ ...labelStyle, marginBottom: 0 }}>
-                Password
+                {t('auth.password', 'Password')}
               </label>
             </div>
             <input
@@ -131,15 +139,15 @@ export const Login: React.FC = () => {
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
             }}
           >
-            {isSubmitting ? 'Authenticating...' : 'Sign In to Dashboard'}
+            {isSubmitting ? t('auth.signing_in', 'Authenticating...') : t('auth.sign_in', 'Sign In to Dashboard')}
           </button>
         </form>
 
         <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            Don't have an account yet?{' '}
+            {t('auth.no_account', "Don't have an account yet?")}{' '}
             <Link to="/register" style={{ color: '#774DA9', fontWeight: 700, textDecoration: 'none' }}>
-              Create free account
+              {t('auth.create_account', 'Create one now')}
             </Link>
           </p>
         </div>
