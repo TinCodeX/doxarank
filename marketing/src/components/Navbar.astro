@@ -1,11 +1,11 @@
 ---
 const navItems = [
-  { label: 'Features', href: '/features' },
-  { label: 'Pricing', href: '/pricing' },
-  { label: 'About', href: '/about' },
-  { label: 'Case Studies', href: '/case-studies' },
-  { label: 'Blog', href: '/blog' },
-  { label: 'Contact', href: '/contact' },
+  { key: 'nav.features', label: 'Features', href: '/features' },
+  { key: 'nav.pricing', label: 'Pricing', href: '/pricing' },
+  { key: 'nav.about', label: 'About', href: '/about' },
+  { key: 'nav.case_studies', label: 'Case Studies', href: '/case-studies' },
+  { key: 'nav.blog', label: 'Blog', href: '/blog' },
+  { key: 'nav.contact', label: 'Contact', href: '/contact' },
 ];
 
 const currentPath = Astro.url.pathname;
@@ -40,6 +40,7 @@ const currentPath = Astro.url.pathname;
         return (
           <a
             href={item.href}
+            data-i18n={item.key}
             class:list={[
               'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors',
               isActive
@@ -68,12 +69,14 @@ const currentPath = Astro.url.pathname;
 
       <a
         href="/login"
+        data-i18n="nav.sign_in"
         class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-[#faf7fd] hover:text-[#774DA9]"
       >
         Sign In
       </a>
       <a
         href="/signup"
+        data-i18n="nav.start_free"
         class="inline-flex items-center justify-center rounded-lg bg-[#774DA9] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#673f97] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#774DA9]"
       >
         Start Free
@@ -109,6 +112,7 @@ const currentPath = Astro.url.pathname;
       {navItems.map((item) => (
         <a
           href={item.href}
+          data-i18n={item.key}
           class="block rounded-lg px-3 py-2 text-base font-medium text-slate-700 hover:bg-[#faf7fd] hover:text-[#774DA9]"
         >
           {item.label}
@@ -127,12 +131,14 @@ const currentPath = Astro.url.pathname;
       </select>
       <a
         href="/login"
+        data-i18n="nav.sign_in"
         class="block w-full text-center rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
         Sign In
       </a>
       <a
         href="/signup"
+        data-i18n="nav.start_free"
         class="block w-full text-center rounded-lg bg-[#774DA9] py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#673f97]"
       >
         Start Free
@@ -159,7 +165,7 @@ const currentPath = Astro.url.pathname;
     });
   }
 
-  // Language selection sync with localStorage
+  // Language selection sync with localStorage and global translation engine
   const desktopLang = document.getElementById('marketing-lang-select') as HTMLSelectElement | null;
   const mobileLang = document.getElementById('mobile-lang-select') as HTMLSelectElement | null;
   const savedLang = localStorage.getItem('doxarank_app_language') || 'en';
@@ -169,9 +175,13 @@ const currentPath = Astro.url.pathname;
 
   const onLangChange = (e: Event) => {
     const val = (e.target as HTMLSelectElement).value;
-    localStorage.setItem('doxarank_app_language', val);
-    if (desktopLang) desktopLang.value = val;
-    if (mobileLang) mobileLang.value = val;
+    if ((window as any).doxaChangeLanguage) {
+      (window as any).doxaChangeLanguage(val);
+    } else {
+      localStorage.setItem('doxarank_app_language', val);
+      if (desktopLang) desktopLang.value = val;
+      if (mobileLang) mobileLang.value = val;
+    }
   };
 
   if (desktopLang) desktopLang.addEventListener('change', onLangChange);

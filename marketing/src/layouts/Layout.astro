@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import Navbar from '../components/Navbar.astro';
 import Footer from '../components/Footer.astro';
+import { marketingTranslations } from '../i18n/translations';
 
 interface Props {
   title?: string;
@@ -97,5 +98,80 @@ const structuredData = {
       <slot />
     </main>
     {!hideFooter && <Footer />}
+
+    <!-- Marketing Client-Side i18n Translation Engine -->
+    <script is:inline define:vars={{ marketingTranslations }}>
+      (function() {
+        window.doxaTranslations = marketingTranslations;
+
+        window.doxaChangeLanguage = function(locale) {
+          const validLocale = (locale === 'am' || locale === 'om' || locale === 'en') ? locale : 'en';
+          try {
+            localStorage.setItem('doxarank_app_language', validLocale);
+          } catch (e) {
+            // Local storage error handling
+          }
+          document.documentElement.lang = validLocale;
+
+          // Sync all language dropdown selectors
+          document.querySelectorAll('#marketing-lang-select, #mobile-lang-select').forEach(function(sel) {
+            if (sel && sel.value !== validLocale) {
+              sel.value = validLocale;
+            }
+          });
+
+          const dict = window.doxaTranslations[validLocale] || window.doxaTranslations['en'];
+          const fallbackDict = window.doxaTranslations['en'] || {};
+
+          // Translate text content
+          document.querySelectorAll('[data-i18n]').forEach(function(el) {
+            const key = el.getAttribute('data-i18n');
+            if (!key) return;
+            if (dict[key] !== undefined) {
+              el.textContent = dict[key];
+            } else if (fallbackDict[key] !== undefined) {
+              console.warn('[i18n] Fallback to English for key: "' + key + '" in locale: "' + validLocale + '"');
+              el.textContent = fallbackDict[key];
+            } else {
+              console.warn('[i18n] Missing translation key: "' + key + '" across all locales!');
+            }
+          });
+
+          // Translate placeholders
+          document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (!key) return;
+            const text = dict[key] || fallbackDict[key];
+            if (text) el.setAttribute('placeholder', text);
+          });
+
+          // Translate aria-labels
+          document.querySelectorAll('[data-i18n-aria-label]').forEach(function(el) {
+            const key = el.getAttribute('data-i18n-aria-label');
+            if (!key) return;
+            const text = dict[key] || fallbackDict[key];
+            if (text) el.setAttribute('aria-label', text);
+          });
+
+          // Dispatch event for any custom components listening
+          window.dispatchEvent(new CustomEvent('doxa-language-changed', { detail: { locale: validLocale } }));
+        };
+
+        // Initialize on load
+        function initI18n() {
+          let currentLocale = 'en';
+          try {
+            currentLocale = localStorage.getItem('doxarank_app_language') || 'en';
+          } catch (e) {}
+          window.doxaChangeLanguage(currentLocale);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initI18n);
+        } else {
+          initI18n();
+        }
+      })();
+    </script>
   </body>
 </html>

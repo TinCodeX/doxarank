@@ -78,7 +78,7 @@ type DashboardTab =
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
-  const { t } = useLanguage();
+  const { t, formatStatus, formatDevice, formatDate, formatNumber } = useLanguage();
   const [subscriptionSummary, setSubscriptionSummary] = useState<UserSubscriptionSummary | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
@@ -184,6 +184,7 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    document.title = 'DoxaRank | SEO Audit & Analytics Dashboard';
     fetchUserProjects();
     fetchSubscription();
   }, []);
@@ -574,7 +575,7 @@ export const Dashboard: React.FC = () => {
             <img
               src="/doxa-logo.png"
               alt="Doxa Logo"
-              style={{ width: '36px', height: '36px', objectFit: 'contain', borderRadius: '8px' }}
+              style={{ width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px' }}
             />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1004,10 +1005,10 @@ export const Dashboard: React.FC = () => {
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                             <thead>
                               <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
-                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Query</th>
-                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Rank</th>
-                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Change</th>
-                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Volume</th>
+                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>{t('table.query', 'Query')}</th>
+                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>{t('table.rank', 'Rank')}</th>
+                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>{t('table.change', 'Change')}</th>
+                                <th style={{ padding: '8px 10px', fontWeight: 600 }}>{t('table.volume', 'Volume')}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1230,15 +1231,15 @@ export const Dashboard: React.FC = () => {
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                          <th style={thStyle}>Keyword Query</th>
-                          <th style={thStyle}>Position</th>
-                          <th style={thStyle}>Delta</th>
-                          <th style={thStyle}>Search Vol</th>
-                          <th style={thStyle}>Est. CPC</th>
-                          <th style={thStyle}>Target (ET)</th>
-                          <th style={thStyle}>Device</th>
-                          <th style={thStyle}>Status</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                          <th style={thStyle}>{t('table.keyword', 'Keyword Query')}</th>
+                          <th style={thStyle}>{t('table.position', 'Position')}</th>
+                          <th style={thStyle}>{t('table.delta', 'Delta')}</th>
+                          <th style={thStyle}>{t('table.search_vol', 'Search Vol')}</th>
+                          <th style={thStyle}>{t('table.cpc', 'Est. CPC')}</th>
+                          <th style={thStyle}>{t('table.target_et', 'Target (ET)')}</th>
+                          <th style={thStyle}>{t('table.device', 'Device')}</th>
+                          <th style={thStyle}>{t('table.status', 'Status')}</th>
+                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions', 'Actions')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1301,7 +1302,7 @@ export const Dashboard: React.FC = () => {
                               </td>
                               <td style={tdStyle}>
                                 {intel?.search_volume !== null && intel?.search_volume !== undefined ? (
-                                  <span style={{ fontWeight: 600, color: '#334155' }}>{intel.search_volume.toLocaleString()}</span>
+                                  <span style={{ fontWeight: 600, color: '#334155' }}>{formatNumber(intel.search_volume)}</span>
                                 ) : (
                                   <span style={{ color: '#64748b' }}>—</span>
                                 )}
@@ -1319,12 +1320,12 @@ export const Dashboard: React.FC = () => {
                               <td style={tdStyle}>
                                 <span style={{ fontSize: '12px', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                   {kw.device === 'desktop' ? <Monitor size={13} /> : <Smartphone size={13} />}
-                                  <span>{kw.device}</span>
+                                  <span>{formatDevice(kw.device)}</span>
                                 </span>
                               </td>
                               <td style={tdStyle}>
                                 <span style={kw.is_active ? activeStatusStyle : inactiveStatusStyle}>
-                                  {kw.is_active ? 'Active' : 'Paused'}
+                                  {formatStatus(kw.is_active ? 'active' : 'paused')}
                                 </span>
                               </td>
                               <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -1333,7 +1334,7 @@ export const Dashboard: React.FC = () => {
                                   onClick={(e) => handleOpenEditKeywordModal(kw, e)}
                                   style={actionInlineBtnStyle}
                                 >
-                                  Edit
+                                  {t('action.edit', 'Edit')}
                                 </button>
                                 <button
                                   id={`delete-keyword-${kw.id}`}
@@ -1343,7 +1344,7 @@ export const Dashboard: React.FC = () => {
                                   }}
                                   style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
                                 >
-                                  Delete
+                                  {t('action.delete', 'Delete')}
                                 </button>
                               </td>
                             </tr>
@@ -1462,13 +1463,13 @@ export const Dashboard: React.FC = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                            <th style={thStyle}>Rank</th>
-                            <th style={thStyle}>Status</th>
-                            <th style={thStyle}>Indexed Title &amp; URL</th>
-                            <th style={thStyle}>Search Engine</th>
-                            <th style={thStyle}>Device</th>
-                            <th style={thStyle}>Recorded At</th>
-                            <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                            <th style={thStyle}>{t('table.rank', 'Rank')}</th>
+                            <th style={thStyle}>{t('table.status', 'Status')}</th>
+                            <th style={thStyle}>{t('table.indexed_title', 'Indexed Title & URL')}</th>
+                            <th style={thStyle}>{t('table.engine', 'Search Engine')}</th>
+                            <th style={thStyle}>{t('table.device', 'Device')}</th>
+                            <th style={thStyle}>{t('table.recorded_at', 'Recorded At')}</th>
+                            <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions', 'Actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1495,7 +1496,7 @@ export const Dashboard: React.FC = () => {
                                   backgroundColor: ranking.result_status === 'found' ? '#ecfdf5' : '#fef2f2',
                                   color: ranking.result_status === 'found' ? '#065f46' : '#991b1b',
                                 }}>
-                                  {ranking.result_status || 'found'}
+                                  {formatStatus(ranking.result_status || 'found')}
                                 </span>
                               </td>
                               <td style={tdStyle}>
@@ -1509,22 +1510,22 @@ export const Dashboard: React.FC = () => {
                                 </div>
                               </td>
                               <td style={tdStyle}>google.com.et</td>
-                              <td style={tdStyle}>{ranking.device}</td>
-                              <td style={tdStyle}>{new Date(ranking.recorded_at).toLocaleDateString()}</td>
+                              <td style={tdStyle}>{formatDevice(ranking.device)}</td>
+                              <td style={tdStyle}>{formatDate(ranking.recorded_at)}</td>
                               <td style={{ ...tdStyle, textAlign: 'right' }}>
                                 <button
                                   id={`edit-ranking-${ranking.id}`}
                                   onClick={() => handleOpenEditRankingModal(ranking)}
                                   style={actionInlineBtnStyle}
                                 >
-                                  Edit
+                                  {t('action.edit', 'Edit')}
                                 </button>
                                 <button
                                   id={`delete-ranking-${ranking.id}`}
                                   onClick={() => setDeletingRanking(ranking)}
                                   style={{ ...actionInlineBtnStyle, color: '#ef4444' }}
                                 >
-                                  Delete
+                                  {t('action.delete', 'Delete')}
                                 </button>
                               </td>
                             </tr>
@@ -1568,31 +1569,31 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setRecommendationsSubTab('all')}
                   style={getSubTabBtnStyle(recommendationsSubTab === 'all')}
                 >
-                  All Views
+                  {t('subtab.all_views', 'All Views')}
                 </button>
                 <button
                   onClick={() => setRecommendationsSubTab('feed')}
                   style={getSubTabBtnStyle(recommendationsSubTab === 'feed')}
                 >
-                  Audit Feed
+                  {t('subtab.audit_feed', 'Audit Feed')}
                 </button>
                 <button
                   onClick={() => setRecommendationsSubTab('actions')}
                   style={getSubTabBtnStyle(recommendationsSubTab === 'actions')}
                 >
-                  Action Plan &amp; Tasks
+                  {t('subtab.action_plan', 'Action Plan & Tasks')}
                 </button>
                 <button
                   onClick={() => setRecommendationsSubTab('insights')}
                   style={getSubTabBtnStyle(recommendationsSubTab === 'insights')}
                 >
-                  SERP Insights
+                  {t('subtab.serp_insights', 'SERP Insights')}
                 </button>
                 <button
                   onClick={() => setRecommendationsSubTab('generator')}
                   style={getSubTabBtnStyle(recommendationsSubTab === 'generator')}
                 >
-                  AI Strategy Generator
+                  {t('subtab.ai_strategy', 'AI Strategy Generator')}
                 </button>
               </div>
 
@@ -1642,19 +1643,19 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setContentSubTab('all')}
                   style={getSubTabBtnStyle(contentSubTab === 'all')}
                 >
-                  All Content
+                  {t('subtab.all_content', 'All Content')}
                 </button>
                 <button
                   onClick={() => setContentSubTab('briefs')}
                   style={getSubTabBtnStyle(contentSubTab === 'briefs')}
                 >
-                  Content Briefs &amp; Outlines
+                  {t('subtab.content_briefs', 'Content Briefs & Outlines')}
                 </button>
                 <button
                   onClick={() => setContentSubTab('drafts')}
                   style={getSubTabBtnStyle(contentSubTab === 'drafts')}
                 >
-                  Drafts &amp; Generated Articles
+                  {t('subtab.content_drafts', 'Drafts & Generated Articles')}
                 </button>
               </div>
 
@@ -1727,49 +1728,49 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setOperationsSubTab('all')}
                   style={getSubTabBtnStyle(operationsSubTab === 'all')}
                 >
-                  All Operations
+                  {t('subtab.all_operations', 'All Operations')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('orchestrator')}
                   style={getSubTabBtnStyle(operationsSubTab === 'orchestrator')}
                 >
-                  Specialized Agents
+                  {t('subtab.specialized_agents', 'Specialized Agents')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('continuous')}
                   style={getSubTabBtnStyle(operationsSubTab === 'continuous')}
                 >
-                  Continuous Ops
+                  {t('subtab.continuous_ops', 'Continuous Ops')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('events')}
                   style={getSubTabBtnStyle(operationsSubTab === 'events')}
                 >
-                  Event Logs
+                  {t('subtab.event_logs', 'Event Logs')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('monitoring')}
                   style={getSubTabBtnStyle(operationsSubTab === 'monitoring')}
                 >
-                  Live Monitoring
+                  {t('subtab.live_monitoring', 'Live Monitoring')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('remediation')}
                   style={getSubTabBtnStyle(operationsSubTab === 'remediation')}
                 >
-                  Auto-Remediation
+                  {t('subtab.auto_remediation', 'Auto-Remediation')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('observability')}
                   style={getSubTabBtnStyle(operationsSubTab === 'observability')}
                 >
-                  Observability &amp; Sentry
+                  {t('subtab.observability', 'Observability & Sentry')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('strategy')}
                   style={getSubTabBtnStyle(operationsSubTab === 'strategy')}
                 >
-                  Long-Term Strategy
+                  {t('subtab.long_term_strategy', 'Long-Term Strategy')}
                 </button>
               </div>
 

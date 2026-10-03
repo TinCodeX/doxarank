@@ -6,6 +6,11 @@ export interface LanguageContextType {
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => void;
   t: (key: string, defaultText?: string) => string;
+  formatStatus: (status?: string | null) => string;
+  formatSeverity: (severity?: string | null) => string;
+  formatDevice: (device?: string | null) => string;
+  formatDate: (date: string | number | Date | null | undefined) => string;
+  formatNumber: (num: number | null | undefined) => string;
 }
 
 const STORAGE_KEY = 'doxarank_app_language';
@@ -102,6 +107,13 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'table.status': 'Status',
     'table.severity': 'Severity',
     'table.issue': 'Issue Description',
+    'table.query': 'Query',
+    'table.rank': 'Rank',
+    'table.delta': 'Delta',
+    'table.search_vol': 'Search Vol',
+    'table.target_et': 'Target (ET)',
+    'table.indexed_title': 'Indexed Title & URL',
+    'table.recorded_at': 'Recorded At',
 
     // Empty States
     'empty.no_keywords': 'No keywords tracked yet.',
@@ -115,6 +127,22 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'empty.add_competitor_btn': 'Add Competitor Domain',
 
     // Sub-Tabs
+    'subtab.all_views': 'All Views',
+    'subtab.audit_feed': 'Audit Feed',
+    'subtab.action_plan': 'Action Plan & Tasks',
+    'subtab.serp_insights': 'SERP Insights',
+    'subtab.ai_strategy': 'AI Strategy Generator',
+    'subtab.all_content': 'All Content',
+    'subtab.content_briefs': 'Content Briefs & Outlines',
+    'subtab.content_drafts': 'Drafts & Generated Articles',
+    'subtab.all_operations': 'All Operations',
+    'subtab.specialized_agents': 'Specialized Agents',
+    'subtab.continuous_ops': 'Continuous Ops',
+    'subtab.event_logs': 'Event Logs',
+    'subtab.live_monitoring': 'Live Monitoring',
+    'subtab.auto_remediation': 'Auto-Remediation',
+    'subtab.observability': 'Observability & Sentry',
+    'subtab.long_term_strategy': 'Long-Term Strategy',
     'subtab.feed': 'Recommendations Feed',
     'subtab.actions': 'Action Tracker',
     'subtab.insights': 'Strategic Insights',
@@ -129,17 +157,51 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'subtab.strategy': 'Long-Term Strategy',
     'subtab.health': 'Platform Health',
 
+    // Dynamic Statuses
+    'status.active': 'Active',
+    'status.paused': 'Paused',
+    'status.running': 'Running',
+    'status.completed': 'Completed',
+    'status.failed': 'Failed',
+    'status.pending': 'Pending',
+    'status.found': 'Found',
+    'status.not_found': 'Not Found',
+    'status.success': 'Success',
+    'status.error': 'Error',
+    'status.warning': 'Warning',
+    'status.passed': 'Passed',
+
+    // Dynamic Severities
+    'severity.critical': 'Critical',
+    'severity.high': 'High',
+    'severity.medium': 'Medium',
+    'severity.low': 'Low',
+    'severity.info': 'Info',
+
+    // Devices
+    'device.desktop': 'Desktop',
+    'device.mobile': 'Mobile',
+    'device.tablet': 'Tablet',
+
     // Auth
     'auth.sign_in': 'Sign in to your account',
     'auth.sign_in_desc': 'Sign in to access your Google Ethiopia SEO intelligence',
+    'auth.login_subtitle': 'Sign in to access your Google Ethiopia SEO intelligence',
     'auth.email': 'Email Address',
     'auth.password': 'Password',
     'auth.first_name': 'First Name',
     'auth.last_name': 'Last Name',
-    'auth.create_account': 'Create your DoxaRank account',
+    'auth.create_account': 'Create one now',
     'auth.dont_have_account': "Don't have an account?",
     'auth.already_have_account': 'Already have an account?',
     'auth.start_free': 'Start Free',
+    'auth.signing_in': 'Authenticating...',
+    'auth.no_account': "Don't have an account yet?",
+    'auth.register_subtitle': 'Start tracking rankings on Google Ethiopia and optimizing technical SEO',
+    'auth.creating_account': 'Creating account...',
+    'auth.create_account_btn': 'Create Account & Start Free',
+    'auth.already_account': 'Already have an account?',
+    'auth.sign_in_link': 'Sign in',
   },
 
   am: {
@@ -232,6 +294,13 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'table.status': 'ሁኔታ',
     'table.severity': 'ክብደት',
     'table.issue': 'የችግሩ ዝርዝር',
+    'table.query': 'የፍለጋ ቃል',
+    'table.rank': 'ደረጃ',
+    'table.delta': 'ልዩነት',
+    'table.search_vol': 'የፍለጋ መጠን',
+    'table.target_et': 'ኢላማ (ኢትዮጵያ)',
+    'table.indexed_title': 'የተመዘገበ ርዕስ እና URL',
+    'table.recorded_at': 'የተመዘገበበት ጊዜ',
 
     // Empty States
     'empty.no_keywords': 'እስካሁን ምንም ቁልፍ ቃል አልተመዘገበም።',
@@ -245,6 +314,22 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'empty.add_competitor_btn': 'ተፎካካሪ ጨምር',
 
     // Sub-Tabs
+    'subtab.all_views': 'ሁሉም እይታዎች',
+    'subtab.audit_feed': 'የምክሮች ዝርዝር',
+    'subtab.action_plan': 'የተግባር እቅድ እና ስራዎች',
+    'subtab.serp_insights': 'የSERP ግንዛቤዎች',
+    'subtab.ai_strategy': 'የAI ስትራቴጂ ማመንጫ',
+    'subtab.all_content': 'ሁሉም ይዘቶች',
+    'subtab.content_briefs': 'የይዘት መመሪያዎች',
+    'subtab.content_drafts': 'የተዘጋጁ ረቂቆች',
+    'subtab.all_operations': 'ሁሉም ስራዎች',
+    'subtab.specialized_agents': 'ልዩ ረዳቶች',
+    'subtab.continuous_ops': 'ተከታታይ ስራዎች',
+    'subtab.event_logs': 'የክስተቶች መዝገብ',
+    'subtab.live_monitoring': 'የቀጥታ ክትትል',
+    'subtab.auto_remediation': 'ራስ-ሰር ማስተካከያ',
+    'subtab.observability': 'ክትትል እና ስህተት መመርመሪያ',
+    'subtab.long_term_strategy': 'የረጅም ጊዜ ስትራቴጂ',
     'subtab.feed': 'የምክሮች ዝርዝር',
     'subtab.actions': 'የተግባራት መከታተያ',
     'subtab.insights': 'ስትራቴጂካዊ ግንዛቤዎች',
@@ -259,17 +344,51 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'subtab.strategy': 'የረጅም ጊዜ እቅድ',
     'subtab.health': 'የስርዓት ጤንነት',
 
+    // Dynamic Statuses
+    'status.active': 'ንቁ',
+    'status.paused': 'የቆመ',
+    'status.running': 'በመስራት ላይ',
+    'status.completed': 'የተጠናቀቀ',
+    'status.failed': 'አልተሳካም',
+    'status.pending': 'በመጠባበቅ ላይ',
+    'status.found': 'ተገኝቷል',
+    'status.not_found': 'አልተገኘም',
+    'status.success': 'ተሳክቷል',
+    'status.error': 'ስህተት',
+    'status.warning': 'ማስጠንቀቂያ',
+    'status.passed': 'አልፏል',
+
+    // Dynamic Severities
+    'severity.critical': 'ወሳኝ',
+    'severity.high': 'ከፍተኛ',
+    'severity.medium': 'መካከለኛ',
+    'severity.low': 'ዝቅተኛ',
+    'severity.info': 'መረጃ',
+
+    // Devices
+    'device.desktop': 'ኮምፒውተር',
+    'device.mobile': 'ሞባይል',
+    'device.tablet': 'ታብሌት',
+
     // Auth
     'auth.sign_in': 'ወደ መለያዎ ይግቡ',
     'auth.sign_in_desc': 'የኢትዮጵያ SEO መረጃዎን ለማግኘት ይግቡ',
+    'auth.login_subtitle': 'የጉግል ኢትዮጵያ SEO መረጃዎን ለማግኘት ይግቡ',
     'auth.email': 'የኢሜይል አድራሻ',
     'auth.password': 'የይለፍ ቃል',
     'auth.first_name': 'ስም',
     'auth.last_name': 'የአባት ስም',
-    'auth.create_account': 'የዶክሳራንክ መለያ ይፍጠሩ',
+    'auth.create_account': 'አሁን ይመዝገቡ',
     'auth.dont_have_account': 'መለያ የለዎትም?',
     'auth.already_have_account': 'አስቀድመው መለያ አለዎት?',
     'auth.start_free': 'በነጻ ይጀምሩ',
+    'auth.signing_in': 'በማረጋገጥ ላይ...',
+    'auth.no_account': 'እስካሁን መለያ የለዎትም?',
+    'auth.register_subtitle': 'በጉግል ኢትዮጵያ ላይ ደረጃዎችን መከታተል እና የቴክኒክ SEOን ማሻሻል ይጀምሩ',
+    'auth.creating_account': 'መለያ በመፍጠር ላይ...',
+    'auth.create_account_btn': 'መለያ ይፍጠሩ እና በነፃ ይጀምሩ',
+    'auth.already_account': 'አስቀድመው መለያ አለዎት?',
+    'auth.sign_in_link': 'ግባ',
   },
 
   om: {
@@ -362,6 +481,13 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'table.status': 'Haala',
     'table.severity': 'Cimina',
     'table.issue': 'Ibsa Rakkoo',
+    'table.query': 'Jecha Barbaadaa',
+    'table.rank': 'Sadarkaa',
+    'table.delta': 'Garaagarummaa',
+    'table.search_vol': 'Baay\'ina Barbaadaa',
+    'table.target_et': 'Qiyyaafannoo (Itoophiyaa)',
+    'table.indexed_title': 'Mata-duree fi URL',
+    'table.recorded_at': 'Yeroo Galmaa\'e',
 
     // Empty States
     'empty.no_keywords': 'Hamma ammaatti jechi ijoo hin galmoofne.',
@@ -375,6 +501,22 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'empty.add_competitor_btn': 'Dorgomaa Dabali',
 
     // Sub-Tabs
+    'subtab.all_views': 'Ilaalcha Hundaa',
+    'subtab.audit_feed': 'Tarree Qorannoo',
+    'subtab.action_plan': 'Karoora Tarkaanfii',
+    'subtab.serp_insights': 'Hubannoo SERP',
+    'subtab.ai_strategy': 'Uumaa Tarsiimoo AI',
+    'subtab.all_content': 'Qabiyyee Hundaa',
+    'subtab.content_briefs': 'Qajeelfama Qabiyyee',
+    'subtab.content_drafts': 'Wixinee Qophaa\'e',
+    'subtab.all_operations': 'Hojiiwwan Hundaa',
+    'subtab.specialized_agents': 'Gargaartota Addaa',
+    'subtab.continuous_ops': 'Hojii Walitti Fufaa',
+    'subtab.event_logs': 'Galmee Taatee',
+    'subtab.live_monitoring': 'Hordoffii Kallattii',
+    'subtab.auto_remediation': 'Ofiin Sirreessuu',
+    'subtab.observability': 'Qorannoo fi To\'annoo',
+    'subtab.long_term_strategy': 'Tarsiimoo Yeroo Dheeraa',
     'subtab.feed': 'Tarree Gorsaalee',
     'subtab.actions': 'Hordoffii Tarkaanfii',
     'subtab.insights': 'Hubannoo Qajeelchaa',
@@ -389,17 +531,51 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'subtab.strategy': 'Tarsiimoo Yeroo Dheeraa',
     'subtab.health': 'Fayyaa Sirnaa',
 
+    // Dynamic Statuses
+    'status.active': 'Hojirra Jira',
+    'status.paused': 'Dhaabbateera',
+    'status.running': 'Hojjechaa Jira',
+    'status.completed': 'Xumurameera',
+    'status.failed': 'Hin Milkoofne',
+    'status.pending': 'Eeggachaa Jira',
+    'status.found': 'Argameera',
+    'status.not_found': 'Hin Argamne',
+    'status.success': 'Milkaa\'ina',
+    'status.error': 'Dogoggora',
+    'status.warning': 'Akeekkachiisa',
+    'status.passed': 'Darbeera',
+
+    // Dynamic Severities
+    'severity.critical': 'Baay\'ee Cimaa',
+    'severity.high': 'Cimaa',
+    'severity.medium': 'Giddu-galeessa',
+    'severity.low': 'Gadi-aanaa',
+    'severity.info': 'Odeeffannoo',
+
+    // Devices
+    'device.desktop': 'Kompiitara',
+    'device.mobile': 'Moobaayila',
+    'device.tablet': 'Taableetii',
+
     // Auth
     'auth.sign_in': 'Gara herrega keetti seeni',
     'auth.sign_in_desc': 'Odeeffannoo SEO Google Itoophiyaa argachuuf seenaa',
+    'auth.login_subtitle': 'Odeeffannoo SEO Google Itoophiyaa argachuuf seenaa',
     'auth.email': 'Teessoo Imeelii',
     'auth.password': 'Jecha Iccitii',
     'auth.first_name': 'Maqaa',
     'auth.last_name': 'Maqaa Abbaa',
-    'auth.create_account': 'Herrega DoxaRank Uumi',
+    'auth.create_account': 'Amma Uumi',
     'auth.dont_have_account': 'Herrega hin qabduu?',
     'auth.already_have_account': 'Duraan herrega qabdaa?',
     'auth.start_free': 'Bilisaan Jalqabi',
+    'auth.signing_in': 'Mirkaneessaa jira...',
+    'auth.no_account': 'Hamma ammaatti herrega hin qabduu?',
+    'auth.register_subtitle': 'Google Itoophiyaa irratti sadarkaa hordofuu fi SEO fooyyessuu jalqabaa',
+    'auth.creating_account': 'Herrega uumaa jira...',
+    'auth.create_account_btn': 'Herrega Uumaa Bilisaan Jalqabaa',
+    'auth.already_account': 'Duraan herrega qabdaa?',
+    'auth.sign_in_link': 'Seeni',
   },
 };
 
@@ -432,19 +608,91 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [language]);
 
   const t = (key: string, defaultText?: string): string => {
+    const isDev = Boolean(import.meta.env?.DEV);
     const langDict = translations[language];
     if (langDict && langDict[key]) {
       return langDict[key];
     }
     // Fallback to English
     if (translations.en[key]) {
+      if (isDev && language !== 'en') {
+        console.warn(`[i18n] Fallback to English for key: "${key}" in language "${language}"`);
+      }
       return translations.en[key];
+    }
+    if (isDev) {
+      console.warn(`[i18n] Missing translation key: "${key}" across all locales!`);
     }
     return defaultText ?? key;
   };
 
+  const formatStatus = (status?: string | null): string => {
+    if (!status) return '—';
+    const key = `status.${status.toLowerCase().trim()}`;
+    return t(key, status);
+  };
+
+  const formatSeverity = (severity?: string | null): string => {
+    if (!severity) return '—';
+    const key = `severity.${severity.toLowerCase().trim()}`;
+    return t(key, severity);
+  };
+
+  const formatDevice = (device?: string | null): string => {
+    if (!device) return '—';
+    const key = `device.${device.toLowerCase().trim()}`;
+    return t(key, device);
+  };
+
+  const formatDate = (date: string | number | Date | null | undefined): string => {
+    if (!date) return '—';
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return String(date);
+      const localeMap: Record<SupportedLanguage, string> = {
+        en: 'en-US',
+        am: 'am-ET',
+        om: 'om-ET',
+      };
+      const locale = localeMap[language] || 'en-US';
+      return d.toLocaleDateString(locale, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return String(date);
+    }
+  };
+
+  const formatNumber = (num: number | null | undefined): string => {
+    if (num === null || num === undefined) return '—';
+    try {
+      const localeMap: Record<SupportedLanguage, string> = {
+        en: 'en-US',
+        am: 'am-ET',
+        om: 'om-ET',
+      };
+      const locale = localeMap[language] || 'en-US';
+      return num.toLocaleString(locale);
+    } catch {
+      return String(num);
+    }
+  };
+
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider
+      value={{
+        language,
+        setLanguage,
+        t,
+        formatStatus,
+        formatSeverity,
+        formatDevice,
+        formatDate,
+        formatNumber,
+      }}
+    >
       {children}
     </LanguageContext.Provider>
   );

@@ -18,6 +18,10 @@ export const Login: React.FC = () => {
 
   const from = (location.state as any)?.from?.pathname || '/';
 
+  React.useEffect(() => {
+    document.title = 'Sign In | DoxaRank';
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);

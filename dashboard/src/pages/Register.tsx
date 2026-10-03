@@ -17,6 +17,10 @@ export const Register: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    document.title = 'Create Account | DoxaRank';
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
