@@ -141,7 +141,7 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'subtab.event_logs': 'Event Logs',
     'subtab.live_monitoring': 'Live Monitoring',
     'subtab.auto_remediation': 'Auto-Remediation',
-    'subtab.observability': 'Observability & Sentry',
+    'subtab.observability': 'Platform Observability',
     'subtab.long_term_strategy': 'Long-Term Strategy',
     'subtab.feed': 'Recommendations Feed',
     'subtab.actions': 'Action Tracker',

@@ -1764,7 +1764,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => setOperationsSubTab('observability')}
                   style={getSubTabBtnStyle(operationsSubTab === 'observability')}
                 >
-                  {t('subtab.observability', 'Observability & Sentry')}
+                  {t('subtab.observability', 'Platform Observability')}
                 </button>
                 <button
                   onClick={() => setOperationsSubTab('strategy')}
