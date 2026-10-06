@@ -1599,6 +1599,7 @@ export const Dashboard: React.FC = () => {
               <TechnicalCrawlerPanel
                 project={selectedProject}
                 hasCrawlerEntitlement={!!(subscriptionSummary?.plan?.features ?? []).includes('TECHNICAL_CRAWLER')}
+                onUpgrade={() => setIsSubscriptionModalOpen(true)}
               />
             </section>
           )}
