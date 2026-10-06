@@ -12,8 +12,10 @@ Features:
 - Celery-ready service methods with per-keyword error isolation
 """
 
+import base64
 import logging
 import re
+import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -21,6 +23,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import httpx
 from bs4 import BeautifulSoup
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -151,19 +154,46 @@ class SerpParser:
     @classmethod
     def clean_google_url(cls, raw_url: str) -> Optional[str]:
         """
-        Extract destination URL if wrapped in Google redirect (/url?q=... or /url?url=...).
+        Extract destination URL if wrapped in Google redirect (/url?q=..., /url?url=..., or /goto?url=...).
+        Decodes percent-encoded URLs and normalizes protocol and query parameters.
         Returns cleaned absolute HTTP/HTTPS URL or None if internal/invalid.
         """
         if not raw_url:
             return None
 
-        # Google redirect handler: /url?q=https://example.com&sa=U... or /url?url=...
-        if raw_url.startswith('/url?'):
-            parsed = urllib.parse.urlparse(raw_url)
+        raw_url = raw_url.strip()
+
+        # Handle full Google URLs with redirect paths (e.g. https://www.google.com.et/url?q=...)
+        if raw_url.startswith(('http://', 'https://')):
+            try:
+                parsed = urllib.parse.urlparse(raw_url)
+                host = (parsed.hostname or '').lower()
+                if host in cls.IGNORED_HOSTS or host.endswith('.google.com') or host.endswith('.google.com.et'):
+                    if parsed.path.rstrip('/') in ('/url', '/goto'):
+                        qs = urllib.parse.parse_qs(parsed.query)
+                        target = qs.get('q', [None])[0] or qs.get('url', [None])[0]
+                        if target:
+                            raw_url = urllib.parse.unquote(target)
+                    else:
+                        return None
+            except Exception:
+                return None
+
+        # Google redirect handler: /url?q=... or /url?url=...
+        if raw_url.startswith(('/url?', 'url?')):
+            parsed = urllib.parse.urlparse(raw_url if raw_url.startswith('/') else f"/{raw_url}")
             query_params = urllib.parse.parse_qs(parsed.query)
             target = query_params.get('q', [None])[0] or query_params.get('url', [None])[0]
             if target:
-                raw_url = target
+                raw_url = urllib.parse.unquote(target)
+
+        # Modern Google redirect handler: /goto?url=...
+        if raw_url.startswith(('/goto?', 'goto?')):
+            parsed = urllib.parse.urlparse(raw_url if raw_url.startswith('/') else f"/{raw_url}")
+            query_params = urllib.parse.parse_qs(parsed.query)
+            target = query_params.get('url', [None])[0] or query_params.get('q', [None])[0]
+            if target:
+                raw_url = urllib.parse.unquote(target)
 
         if not raw_url.startswith(('http://', 'https://')):
             return None
@@ -171,8 +201,11 @@ class SerpParser:
         # Strip URL fragments
         raw_url = raw_url.split('#')[0]
 
-        parsed_target = urllib.parse.urlparse(raw_url)
-        hostname = (parsed_target.hostname or '').lower()
+        try:
+            parsed_target = urllib.parse.urlparse(raw_url)
+            hostname = (parsed_target.hostname or '').lower()
+        except Exception:
+            return None
 
         # Filter out Google internal hostnames
         if hostname in cls.IGNORED_HOSTS or hostname.endswith('.google.com') or hostname.endswith('.google.com.et'):
@@ -184,7 +217,9 @@ class SerpParser:
     def normalize_domain(cls, url_or_domain: str) -> str:
         """
         Normalize a website URL or domain into a clean canonical hostname for matching.
+        Removes protocol, www. prefix, port, trailing slashes, paths, and query params.
         E.g. 'https://www.addisinsight.net/path/' -> 'addisinsight.net'
+             'doxaplc.com/' -> 'doxaplc.com'
         """
         if not url_or_domain:
             return ''
@@ -193,17 +228,23 @@ class SerpParser:
         if not text.startswith(('http://', 'https://')):
             text = f"https://{text}"
 
-        parsed = urllib.parse.urlparse(text)
-        host = (parsed.hostname or '').lower().strip()
-        if host.startswith('www.'):
-            host = host[4:]
-        host = host.split(':')[0].rstrip('.')
-        return host
+        try:
+            parsed = urllib.parse.urlparse(text)
+            host = (parsed.hostname or '').lower().strip()
+            if host.startswith('www.'):
+                host = host[4:]
+            host = host.split(':')[0].rstrip('.')
+            return host
+        except Exception:
+            cleaned = re.sub(r'^https?://', '', text)
+            cleaned = re.sub(r'^www\.', '', cleaned)
+            return cleaned.split('/')[0].split(':')[0].strip().rstrip('.')
 
     @classmethod
     def domains_match(cls, candidate_url: str, target_domain: str) -> bool:
         """
-        Check if a candidate URL matches the target website domain or subdomain.
+        Check if a candidate URL matches the target website domain or its subdomains.
+        Compares hostnames strictly rather than matching arbitrary substring text.
         """
         if not candidate_url or not target_domain:
             return False
@@ -214,17 +255,25 @@ class SerpParser:
         if not candidate_norm or not target_norm:
             return False
 
-        return (
-            candidate_norm == target_norm
-            or candidate_norm.endswith(f".{target_norm}")
-            or target_norm.endswith(f".{candidate_norm}")
-        )
+        # Exact canonical domain match
+        if candidate_norm == target_norm:
+            return True
+
+        # Candidate is a subdomain of target domain (e.g. blog.example.com vs example.com)
+        if candidate_norm.endswith(f".{target_norm}"):
+            return True
+
+        # Target is a subdomain of candidate domain (e.g. sub.example.com vs example.com)
+        if target_norm.endswith(f".{candidate_norm}"):
+            return True
+
+        return False
 
     @classmethod
     def validate_serp_response(cls, html: str) -> Tuple[bool, Optional[str]]:
         """
         Validate whether HTTP response contains a legitimate Google SERP structure
-        rather than a consent screen, CAPTCHA, bot block, or malformed/unexpected HTML.
+        rather than a consent screen, CAPTCHA, bot block, JS wall, or malformed/unexpected HTML.
         Returns (is_valid, error_message).
         """
         if not html or not html.strip():
@@ -232,7 +281,19 @@ class SerpParser:
 
         html_lower = html.lower()
 
-        # 1. Detect Google Bot Block / CAPTCHA / Unusual Traffic
+        # 1. Detect Google JavaScript Challenge / BotGuard Wall
+        if (
+            "httpservice/retry/enablejs" in html_lower
+            or "enablejs?sei=" in html_lower
+            or "/js/bg/" in html_lower
+            or "window.google.c = window.google.c || {cap:0}" in html
+            or "your browser isn't supported any more. to continue your search" in html_lower
+            or "solvesimplechallenge" in html_lower
+            or "enable javascript on your web browser" in html_lower
+        ):
+            return False, "Google JavaScript challenge (enablejs/BotGuard) encountered: JavaScript rendering required."
+
+        # 2. Detect Google Bot Block / CAPTCHA / Unusual Traffic
         if (
             "detected unusual traffic" in html_lower
             or 'id="captcha-form"' in html
@@ -242,7 +303,7 @@ class SerpParser:
         ):
             return False, "Google automated query block / CAPTCHA detected."
 
-        # 2. Detect Google Cookie Consent / Interstitial
+        # 3. Detect Google Cookie Consent / Interstitial
         if (
             "consent.google.com" in html_lower
             or "before you continue to google" in html_lower
@@ -252,11 +313,11 @@ class SerpParser:
         ):
             return False, "Google cookie consent interstitial returned instead of SERP."
 
-        # 3. Detect Rate Limit / 429 indicators
+        # 4. Detect Rate Limit / 429 indicators
         if "rate limit" in html_lower and "google" in html_lower:
             return False, "Google search rate limit response received."
 
-        # 4. Check for valid Google SERP landmarks or valid zero-result indicators
+        # 5. Check for valid Google SERP landmarks or valid zero-result indicators
         has_serp_landmarks = any(
             marker in html for marker in (
                 'id="search"',
@@ -266,7 +327,12 @@ class SerpParser:
                 'id="res"',
                 'class="g"',
                 'class="MjjYud"',
+                'class="tF2Cxc"',
+                'class="yuRUbf"',
+                'class="N54PNb"',
+                'class="Ww4FFb"',
                 'data-sokoban-container',
+                'class="zReHs"',
                 'id="taw"',
                 'id="tads"',
             )
@@ -296,6 +362,7 @@ class SerpParser:
         """
         Parse all organic (URL, title) entries from Google SERP HTML in ranking order.
         Filters ads, navigation, PAA, and non-organic widgets.
+        Supports standard and modern Google Ethiopia SERP layouts.
         """
         if not html:
             return []
@@ -314,16 +381,19 @@ class SerpParser:
         results: List[Tuple[str, str]] = []
         seen_urls = set()
 
-        # 2. Strategy A: Standard Google organic containers (div.g, div.MjjYud, div[data-sokoban-container])
-        containers = soup.select('div#rso div.g, div#rso div[data-sokoban-container], div#rso div.MjjYud, div.g, div[data-sokoban-container], div.MjjYud')
+        # 2. Strategy A: Container-based extraction (modern and classic)
+        container_selector = (
+            'div#rso div.g, div#rso div.MjjYud, div#rso div.tF2Cxc, '
+            'div#rso div[data-sokoban-container], div.g, div.MjjYud, '
+            'div.tF2Cxc, div[data-sokoban-container]'
+        )
+        containers = soup.select(container_selector)
 
         for container in containers:
-            # Check if container has ad badges or text
             text_preview = container.get_text(separator=' ', strip=True)
             if cls.AD_PATTERN.search(text_preview[:80]):
                 continue
 
-            # Find main ranking link with title
             link = container.find('a', href=True)
             if not link:
                 continue
@@ -332,7 +402,6 @@ class SerpParser:
             if not clean_url or clean_url in seen_urls:
                 continue
 
-            # Extract title: prefer h3, fallback to link text
             h3 = container.find('h3')
             title = h3.get_text(strip=True) if h3 else link.get_text(strip=True)
 
@@ -340,7 +409,20 @@ class SerpParser:
                 seen_urls.add(clean_url)
                 results.append((clean_url, title))
 
-        # 3. Strategy B (Fallback): If standard containers yielded 0 results, find all anchor tags wrapping h3
+        # 3. Strategy B: Modern Google Ethiopia anchors (a.zReHs or redirect links)
+        if not results:
+            for anchor in soup.select('a.zReHs[href], a[href*="/goto?url="], a[href*="/url?q="]'):
+                clean_url = cls.clean_google_url(anchor['href'])
+                if not clean_url or clean_url in seen_urls:
+                    continue
+
+                h3 = anchor.find('h3')
+                title = h3.get_text(strip=True) if h3 else anchor.get_text(strip=True)
+                if clean_url and title:
+                    seen_urls.add(clean_url)
+                    results.append((clean_url, title))
+
+        # 4. Strategy C: Fallback to all anchor tags wrapping h3
         if not results:
             for a_tag in soup.find_all('a', href=True):
                 h3 = a_tag.find('h3')
@@ -551,39 +633,291 @@ class GoogleEtSerpClient:
         raise RuntimeError(f"Failed to fetch SERP for '{keyword}' after {self.max_retries + 1} attempts: {last_error}")
 
 
+class DataForSeoSerpClient:
+    """
+    Dedicated REST client for DataForSEO Google Organic SERP API.
+    Uses standard HTTP Basic Auth and httpx without requiring an external SDK.
+    Supports Ethiopia (location_code: 2231), multi-lingual queries (en, am, om),
+    desktop and mobile devices, and organic result extraction up to depth 100.
+    """
+    LOCATION_CODE_ETHIOPIA = 2231
+    LANGUAGE_CODES = {
+        'en': 'en',
+        'am': 'am',
+        'om': 'om',
+    }
+
+    def __init__(
+        self,
+        login: Optional[str] = None,
+        password: Optional[str] = None,
+        api_url: Optional[str] = None,
+        timeout_seconds: float = 25.0
+    ):
+        self.login = login or getattr(settings, 'DATAFORSEO_LOGIN', '')
+        self.password = password or getattr(settings, 'DATAFORSEO_PASSWORD', '')
+        self.api_url = (api_url or getattr(settings, 'DATAFORSEO_API_URL', 'https://api.dataforseo.com/v3')).rstrip('/')
+        self.timeout_seconds = timeout_seconds
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.login and self.password)
+
+    def _get_auth_header(self) -> Dict[str, str]:
+        auth_str = f"{self.login}:{self.password}"
+        encoded = base64.b64encode(auth_str.encode('utf-8')).decode('ascii')
+        return {
+            'Authorization': f'Basic {encoded}',
+            'Content-Type': 'application/json',
+            'User-Agent': 'DoxaRank-SerpClient/1.0',
+        }
+
+    def fetch_organic_results(
+        self,
+        keyword: str,
+        language: str = 'en',
+        device: str = 'desktop',
+        depth: int = 100
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        """
+        Fetch SERP results from DataForSEO /v3/serp/google/organic/live/advanced.
+        Returns (organic_items, error_message).
+        Each item is a dict with 'url', 'title', 'rank', 'domain'.
+        """
+        if not self.is_configured:
+            return [], "DataForSEO credentials are not configured on the server."
+
+        url = f"{self.api_url}/serp/google/organic/live/advanced"
+        lang_code = self.LANGUAGE_CODES.get(language.lower().strip() if language else 'en', 'en')
+        device_type = 'mobile' if device == Device.MOBILE else 'desktop'
+
+        payload = [
+            {
+                "keyword": keyword.strip(),
+                "location_code": self.LOCATION_CODE_ETHIOPIA,
+                "language_code": lang_code,
+                "device": device_type,
+                "depth": min(depth, 100),
+            }
+        ]
+
+        try:
+            with httpx.Client(timeout=self.timeout_seconds) as client:
+                response = client.post(
+                    url,
+                    headers=self._get_auth_header(),
+                    json=payload
+                )
+
+            if response.status_code in (401, 403):
+                try:
+                    err_json = response.json()
+                    msg = err_json.get('status_message') or f"HTTP {response.status_code}"
+                except Exception:
+                    msg = f"HTTP {response.status_code}"
+                logger.error(f"[DataForSEO-SERP] Auth/forbidden error: {msg}")
+                return [], f"DataForSEO error: {msg}"
+
+            if response.status_code == 429:
+                logger.warning("[DataForSEO-SERP] Rate limit exceeded (HTTP 429).")
+                return [], "DataForSEO rate limit exceeded. Please try again later."
+
+            if not response.is_success:
+                logger.error(f"[DataForSEO-SERP] Request failed (HTTP {response.status_code}): {response.text[:200]}")
+                return [], f"DataForSEO returned HTTP {response.status_code}."
+
+            data = response.json()
+            tasks = data.get('tasks', [])
+            if not tasks or not isinstance(tasks, list):
+                return [], "Malformed response from DataForSEO: missing tasks."
+
+            task = tasks[0]
+            task_status = task.get('status_code')
+            if task_status not in (20000, 200):
+                msg = task.get('status_message', f"DataForSEO task failed with code {task_status}")
+                logger.warning(f"[DataForSEO-SERP] Task error: {msg}")
+                return [], f"DataForSEO error: {msg}"
+
+            results = task.get('result', [])
+            if not results:
+                # No results found for query
+                return [], None
+
+            items = results[0].get('items', [])
+            organic_items: List[Dict[str, Any]] = []
+            for item in items:
+                if item.get('type') == 'organic':
+                    organic_items.append({
+                        'rank': item.get('rank_group') or len(organic_items) + 1,
+                        'url': item.get('url', ''),
+                        'title': item.get('title', ''),
+                        'domain': item.get('domain', ''),
+                    })
+
+            return organic_items, None
+
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            logger.warning(f"[DataForSEO-SERP] Network error: {exc}")
+            return [], f"DataForSEO network error: {str(exc)[:200]}"
+        except Exception as exc:
+            logger.error(f"[DataForSEO-SERP] Unexpected error: {exc}")
+            return [], f"DataForSEO error: {str(exc)[:200]}"
+
+    def check_serp(
+        self,
+        keyword: str,
+        target_website: str,
+        language: str = 'en',
+        device: str = 'desktop'
+    ) -> Tuple[Optional[SerpResult], Optional[str]]:
+        """
+        Check keyword ranking for target website via DataForSEO.
+        Returns (SerpResult, error_message).
+        If API failed, SerpResult is None and error_message is string.
+        """
+        organic_items, err = self.fetch_organic_results(
+            keyword=keyword,
+            language=language,
+            device=device,
+            depth=100
+        )
+        if err:
+            return None, err
+
+        target_norm = SerpParser.normalize_domain(target_website)
+        for item in organic_items:
+            url = item.get('url', '')
+            title = item.get('title', '')
+            rank = item.get('rank')
+            if SerpParser.domains_match(url, target_norm):
+                return SerpResult(
+                    position=rank,
+                    url=url,
+                    title=title,
+                    status=RankingResultStatus.FOUND,
+                    total_organic_found=len(organic_items)
+                ), None
+
+        return SerpResult(
+            position=None,
+            url=None,
+            title=None,
+            status=RankingResultStatus.NOT_FOUND,
+            total_organic_found=len(organic_items)
+        ), None
+
+
 class RankTrackerService:
     """
     Main service orchestrating Google Ethiopia rank tracking, snapshot storage,
     position change calculations, and batch check jobs.
+    Coordinates DataForSEO REST API provider and Google Ethiopia direct scraper.
     """
 
-    def __init__(self, serp_client: Optional[GoogleEtSerpClient] = None):
+    def __init__(
+        self,
+        serp_client: Optional[GoogleEtSerpClient] = None,
+        dataforseo_client: Optional[DataForSeoSerpClient] = None,
+        provider: Optional[str] = None
+    ):
         self.serp_client = serp_client or GoogleEtSerpClient()
+        self.dataforseo_client = dataforseo_client or DataForSeoSerpClient()
+        default_prov = getattr(settings, 'SERP_TRACKER_PROVIDER', 'auto')
+        if getattr(settings, 'TESTING', False) or 'test' in sys.argv:
+            default_prov = 'scraper'
+        self.provider = (provider or default_prov).lower().strip()
 
     def check_keyword(self, keyword: Keyword) -> KeywordRanking:
         """
         Execute SERP check for a single keyword against google.com.et and persist RankingSnapshot.
         Guarantees isolation: failures are recorded as error snapshots rather than throwing fatal exceptions.
+        Distinguishes clearly between:
+        - Ranking found: position (1-100), status=found
+        - Not in top 100: position=None, status=not_found
+        - Request/parsing failure: position=None, status=error, diagnostic error_message.
         """
         now = timezone.now()
         target_website = keyword.project.website_url
+        target_norm = SerpParser.normalize_domain(target_website)
+        used_provider = "scraper"
+        serp_result: Optional[SerpResult] = None
+        dataforseo_error: Optional[str] = None
 
-        try:
-            html = self.serp_client.fetch_serp(
-                keyword=keyword.keyword,
-                language=keyword.language,
-                device=keyword.device
-            )
-            serp_result = SerpParser.parse_google_serp(html, target_website)
-        except Exception as exc:
-            logger.error(f"[RankTracker] Check failed for keyword #{keyword.id} ('{keyword.keyword}'): {exc}")
-            serp_result = SerpResult(
-                position=None,
-                url=None,
-                title=None,
-                status=RankingResultStatus.ERROR,
-                error_message=str(exc)[:500]
-            )
+        # 1. Attempt DataForSEO if enabled and credentials configured
+        if self.provider in ('auto', 'dataforseo') and self.dataforseo_client.is_configured:
+            try:
+                res, dataforseo_error = self.dataforseo_client.check_serp(
+                    keyword=keyword.keyword,
+                    target_website=target_website,
+                    language=keyword.language,
+                    device=keyword.device
+                )
+                if res is not None:
+                    serp_result = res
+                    used_provider = "dataforseo"
+                elif self.provider == 'dataforseo':
+                    serp_result = SerpResult(
+                        position=None,
+                        url=None,
+                        title=None,
+                        status=RankingResultStatus.ERROR,
+                        error_message=dataforseo_error or "DataForSEO SERP check failed."
+                    )
+                    used_provider = "dataforseo"
+            except Exception as e:
+                logger.warning(f"[RankTracker] DataForSEO check error: {e}")
+                dataforseo_error = str(e)
+                if self.provider == 'dataforseo':
+                    serp_result = SerpResult(
+                        position=None,
+                        url=None,
+                        title=None,
+                        status=RankingResultStatus.ERROR,
+                        error_message=f"DataForSEO error: {str(e)[:300]}"
+                    )
+                    used_provider = "dataforseo"
+
+        # 2. Fall back to / use direct Google scraper if serp_result not yet obtained
+        if serp_result is None:
+            used_provider = "google_scraper"
+            try:
+                html = self.serp_client.fetch_serp(
+                    keyword=keyword.keyword,
+                    language=keyword.language,
+                    device=keyword.device
+                )
+                serp_result = SerpParser.parse_google_serp(html, target_website)
+                if serp_result.status == RankingResultStatus.ERROR and dataforseo_error:
+                    serp_result.error_message = (
+                        f"{serp_result.error_message} (DataForSEO note: {dataforseo_error[:150]})"
+                    )
+            except Exception as exc:
+                clean_err = str(exc)[:300]
+                logger.error(f"[RankTracker] Scraper check failed for keyword #{keyword.id} ('{keyword.keyword}'): {clean_err}")
+                err_msg = clean_err
+                if dataforseo_error:
+                    err_msg = f"{clean_err} (DataForSEO note: {dataforseo_error[:150]})"
+                serp_result = SerpResult(
+                    position=None,
+                    url=None,
+                    title=None,
+                    status=RankingResultStatus.ERROR,
+                    error_message=err_msg
+                )
+
+        # Sanitize error message to prevent raw HTML leaks or excessive length
+        clean_error = re.sub(r'<[^>]+>', '', serp_result.error_message or '')[:500].strip()
+
+        # Structured logging (Requirement 10)
+        logger.info(
+            f"[RankTracker] Keyword check completed: keyword='{keyword.keyword}' (id={keyword.id}) "
+            f"engine='{keyword.search_engine}' domain='{keyword.search_domain}' "
+            f"target_domain='{target_norm}' provider='{used_provider}' "
+            f"results_parsed={serp_result.total_organic_found} "
+            f"domain_found={serp_result.status == RankingResultStatus.FOUND} "
+            f"position={serp_result.position} status='{serp_result.status}' "
+            f"failure_reason='{clean_error}'"
+        )
 
         with transaction.atomic():
             snapshot, _ = KeywordRanking.objects.update_or_create(
@@ -599,7 +933,7 @@ class RankTrackerService:
                     'title': serp_result.title or '',
                     'result_status': serp_result.status,
                     'search_domain': keyword.search_domain or 'google.com.et',
-                    'error_message': serp_result.error_message,
+                    'error_message': clean_error,
                 }
             )
 
@@ -680,12 +1014,14 @@ class RankTrackerService:
             return {
                 'current_position': None,
                 'previous_position': None,
+                'display_position': '—',
                 'change': None,
                 'change_status': 'new',
                 'ranking_url': None,
                 'title': '',
                 'last_checked_at': None,
                 'result_status': 'not_checked',
+                'error_message': '',
             }
 
         current = latest_rankings[0]
@@ -700,8 +1036,10 @@ class RankTrackerService:
         if previous is None:
             if curr_pos is not None:
                 change_status = 'entered'
-            else:
+            elif current.result_status == RankingResultStatus.NOT_FOUND:
                 change_status = 'not_found'
+            else:
+                change_status = 'error' if current.result_status == RankingResultStatus.ERROR else 'new'
         else:
             if curr_pos is not None and prev_pos is not None:
                 # Rank 5 is better than Rank 8 -> change is +3
@@ -717,17 +1055,29 @@ class RankTrackerService:
             elif curr_pos is None and prev_pos is not None:
                 change_status = 'dropped'
             else:
-                change_status = 'not_found'
+                change_status = 'not_found' if current.result_status == RankingResultStatus.NOT_FOUND else current.result_status
+
+        # Format human-readable display position
+        if curr_pos is not None:
+            display_position = f"#{curr_pos}"
+        elif current.result_status == RankingResultStatus.NOT_FOUND:
+            display_position = "Not in top 100"
+        elif current.result_status == RankingResultStatus.ERROR:
+            display_position = "Check failed"
+        else:
+            display_position = "—"
 
         return {
             'current_position': curr_pos,
             'previous_position': prev_pos,
+            'display_position': display_position,
             'change': change,
             'change_status': change_status,
             'ranking_url': current.ranking_url,
             'title': current.title,
             'last_checked_at': current.recorded_at,
             'result_status': current.result_status,
+            'error_message': current.error_message if current.result_status == RankingResultStatus.ERROR else '',
         }
 
     @classmethod

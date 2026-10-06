@@ -72,6 +72,8 @@ export interface KeywordRankingSummary {
   title: string;
   last_checked_at: string | null;
   result_status: string;
+  display_position?: string;
+  error_message?: string;
 }
 
 export interface RankCheckJob {

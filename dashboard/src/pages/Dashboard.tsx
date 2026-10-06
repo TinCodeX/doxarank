@@ -1040,6 +1040,28 @@ export const Dashboard: React.FC = () => {
                                         }}>
                                           #{currPos}
                                         </span>
+                                      ) : summary?.result_status === 'not_found' ? (
+                                        <span style={{
+                                          fontWeight: 700,
+                                          padding: '2px 7px',
+                                          borderRadius: '6px',
+                                          fontSize: '11px',
+                                          backgroundColor: '#f1f5f9',
+                                          color: '#64748b',
+                                        }}>
+                                          {t('status.not_in_top_100', 'Not in top 100')}
+                                        </span>
+                                      ) : summary?.result_status === 'error' ? (
+                                        <span style={{
+                                          fontWeight: 700,
+                                          padding: '2px 7px',
+                                          borderRadius: '6px',
+                                          fontSize: '11px',
+                                          backgroundColor: '#fef2f2',
+                                          color: '#991b1b',
+                                        }} title={summary.error_message || t('status.check_failed', 'Check failed')}>
+                                          {t('status.check_failed', 'Check failed')}
+                                        </span>
                                       ) : (
                                         <span style={{ color: '#64748b' }}>—</span>
                                       )}
@@ -1286,6 +1308,37 @@ export const Dashboard: React.FC = () => {
                                   >
                                     #{currPos}
                                   </span>
+                                ) : summary?.result_status === 'not_found' ? (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      fontWeight: 700,
+                                      fontSize: '11px',
+                                      backgroundColor: '#f1f5f9',
+                                      color: '#64748b',
+                                    }}
+                                  >
+                                    {t('status.not_in_top_100', 'Not in top 100')}
+                                  </span>
+                                ) : summary?.result_status === 'error' ? (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      fontWeight: 700,
+                                      fontSize: '11px',
+                                      backgroundColor: '#fef2f2',
+                                      color: '#991b1b',
+                                    }}
+                                    title={summary.error_message || t('status.check_failed', 'Check failed')}
+                                  >
+                                    {t('status.check_failed', 'Check failed')}
+                                  </span>
                                 ) : (
                                   <span style={{ color: '#64748b' }}>—</span>
                                 )}
@@ -1478,13 +1531,13 @@ export const Dashboard: React.FC = () => {
                               <td style={tdStyle}>
                                 <span style={{
                                   fontWeight: 800,
-                                  fontSize: '13px',
+                                  fontSize: '12px',
                                   padding: '2px 7px',
                                   borderRadius: '6px',
-                                  backgroundColor: ranking.position && ranking.position <= 3 ? '#fef3c7' : ranking.position && ranking.position <= 10 ? '#f3eef9' : '#f1f5f9',
-                                  color: ranking.position && ranking.position <= 3 ? '#92400e' : ranking.position && ranking.position <= 10 ? '#774DA9' : '#475569',
+                                  backgroundColor: ranking.position && ranking.position <= 3 ? '#fef3c7' : ranking.position && ranking.position <= 10 ? '#f3eef9' : ranking.result_status === 'error' ? '#fef2f2' : '#f1f5f9',
+                                  color: ranking.position && ranking.position <= 3 ? '#92400e' : ranking.position && ranking.position <= 10 ? '#774DA9' : ranking.result_status === 'error' ? '#991b1b' : '#475569',
                                 }}>
-                                  #{ranking.position ?? '—'}
+                                  {ranking.position ? `#${ranking.position}` : ranking.result_status === 'not_found' ? t('status.not_in_top_100', 'Not in top 100') : ranking.result_status === 'error' ? t('status.check_failed', 'Check failed') : '—'}
                                 </span>
                               </td>
                               <td style={tdStyle}>
@@ -1493,10 +1546,10 @@ export const Dashboard: React.FC = () => {
                                   borderRadius: '4px',
                                   fontSize: '11px',
                                   fontWeight: 700,
-                                  backgroundColor: ranking.result_status === 'found' ? '#ecfdf5' : '#fef2f2',
-                                  color: ranking.result_status === 'found' ? '#065f46' : '#991b1b',
-                                }}>
-                                  {formatStatus(ranking.result_status || 'found')}
+                                  backgroundColor: ranking.result_status === 'found' ? '#ecfdf5' : ranking.result_status === 'not_found' ? '#f1f5f9' : '#fef2f2',
+                                  color: ranking.result_status === 'found' ? '#065f46' : ranking.result_status === 'not_found' ? '#64748b' : '#991b1b',
+                                }} title={ranking.error_message}>
+                                  {ranking.result_status === 'found' ? t('status.found', 'Found') : ranking.result_status === 'not_found' ? t('status.not_in_top_100', 'Not in top 100') : ranking.result_status === 'error' ? t('status.check_failed', 'Check failed') : formatStatus(ranking.result_status)}
                                 </span>
                               </td>
                               <td style={tdStyle}>

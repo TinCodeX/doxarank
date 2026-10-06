@@ -335,6 +335,7 @@ KEYWORD_INTELLIGENCE_REFRESH_COOLDOWN_SECONDS = config('KEYWORD_INTELLIGENCE_REF
 DATAFORSEO_LOGIN = config('DATAFORSEO_LOGIN', default='')
 DATAFORSEO_PASSWORD = config('DATAFORSEO_PASSWORD', default='')
 DATAFORSEO_API_URL = config('DATAFORSEO_API_URL', default='https://api.dataforseo.com/v3')
+SERP_TRACKER_PROVIDER = config('SERP_TRACKER_PROVIDER', default='auto')
 
 
 # ==============================================================================

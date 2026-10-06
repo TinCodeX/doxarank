@@ -1212,9 +1212,14 @@ def check_keyword_ranking(self, keyword_id: int) -> Optional[int]:
 
     service = RankTrackerService()
     snapshot = service.check_keyword(keyword)
+    domain_found = (snapshot.result_status == 'found')
+    failure_reason = snapshot.error_message if snapshot.result_status == 'error' else ''
     logger.info(
         f"[RankTrackerTask] Keyword #{keyword.id} ('{keyword.keyword}') checked: "
-        f"Pos #{snapshot.position} ({snapshot.result_status})."
+        f"SearchEngine='{keyword.search_engine}' "
+        f"Pos #{snapshot.position} Status='{snapshot.result_status}' "
+        f"DomainFound={domain_found} URL='{snapshot.ranking_url or ''}' "
+        f"FailureReason='{failure_reason}'."
     )
     return snapshot.id
 

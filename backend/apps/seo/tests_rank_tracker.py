@@ -38,6 +38,7 @@ from apps.seo.services.rank_tracker import (
     GoogleEtSerpClient,
     RankTrackerService,
     SerpResult,
+    DataForSeoSerpClient,
 )
 from apps.seo.tasks import (
     check_keyword_ranking,
@@ -1248,4 +1249,281 @@ class ProductionRankTrackerServiceTests(TestCase):
         # Free user blocked from triggering rank check
         res = client.post('/api/seo/rankings/check/', {'keyword_id': kw_free.id})
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ModernSerpPipelineTests(TestCase):
+    """
+    Comprehensive tests for modern Google Ethiopia SERP parsing,
+    DataForSEO integration, domain normalization, and display position formatting.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(email='modern_serp@doxarank.com', password='Password123!')
+        SubscriptionService.assign_plan(self.user, PlanCode.STARTER)
+        self.project = Project.objects.create(
+            owner=self.user,
+            name='Doxa PLC',
+            website_url='https://doxaplc.com/'
+        )
+
+    def test_modern_google_goto_redirect_unwrapping(self):
+        """Modern Google Ethiopia /goto?url= redirect URLs are unwrapped cleanly."""
+        wrapped = "/goto?url=https%3A%2F%2Fdoxaplc.com%2Fservices%2Fseo%2F&ved=2ahUKEwj"
+        clean = SerpParser.clean_google_url(wrapped)
+        self.assertEqual(clean, "https://doxaplc.com/services/seo/")
+
+        # Test absolute google.com.et goto URL
+        abs_wrapped = "https://www.google.com.et/goto?url=https%3A%2F%2Fdoxaplc.com%2Fabout"
+        clean_abs = SerpParser.clean_google_url(abs_wrapped)
+        self.assertEqual(clean_abs, "https://doxaplc.com/about")
+
+    def test_modern_google_serp_containers_and_classes(self):
+        """Parser extracts organic results from modern div.MjjYud / a.zReHs DOM structures."""
+        modern_html = """
+        <!DOCTYPE html>
+        <html><head><title>Search</title></head><body>
+          <div id="rso">
+            <!-- Modern result 1 (Competitor) -->
+            <div class="MjjYud">
+              <div class="tF2Cxc">
+                <div class="yuRUbf">
+                  <a class="zReHs" href="/goto?url=https%3A%2F%2Fother-agency.com%2Fservices">
+                    <h3>Top Ethiopian Agencies</h3>
+                  </a>
+                </div>
+              </div>
+            </div>
+            <!-- Modern result 2 (Target website) -->
+            <div class="MjjYud">
+              <div class="tF2Cxc">
+                <div class="yuRUbf">
+                  <a class="zReHs" href="/goto?url=https%3A%2F%2Fdoxaplc.com%2Fcase-studies">
+                    <h3>DOXA Innovations &amp; SEO Case Studies</h3>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </body></html>
+        """
+        res = SerpParser.parse_google_serp(modern_html, 'https://doxaplc.com/')
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 2)
+        self.assertEqual(res.url, 'https://doxaplc.com/case-studies')
+        self.assertIn('DOXA Innovations', res.title)
+
+    def test_google_enablejs_botguard_challenge_detection(self):
+        """Google enablejs and BotGuard anti-bot pages are detected explicitly as errors."""
+        enablejs_html = """
+        <!DOCTYPE html><html><head><title>Google Search</title></head><body>
+        <noscript>
+          <meta content="0;url=/httpservice/retry/enablejs?sei=xyz" http-equiv="refresh">
+          <div>Please click <a href="/httpservice/retry/enablejs?sei=xyz">here</a></div>
+        </noscript>
+        <script src="https://www.google.com/js/bg/abc.js"></script>
+        </body></html>
+        """
+        is_valid, err = SerpParser.validate_serp_response(enablejs_html)
+        self.assertFalse(is_valid)
+        self.assertIn("enablejs/BotGuard", err)
+
+        res = SerpParser.parse_google_serp(enablejs_html, 'https://doxaplc.com/')
+        self.assertEqual(res.status, RankingResultStatus.ERROR)
+        self.assertIsNone(res.position)
+        self.assertIn("enablejs/BotGuard", res.error_message)
+
+    def test_domain_normalization_and_strict_matching(self):
+        """Domain normalization handles schemes, paths, ports, and www without false positives."""
+        self.assertEqual(SerpParser.normalize_domain('https://www.doxaplc.com/about/'), 'doxaplc.com')
+        self.assertEqual(SerpParser.normalize_domain('http://doxaplc.com:8080/'), 'doxaplc.com')
+        self.assertEqual(SerpParser.normalize_domain('doxaplc.com/'), 'doxaplc.com')
+
+        # Matching tests
+        self.assertTrue(SerpParser.domains_match('https://doxaplc.com/page', 'https://www.doxaplc.com/'))
+        self.assertTrue(SerpParser.domains_match('https://blog.doxaplc.com/post', 'doxaplc.com'))
+        # Substring false positive rejection: notdoxaplc.com must NOT match doxaplc.com
+        self.assertFalse(SerpParser.domains_match('https://notdoxaplc.com/page', 'doxaplc.com'))
+        self.assertFalse(SerpParser.domains_match('https://doxaplc.org/page', 'doxaplc.com'))
+
+    @patch('httpx.Client.post')
+    def test_dataforseo_serp_client_success_found(self, mock_post):
+        """DataForSeoSerpClient successfully queries live organic SERP and finds ranking."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.is_success = True
+        mock_resp.json.return_value = {
+            "tasks": [
+                {
+                    "status_code": 20000,
+                    "status_message": "Ok.",
+                    "result": [
+                        {
+                            "items": [
+                                {
+                                    "type": "organic",
+                                    "rank_group": 1,
+                                    "url": "https://wikipedia.org/wiki/Start",
+                                    "title": "Start - Wikipedia",
+                                    "domain": "wikipedia.org"
+                                },
+                                {
+                                    "type": "organic",
+                                    "rank_group": 7,
+                                    "url": "https://doxaplc.com/start-project",
+                                    "title": "Start Your Project - DOXA",
+                                    "domain": "doxaplc.com"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_post.return_value = mock_resp
+
+        client = DataForSeoSerpClient(login="test_user", password="test_password")
+        res, err = client.check_serp(
+            keyword="Start",
+            target_website="https://doxaplc.com",
+            language="en"
+        )
+        self.assertIsNone(err)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.status, RankingResultStatus.FOUND)
+        self.assertEqual(res.position, 7)
+        self.assertEqual(res.url, "https://doxaplc.com/start-project")
+
+    @patch('httpx.Client.post')
+    def test_dataforseo_serp_client_not_found(self, mock_post):
+        """DataForSeoSerpClient returns NOT_FOUND when domain is not in results."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.is_success = True
+        mock_resp.json.return_value = {
+            "tasks": [
+                {
+                    "status_code": 20000,
+                    "status_message": "Ok.",
+                    "result": [
+                        {
+                            "items": [
+                                {
+                                    "type": "organic",
+                                    "rank_group": 1,
+                                    "url": "https://wikipedia.org/wiki/Start",
+                                    "title": "Start - Wikipedia",
+                                    "domain": "wikipedia.org"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_post.return_value = mock_resp
+
+        client = DataForSeoSerpClient(login="test_user", password="test_password")
+        res, err = client.check_serp(
+            keyword="Start",
+            target_website="https://doxaplc.com",
+            language="en"
+        )
+        self.assertIsNone(err)
+        self.assertIsNotNone(res)
+        self.assertEqual(res.status, RankingResultStatus.NOT_FOUND)
+        self.assertIsNone(res.position)
+
+    def test_position_metrics_human_readable_display(self):
+        """calculate_position_metrics returns clean display_position values."""
+        kw = Keyword.objects.create(project=self.project, keyword='test display kw')
+
+        # Scenario 1: Not checked yet
+        m1 = RankTrackerService.calculate_position_metrics(kw)
+        self.assertEqual(m1['display_position'], '—')
+        self.assertEqual(m1['result_status'], 'not_checked')
+
+        # Scenario 2: Found at rank #7
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=7,
+            result_status=RankingResultStatus.FOUND,
+            recorded_at=timezone.now()
+        )
+        m2 = RankTrackerService.calculate_position_metrics(kw)
+        self.assertEqual(m2['display_position'], '#7')
+        self.assertEqual(m2['current_position'], 7)
+
+        # Scenario 3: Not in top 100
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=None,
+            result_status=RankingResultStatus.NOT_FOUND,
+            recorded_at=timezone.now() + timezone.timedelta(minutes=1)
+        )
+        m3 = RankTrackerService.calculate_position_metrics(kw)
+        self.assertEqual(m3['display_position'], 'Not in top 100')
+        self.assertIsNone(m3['current_position'])
+
+        # Scenario 4: Error / Check failed
+        KeywordRanking.objects.create(
+            keyword=kw,
+            position=None,
+            result_status=RankingResultStatus.ERROR,
+            error_message='Google anti-bot challenge',
+            recorded_at=timezone.now() + timezone.timedelta(minutes=2)
+        )
+        m4 = RankTrackerService.calculate_position_metrics(kw)
+        self.assertEqual(m4['display_position'], 'Check failed')
+        self.assertIsNone(m4['current_position'])
+        self.assertIn('anti-bot', m4['error_message'])
+
+    def test_three_keyword_scenarios(self):
+        """
+        Verifies Requirement 15:
+        1. Broad keyword where domain is not in top 100 -> status='not_found', pos=None
+        2. Keyword that returns project's own domain -> status='found', pos=1
+        3. Scraper error/block -> status='error', pos=None
+        """
+        # Keyword 1: Broad keyword not ranking
+        kw_broad = Keyword.objects.create(project=self.project, keyword='Start')
+        broad_html = """
+        <html><body><div id="rso">
+          <div class="g"><a href="https://example.com/one"><h3>Example One</h3></a></div>
+          <div class="g"><a href="https://example.com/two"><h3>Example Two</h3></a></div>
+        </div></body></html>
+        """
+        with patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=broad_html):
+            service = RankTrackerService()
+            snap_broad = service.check_keyword(kw_broad)
+            self.assertEqual(snap_broad.result_status, RankingResultStatus.NOT_FOUND)
+            self.assertIsNone(snap_broad.position)
+            metrics_broad = RankTrackerService.calculate_position_metrics(kw_broad)
+            self.assertEqual(metrics_broad['display_position'], 'Not in top 100')
+
+        # Keyword 2: Branded keyword ranking #1
+        kw_branded = Keyword.objects.create(project=self.project, keyword='Doxa Innovations Ethiopia')
+        branded_html = """
+        <html><body><div id="rso">
+          <div class="g"><a href="https://doxaplc.com/home"><h3>DOXA Innovations Ethiopia - Official</h3></a></div>
+        </div></body></html>
+        """
+        with patch.object(GoogleEtSerpClient, 'fetch_serp', return_value=branded_html):
+            service = RankTrackerService()
+            snap_branded = service.check_keyword(kw_branded)
+            self.assertEqual(snap_branded.result_status, RankingResultStatus.FOUND)
+            self.assertEqual(snap_branded.position, 1)
+            metrics_branded = RankTrackerService.calculate_position_metrics(kw_branded)
+            self.assertEqual(metrics_branded['display_position'], '#1')
+
+        # Keyword 3: Error / Blocked
+        kw_err = Keyword.objects.create(project=self.project, keyword='blocked keyword')
+        with patch.object(GoogleEtSerpClient, 'fetch_serp', side_effect=RuntimeError("Google rate limit (HTTP 429)")):
+            service = RankTrackerService()
+            snap_err = service.check_keyword(kw_err)
+            self.assertEqual(snap_err.result_status, RankingResultStatus.ERROR)
+            self.assertIsNone(snap_err.position)
+            self.assertIn('429', snap_err.error_message)
+            metrics_err = RankTrackerService.calculate_position_metrics(kw_err)
+            self.assertEqual(metrics_err['display_position'], 'Check failed')
+
 
