@@ -3,13 +3,14 @@ import Layout from '../layouts/Layout.astro';
 
 const plans = [
   {
+    id: 'free',
     name: 'Free',
     price: 'ETB 0',
     period: 'forever',
     description: 'Essential rank tracking and health auditing for small websites and personal projects.',
-    badge: null,
+    badge: 'Starter Choice',
     cta: 'Start Free',
-    ctaLink: '/signup',
+    ctaLink: '/signup?plan=free',
     featured: false,
     features: [
       '1 Website project',
@@ -23,6 +24,7 @@ const plans = [
     ],
   },
   {
+    id: 'starter',
     name: 'Starter',
     price: 'ETB 1,500',
     period: 'per month',
@@ -35,7 +37,7 @@ const plans = [
       '5 Website projects',
       '100 Keywords tracked',
       'Daily google.com.et & regional tracking',
-      'Amharic Fidel normalization & Oromo intelligence',
+      'Amharic Fidel normalization & Oromic intelligence',
       'On-demand technical SEO crawler (up to 2,500 URLs)',
       'Competitor SERP snapshots (up to 5 competitors/project)',
       'Rule-based prioritized recommendation feed',
@@ -45,6 +47,7 @@ const plans = [
     ],
   },
   {
+    id: 'agency',
     name: 'Agency',
     price: 'ETB 6,000',
     period: 'per month',
@@ -104,66 +107,72 @@ const faqs = [
     </div>
 
     <!-- Pricing Cards (3 Columns) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-stretch mb-20">
-      {plans.map((plan) => (
-        <div class={`relative rounded-2xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-200 ${
-          plan.featured 
-            ? 'bg-[#24143C] text-white shadow-xl shadow-purple-950/20 ring-2 ring-[#774DA9] md:-translate-y-2' 
-            : 'bg-white text-slate-900 border border-slate-200 shadow-xs hover:border-[#774DA9]/50 hover:shadow-md'
-        }`}>
-          {plan.badge && (
-            <div class="absolute -top-3.5 left-1/2 -translate-x-1/2">
-              <span class="px-3.5 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-[#774DA9] text-white shadow-sm border border-purple-400/40">
-                {plan.badge}
-              </span>
-            </div>
-          )}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-stretch mb-20" id="pricing-plans-grid">
+      {plans.map((plan) => {
+        const isDefault = plan.featured;
+        return (
+          <div
+            data-plan-id={plan.id}
+            class={`pricing-card relative rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 cursor-pointer select-none ${
+              isDefault 
+                ? 'is-selected bg-gradient-to-b from-[#24143C] to-[#2f194e] text-white shadow-2xl shadow-purple-950/20 ring-2 ring-[#774DA9] md:-translate-y-2' 
+                : 'glass-card text-slate-900 border border-purple-200/50 shadow-md hover:border-[#774DA9]/60 hover:shadow-xl'
+            }`}
+          >
+            {plan.badge && (
+              <div class={`plan-badge-wrapper absolute -top-3.5 left-1/2 -translate-x-1/2 transition-all duration-200 ${isDefault ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+                <span class="px-4 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-[#774DA9] text-white shadow-sm border border-purple-400/40">
+                  {plan.badge}
+                </span>
+              </div>
+            )}
 
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-xl font-bold tracking-tight">{plan.name}</h3>
-            </div>
-            
-            <p class={`text-xs sm:text-sm mb-5 leading-relaxed ${plan.featured ? 'text-purple-200' : 'text-slate-600'}`}>
-              {plan.description}
-            </p>
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="plan-title text-2xl font-bold tracking-tight">{plan.name}</h3>
+              </div>
+              
+              <p class={`plan-desc text-xs sm:text-sm mb-5 leading-relaxed transition-colors ${isDefault ? 'text-purple-200' : 'text-slate-600'}`}>
+                {plan.description}
+              </p>
 
-            <div class={`mb-6 pb-5 border-b ${plan.featured ? 'border-[#3b1d5f]' : 'border-slate-100'}`}>
-              <span class="text-3xl sm:text-4xl font-extrabold tracking-tight">{plan.price}</span>
-              <span class={`text-xs ml-2 font-medium ${plan.featured ? 'text-purple-300' : 'text-slate-500'}`}>
-                /{plan.period}
-              </span>
+              <div class={`plan-divider mb-6 pb-5 border-b transition-colors ${isDefault ? 'border-[#3b1d5f]' : 'border-purple-100'}`}>
+                <span class="plan-price text-3xl sm:text-4xl font-extrabold tracking-tight">{plan.price}</span>
+                <span class={`plan-period text-xs ml-2 font-medium transition-colors ${isDefault ? 'text-purple-300' : 'text-slate-500'}`}>
+                  /{plan.period}
+                </span>
+              </div>
+
+              <ul class="space-y-3 mb-8 text-xs sm:text-sm">
+                {plan.features.map((feature) => (
+                  <li class="flex items-start gap-2.5">
+                    <svg class={`plan-icon w-4 h-4 shrink-0 mt-0.5 transition-colors ${isDefault ? 'text-[#a372df]' : 'text-[#774DA9]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span class={`plan-feature-text transition-colors ${isDefault ? 'text-slate-200' : 'text-slate-700'}`}>{feature}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            <ul class="space-y-3 mb-8 text-xs sm:text-sm">
-              {plan.features.map((feature) => (
-                <li class="flex items-start gap-2.5">
-                  <svg class={`w-4 h-4 shrink-0 mt-0.5 ${plan.featured ? 'text-[#a372df]' : 'text-[#774DA9]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span class={plan.featured ? 'text-slate-200' : 'text-slate-700'}>{feature}</span>
-                </li>
-              ))}
-            </ul>
+            <div>
+              <a
+                href={plan.ctaLink}
+                class={`plan-cta w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-full font-bold text-sm transition-all ${
+                  isDefault
+                    ? 'btn-pill-primary shadow-lg'
+                    : 'btn-pill-secondary'
+                }`}
+              >
+                <span>{plan.cta}</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </a>
+            </div>
           </div>
-
-          <div>
-            <a
-              href={plan.ctaLink}
-              class={`w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all ${
-                plan.featured
-                  ? 'bg-[#774DA9] hover:bg-[#865cb8] text-white shadow-md'
-                  : 'bg-[#24143C] hover:bg-[#3b1d5f] text-white shadow-xs'
-              }`}
-            >
-              <span>{plan.cta}</span>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </a>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
 
     <!-- FAQ Section -->
@@ -185,4 +194,148 @@ const faqs = [
       </div>
     </div>
   </div>
+
+  <script>
+    function setupPricingInteractivity() {
+      const cards = document.querySelectorAll<HTMLElement>('.pricing-card');
+      if (!cards.length) return;
+
+      const activeCardClasses = [
+        'is-selected',
+        'bg-gradient-to-b',
+        'from-[#24143C]',
+        'to-[#2f194e]',
+        'text-white',
+        'shadow-2xl',
+        'shadow-purple-950/20',
+        'ring-2',
+        'ring-[#774DA9]',
+        'md:-translate-y-2'
+      ];
+
+      const inactiveCardClasses = [
+        'glass-card',
+        'text-slate-900',
+        'border',
+        'border-purple-200/50',
+        'shadow-md',
+        'hover:border-[#774DA9]/60',
+        'hover:shadow-xl'
+      ];
+
+      function selectPlan(targetCard: HTMLElement) {
+        cards.forEach((card) => {
+          const isSelected = card === targetCard;
+          const badgeWrapper = card.querySelector<HTMLElement>('.plan-badge-wrapper');
+          const desc = card.querySelector<HTMLElement>('.plan-desc');
+          const divider = card.querySelector<HTMLElement>('.plan-divider');
+          const period = card.querySelector<HTMLElement>('.plan-period');
+          const icons = card.querySelectorAll<HTMLElement>('.plan-icon');
+          const featureTexts = card.querySelectorAll<HTMLElement>('.plan-feature-text');
+          const cta = card.querySelector<HTMLElement>('.plan-cta');
+
+          if (isSelected) {
+            inactiveCardClasses.forEach((cls) => card.classList.remove(cls));
+            activeCardClasses.forEach((cls) => card.classList.add(cls));
+
+            if (badgeWrapper) {
+              badgeWrapper.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+              badgeWrapper.classList.add('opacity-100', 'scale-100');
+            }
+
+            if (desc) {
+              desc.classList.remove('text-slate-600');
+              desc.classList.add('text-purple-200');
+            }
+
+            if (divider) {
+              divider.classList.remove('border-purple-100');
+              divider.classList.add('border-[#3b1d5f]');
+            }
+
+            if (period) {
+              period.classList.remove('text-slate-500');
+              period.classList.add('text-purple-300');
+            }
+
+            icons.forEach((icon) => {
+              icon.classList.remove('text-[#774DA9]');
+              icon.classList.add('text-[#a372df]');
+            });
+
+            featureTexts.forEach((text) => {
+              text.classList.remove('text-slate-700');
+              text.classList.add('text-slate-200');
+            });
+
+            if (cta) {
+              cta.classList.remove('btn-pill-secondary');
+              cta.classList.add('btn-pill-primary', 'shadow-lg');
+            }
+          } else {
+            activeCardClasses.forEach((cls) => card.classList.remove(cls));
+            inactiveCardClasses.forEach((cls) => card.classList.add(cls));
+
+            if (badgeWrapper) {
+              badgeWrapper.classList.remove('opacity-100', 'scale-100');
+              badgeWrapper.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+            }
+
+            if (desc) {
+              desc.classList.remove('text-purple-200');
+              desc.classList.add('text-slate-600');
+            }
+
+            if (divider) {
+              divider.classList.remove('border-[#3b1d5f]');
+              divider.classList.add('border-purple-100');
+            }
+
+            if (period) {
+              period.classList.remove('text-purple-300');
+              period.classList.add('text-slate-500');
+            }
+
+            icons.forEach((icon) => {
+              icon.classList.remove('text-[#a372df]');
+              icon.classList.add('text-[#774DA9]');
+            });
+
+            featureTexts.forEach((text) => {
+              text.classList.remove('text-slate-200');
+              text.classList.add('text-slate-700');
+            });
+
+            if (cta) {
+              cta.classList.remove('btn-pill-primary', 'shadow-lg');
+              cta.classList.add('btn-pill-secondary');
+            }
+          }
+        });
+      }
+
+      cards.forEach((card) => {
+        card.addEventListener('click', (e) => {
+          selectPlan(card);
+        });
+      });
+
+      // Check query parameter if present
+      const params = new URLSearchParams(window.location.search);
+      const planQuery = params.get('plan');
+      if (planQuery) {
+        const matchingCard = document.querySelector<HTMLElement>(`[data-plan-id="${planQuery.toLowerCase()}"]`);
+        if (matchingCard) {
+          selectPlan(matchingCard);
+        }
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupPricingInteractivity);
+    } else {
+      setupPricingInteractivity();
+    }
+    document.addEventListener('astro:page-load', setupPricingInteractivity);
+  </script>
 </Layout>

@@ -42,7 +42,7 @@ const structuredData = {
     address: {
       '@type': 'PostalAddress',
       addressCountry: 'ET',
-      addressLocality: 'Addis Ababa',
+      addressLocality: 'Bishoftu',
     },
   },
 };
@@ -84,7 +84,7 @@ const structuredData = {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
 
@@ -92,7 +92,7 @@ const structuredData = {
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
   </head>
 
-  <body class="flex min-h-screen flex-col bg-[#faf9fc] text-[#1a1625] antialiased selection:bg-[#774DA9] selection:text-white">
+  <body class="flex min-h-screen flex-col bg-pastel-mesh text-[#1a1625] antialiased selection:bg-[#774DA9] selection:text-white relative">
     {!hideNav && <Navbar />}
     <main class="flex-grow">
       <slot />

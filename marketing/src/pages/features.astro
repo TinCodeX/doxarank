@@ -96,10 +96,10 @@ const featureGroups = [
     <!-- Feature Grid (2 Columns, High Information Density) -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-16">
       {featureGroups.map((feature, idx) => (
-        <div id={feature.id} class="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-7 hover:border-[#774DA9]/60 hover:shadow-lg transition-all flex flex-col justify-between">
+        <div id={feature.id} class="glass-card glass-card-hover rounded-3xl p-6 sm:p-8 flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between gap-4 mb-3.5">
-              <span class="px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#f3eef9] text-[#774DA9] border border-[#dac8ee]">
+              <span class="px-3 py-1 rounded-full text-[11px] font-bold bg-[#f3eef9] text-[#774DA9] border border-purple-200/60">
                 {feature.tag}
               </span>
               <span class="text-xs font-mono font-bold text-slate-400">
@@ -107,7 +107,7 @@ const featureGroups = [
               </span>
             </div>
             
-            <h2 class="text-xl font-bold tracking-tight text-[#24143C] mb-2.5">
+            <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-[#24143C] mb-2.5">
               {feature.title}
             </h2>
             
@@ -127,9 +127,9 @@ const featureGroups = [
             </ul>
           </div>
 
-          <div class="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
+          <div class="mt-6 pt-5 border-t border-purple-100 flex items-center justify-between">
             <span class="text-xs font-medium text-slate-500">Live on Google Ethiopia</span>
-            <a href="/signup" class="text-xs font-bold text-[#774DA9] hover:text-[#673f97] flex items-center gap-1 group">
+            <a href="/signup" class="rounded-full px-3.5 py-1 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-[#774DA9] flex items-center gap-1 group transition">
               Try now 
               <span class="group-hover:translate-x-0.5 transition-transform">&rarr;</span>
             </a>
@@ -139,9 +139,9 @@ const featureGroups = [
     </div>
 
     <!-- Bottom CTA Card in Doxa Deep Purple -->
-    <div class="bg-[#24143C] rounded-2xl p-8 sm:p-12 text-center text-white border border-[#3b1d5f] relative overflow-hidden">
+    <div class="rounded-3xl p-8 sm:p-12 text-center text-white bg-gradient-to-br from-[#24143C] via-[#311652] to-[#492275] border border-purple-300/30 relative overflow-hidden shadow-2xl">
       <div class="absolute -right-10 -bottom-10 w-60 h-60 bg-[#774DA9]/20 blur-[70px] rounded-full pointer-events-none"></div>
-      <img src="/doxa-logo.png" alt="Doxa" class="h-10 w-10 mx-auto mb-3 object-contain" />
+      <img src="/doxa-logo.png" alt="Doxa" class="h-10 w-10 mx-auto mb-3 object-contain rounded-full" />
       <h2 class="text-2xl sm:text-3xl font-extrabold mb-3">
         Ready to audit and rank your website on Google Ethiopia?
       </h2>
@@ -149,10 +149,10 @@ const featureGroups = [
         Join Ethiopian businesses and digital marketing agencies achieving top rankings with DoxaRank.
       </p>
       <div class="flex flex-col sm:flex-row items-center justify-center gap-3.5">
-        <a href="/signup" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold bg-[#774DA9] hover:bg-[#865cb8] text-white transition-all shadow-md">
+        <a href="/signup" class="btn-pill-primary w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white shadow-md">
           Start Free Account
         </a>
-        <a href="/pricing" class="w-full sm:w-auto px-6 py-3 rounded-xl font-semibold bg-[#1a0c2e] hover:bg-[#3b1d5f] text-purple-200 border border-[#3b1d5f] transition-colors">
+        <a href="/pricing" class="w-full sm:w-auto px-7 py-3.5 rounded-full font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-colors text-sm">
           View Pricing Plans
         </a>
       </div>

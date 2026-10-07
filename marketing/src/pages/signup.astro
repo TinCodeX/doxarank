@@ -5,17 +5,17 @@ const dashboardUrl = import.meta.env.PUBLIC_DASHBOARD_URL || 'http://localhost:5
 ---
 
 <Layout title="Start Free — DoxaRank | Ethiopia SEO SaaS" description="Create your free DoxaRank account. Track google.com.et rankings, run technical crawls, and optimize for Ethiopian search.">
-  <section class="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-    <div class="w-full max-w-md bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-purple-950/5 p-8 text-center">
+  <section class="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+    <div class="w-full max-w-md glass-card rounded-3xl shadow-xl p-8 text-center border border-purple-200/60 bg-white/90">
       <img
         src="/doxa-logo.png"
         alt="DoxaRank Logo"
-        class="h-14 w-14 object-contain mx-auto mb-3 rounded-xl shadow-xs"
+        class="h-14 w-14 object-contain mx-auto mb-3 rounded-full shadow-xs"
         width="56"
         height="56"
       />
 
-      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f3eef9] border border-[#dac8ee] text-[#774DA9] text-xs font-bold mb-3">
+      <div class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#f3eef9] border border-purple-200 text-[#774DA9] text-xs font-bold mb-3">
         Free Tier &bull; ETB 0 / forever
       </div>
 
@@ -29,7 +29,7 @@ const dashboardUrl = import.meta.env.PUBLIC_DASHBOARD_URL || 'http://localhost:5
       <div class="space-y-3.5">
         <a 
           href={`${dashboardUrl}/register`}
-          class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-[#774DA9] hover:bg-[#673f97] active:bg-[#53327d] rounded-xl transition-all shadow-md"
+          class="btn-pill-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold text-white shadow-md"
         >
           <span>Create Account on Dashboard</span>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,22 +39,22 @@ const dashboardUrl = import.meta.env.PUBLIC_DASHBOARD_URL || 'http://localhost:5
 
         <div class="relative py-2">
           <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-slate-200"></div>
+            <div class="w-full border-t border-purple-100"></div>
           </div>
           <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-white px-2 text-slate-400 font-semibold">Already registered?</span>
+            <span class="bg-white/90 px-3 text-slate-400 font-semibold rounded-full">Already registered?</span>
           </div>
         </div>
 
         <a 
           href="/login" 
-          class="w-full inline-flex items-center justify-center px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-[#faf7fd] hover:bg-[#f3eef9] hover:text-[#774DA9] rounded-xl border border-[#dac8ee] transition-colors"
+          class="btn-pill-secondary w-full inline-flex items-center justify-center px-6 py-3 text-xs sm:text-sm font-semibold text-slate-700"
         >
           Sign In to Existing Account
         </a>
       </div>
 
-      <div class="mt-6 pt-5 border-t border-slate-100 text-xs text-slate-600 text-left space-y-2">
+      <div class="mt-6 pt-5 border-t border-purple-100 text-xs text-slate-600 text-left space-y-2">
         <p class="font-bold text-[#24143C]">Included in Free Tier:</p>
         <ul class="space-y-1.5 text-slate-600 text-[11px] sm:text-xs">
           <li class="flex items-center gap-2">

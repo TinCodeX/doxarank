@@ -28,7 +28,7 @@ export const marketingTranslations: Record<SupportedLanguage, Record<string, str
     'diff.et_engine.title': 'Google Ethiopia SERP Engine',
     'diff.et_engine.subtitle': 'google.com.et Indexing',
     'diff.et_engine.desc': 'Track desktop and mobile ranking positions as seen by searchers inside Ethiopia, not foreign approximations.',
-    'diff.nlp.title': 'Amharic & Oromo Search NLP',
+    'diff.nlp.title': 'Amharic & Oromic Search NLP',
     'diff.nlp.subtitle': 'Multilingual Fidel Engine',
     'diff.nlp.desc': 'Unicode preservation and Fidel homophone handling (ሀ/ሐ/ኀ, ሰ/ሠ, አ/ዐ) so queries like ሆቴል match accurately.',
     'diff.domain.title': '.et Domain Architecture',

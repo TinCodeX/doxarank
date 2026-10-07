@@ -2,33 +2,38 @@
 const currentYear = new Date().getFullYear();
 ---
 
-<footer class="border-t border-[#3b1d5f] bg-[#24143C] text-slate-300">
-  <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+<footer class="mt-16 border-t border-purple-900/20 bg-[#24143C] text-slate-300 relative overflow-hidden">
+  <!-- Subtle ambient glow in footer -->
+  <div class="absolute top-0 right-1/4 w-96 h-48 bg-[#774DA9]/15 blur-[80px] pointer-events-none rounded-full"></div>
+  
+  <div class="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16 relative z-10">
     <div class="grid grid-cols-2 gap-8 md:grid-cols-4 lg:grid-cols-5">
       
       <!-- Brand Column (spans 2 on lg) -->
       <div class="col-span-2">
-        <a href="/" class="flex items-center gap-3">
-          <img
-            src="/doxa-logo.png"
-            alt="DoxaRank Logo"
-            class="h-8 w-8 object-contain rounded-md"
-            width="32"
-            height="32"
-          />
+        <a href="/" class="inline-flex items-center gap-3">
+          <div class="h-9 w-9 rounded-full bg-white/10 p-1 flex items-center justify-center">
+            <img
+              src="/doxa-logo.png"
+              alt="DoxaRank Logo"
+              class="h-7 w-7 object-contain rounded-full"
+              width="28"
+              height="28"
+            />
+          </div>
           <span class="text-xl font-extrabold tracking-tight text-white">
             Doxa<span class="text-[#a372df]">Rank</span>
           </span>
-          <span class="rounded-full bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-800">
+          <span class="rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-slate-300 border border-purple-800/60">
             ET
           </span>
         </a>
         <p class="mt-4 max-w-sm text-sm text-slate-400 leading-relaxed" data-i18n="footer.desc">
           The dedicated SEO intelligence platform for Google Ethiopia. Monitoring keywords in Amharic, Afaan Oromoo, and English.
         </p>
-        <div class="mt-6 flex items-center gap-2 text-xs font-semibold text-emerald-400">
-          <span class="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Live SERP monitoring across Addis Ababa &amp; Ethiopia
+        <div class="mt-5 inline-flex items-center gap-2 rounded-full bg-white/5 border border-purple-800/60 px-3 py-1 text-xs font-semibold text-slate-400">
+          <span class="inline-block h-2 w-2 rounded-full bg-[#a372df]"></span>
+          Live SERP monitoring across Bishoftu &amp; Ethiopia
         </div>
       </div>
 
@@ -65,18 +70,18 @@ const currentYear = new Date().getFullYear();
           <li><a href="/features#integrations" class="hover:text-[#a372df] transition">Google Analytics 4</a></li>
           <li><a href="/features#integrations" class="hover:text-[#a372df] transition">Microsoft Clarity</a></li>
           <li><a href="/features#integrations" class="hover:text-[#a372df] transition">Google Tag Manager</a></li>
-          <li><a href="/login" class="hover:text-white font-semibold text-[#a372df] transition" data-i18n="nav.sign_in">Sign In</a></li>
-          <li><a href="/signup" class="hover:text-white font-semibold text-emerald-400 transition" data-i18n="nav.start_free">Start Free</a></li>
+          <li><a href="/login" class="hover:text-[#a372df] transition" data-i18n="nav.sign_in">Sign In</a></li>
+          <li><a href="/signup" class="hover:text-[#a372df] transition" data-i18n="nav.start_free">Start Free</a></li>
         </ul>
       </div>
 
     </div>
 
     <!-- Bottom Bar -->
-    <div class="mt-12 border-t border-[#3b1d5f] pt-8 sm:flex sm:items-center sm:justify-between text-xs text-slate-400">
+    <div class="mt-12 border-t border-[#3b1d5f]/80 pt-8 sm:flex sm:items-center sm:justify-between text-xs text-slate-400">
       <p>© {currentYear} DoxaRank. <span data-i18n="footer.rights">All rights reserved. Built for the Ethiopian digital ecosystem.</span></p>
       <div class="mt-4 sm:mt-0 flex gap-6">
-        <span>Addis Ababa, Ethiopia</span>
+        <span>Bishoftu, Ethiopia</span>
         <span>•</span>
         <a href="/about" class="hover:text-[#a372df]" data-i18n="footer.about">About</a>
         <span>•</span>

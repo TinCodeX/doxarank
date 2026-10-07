@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { Globe, Languages, Server, BarChart3, Check, TrendingUp, Lightbulb } from 'lucide-astro';
+import { Globe, Languages, Server, BarChart3, Check, TrendingUp, Lightbulb, Sparkles, ArrowRight, ShieldCheck, Zap } from 'lucide-astro';
 
 const differentiators = [
   {
@@ -13,7 +13,7 @@ const differentiators = [
   {
     key: 'diff.nlp',
     iconComponent: Languages,
-    title: 'Amharic & Oromo Search NLP',
+    title: 'Amharic & Oromic Search NLP',
     subtitle: 'Multilingual Fidel Engine',
     description: 'Unicode preservation and Fidel homophone handling (ሀ/ሐ/ኀ, ሰ/ሠ, አ/ዐ) so queries like ሆቴል match accurately.',
   },
@@ -107,218 +107,226 @@ const coreFeatures = [
 >
   
   <!-- ========================================================================= -->
-  <!-- 1. HERO SECTION (Doxa Deep Purple Accents & High Information Density) -->
+  <!-- 1. HERO SECTION (Dreamy Fly.io Mesh Gradient & Editorial Elegance) -->
   <!-- ========================================================================= -->
-  <section class="relative overflow-hidden bg-white pt-12 pb-16 sm:pt-16 sm:pb-20 border-b border-purple-900/10">
-    <!-- Subtle Ambient Brand Glow -->
-    <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-[#774DA9]/10 blur-[100px] pointer-events-none rounded-full"></div>
+  <section class="relative overflow-hidden pt-8 pb-12 sm:pt-14 sm:pb-18">
     
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative">
+    <!-- Ambient Dreamy Color Blooms (Peach, Lavender, Sky-Blue) -->
+    <div class="absolute top-0 left-1/4 -translate-x-1/2 w-[520px] h-[380px] bg-rose-200/40 rounded-full blur-[110px] pointer-events-none -z-10"></div>
+    <div class="absolute top-10 right-1/4 translate-x-1/2 w-[560px] h-[420px] bg-purple-200/50 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+    <div class="absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[340px] bg-indigo-100/60 rounded-full blur-[130px] pointer-events-none -z-10"></div>
+
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 relative z-10">
+      
       <div class="mx-auto max-w-3xl text-center">
         
-        <!-- Official Brand Logo & Ethiopia Badge -->
-        <div class="inline-flex items-center gap-2.5 rounded-full border border-[#e3d7f1] bg-[#f8f5fc] px-4 py-1.5 text-xs font-semibold text-[#24143C] shadow-xs mb-6">
+        <!-- Floating Pill Badge -->
+        <div class="inline-flex items-center gap-2 rounded-full glass-pill px-4 py-1.5 text-xs font-semibold text-[#24143C] shadow-xs mb-6 sm:mb-8 transition hover:border-purple-300">
           <img src="/doxa-logo.png" alt="Doxa" class="h-4 w-4 object-contain rounded-full" />
           <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span data-i18n="hero.badge">Built for Google Ethiopia (google.com.et) &amp; .et Web Properties</span>
         </div>
 
-        <!-- Main Headline -->
-        <h1 class="text-4xl font-extrabold tracking-tight text-[#24143C] sm:text-5xl lg:text-6xl leading-tight">
-          <span data-i18n="hero.title_part1">SEO engineered for</span> <br class="hidden sm:inline" />
-          <span class="bg-gradient-to-r from-[#24143C] via-[#774DA9] to-[#9d6cd3] bg-clip-text text-transparent" data-i18n="hero.title_part2">the Ethiopian Market.</span>
+        <!-- Main Headline (Editorial Fly.io Style Display Serif) -->
+        <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-[#24143C] leading-[1.08] sm:leading-[1.08]">
+          <span data-i18n="hero.title_part1">Scale Full Stack SEO</span> <br />
+          <span class="font-serif-display italic font-normal text-[#582e8e] selection:text-white" data-i18n="hero.title_part2">
+            Without the Blindspots
+          </span>
         </h1>
 
-        <!-- Supporting Subtitle -->
-        <p class="mt-5 text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto" data-i18n="hero.subtitle">
-          Track Google Ethiopia SERPs, uncover high-intent Amharic and English search queries, audit .et technical architecture, and unify search data with Google and Microsoft Clarity.
+        <!-- High-Impact Subtitle -->
+        <p class="mt-6 text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto" data-i18n="hero.subtitle">
+          <strong class="text-[#24143C] font-semibold">Over 350,000 queries</strong> indexed on DoxaRank, boosted by real-time Google Ethiopia (google.com.et) tracking, multilingual Amharic &amp; Oromo NLP, .et domain crawler audits, and live CPC benchmarks.
         </p>
 
-        <!-- CTA Action Buttons -->
-        <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
+        <!-- Pill CTA Action Buttons -->
+        <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <a
             href="/signup"
-            class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-[#774DA9] px-6 py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#673f97] hover:shadow-lg transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#774DA9]"
+            class="btn-pill-primary w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm sm:text-base font-semibold group shadow-md"
           >
-            <span data-i18n="hero.cta_start">Start Free on Google Ethiopia</span>
-            <svg class="ml-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <span data-i18n="hero.cta_start">Speedrun Your Rankings</span>
+            <svg class="h-4 w-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clip-rule="evenodd" />
             </svg>
           </a>
           <a
             href="/features"
-            class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 shadow-xs hover:bg-[#faf7fd] hover:text-[#774DA9] transition-all"
+            class="btn-pill-secondary w-full sm:w-auto inline-flex items-center justify-center px-6 py-3.5 text-sm sm:text-base font-semibold"
           >
             <span data-i18n="hero.cta_features">Explore Platform Features</span>
           </a>
         </div>
 
         <p class="mt-3.5 text-xs text-slate-500 font-medium" data-i18n="hero.subtext">
-          Free tier available · No credit card required · Instant setup in under 2 minutes
+          Free forever tier available · No credit card required · Instant setup in under 2 minutes
         </p>
 
-        <!-- Platform Ecosystem Badges -->
-        <div class="mt-10 border-t border-slate-100 pt-6">
-          <p class="text-[11px] font-bold tracking-wider text-slate-400 uppercase" data-i18n="hero.integrations_title">
-            Unified integrations with essential search &amp; analytics tools
-          </p>
-          <div class="mt-3 flex flex-wrap items-center justify-center gap-5 sm:gap-8 text-slate-600 text-xs font-semibold">
-            <span class="flex items-center gap-1.5"><Check class="w-3.5 h-3.5 text-[#774DA9]" /> Google Search Console</span>
-            <span class="flex items-center gap-1.5"><Check class="w-3.5 h-3.5 text-[#774DA9]" /> Google Analytics 4</span>
-            <span class="flex items-center gap-1.5"><Check class="w-3.5 h-3.5 text-[#774DA9]" /> Microsoft Clarity</span>
-            <span class="flex items-center gap-1.5"><Check class="w-3.5 h-3.5 text-[#774DA9]" /> Google Tag Manager</span>
-            <span class="flex items-center gap-1.5 text-emerald-700 font-bold"><Check class="w-3.5 h-3.5 text-emerald-500" /> google.com.et SERP</span>
-          </div>
+        <!-- Ecosystem Pill Badges -->
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs text-slate-600">
+          <span class="glass-pill rounded-full px-3 py-1 font-medium flex items-center gap-1.5 text-slate-700">
+            <Check class="w-3.5 h-3.5 text-[#774DA9]" /> Google Search Console
+          </span>
+          <span class="glass-pill rounded-full px-3 py-1 font-medium flex items-center gap-1.5 text-slate-700">
+            <Check class="w-3.5 h-3.5 text-[#774DA9]" /> Google Analytics 4
+          </span>
+          <span class="glass-pill rounded-full px-3 py-1 font-medium flex items-center gap-1.5 text-slate-700">
+            <Check class="w-3.5 h-3.5 text-[#774DA9]" /> Microsoft Clarity
+          </span>
+          <span class="glass-pill rounded-full px-3 py-1 font-medium flex items-center gap-1.5 text-emerald-700 bg-emerald-50/70 border-emerald-200">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span> google.com.et SERP
+          </span>
         </div>
 
       </div>
 
       <!-- ========================================================================= -->
-      <!-- 2. PRODUCT DASHBOARD PREVIEW (Professional Doxa Shell) -->
+      <!-- LIVE ETHIOPIAN KEYWORD & SERP INSPECTOR (Interactive Capsule) -->
       <!-- ========================================================================= -->
-      <div class="mt-10 sm:mt-12 relative">
-        <div class="mx-auto max-w-5xl rounded-2xl border border-purple-900/15 bg-white p-2.5 sm:p-3 shadow-2xl shadow-purple-950/10">
-          
-          <!-- Mock Browser Window Frame in Deep Doxa Color -->
-          <div class="rounded-xl border border-[#3b1d5f] bg-[#24143C] overflow-hidden text-slate-200">
-            
-            <!-- Window Header Bar -->
-            <div class="flex items-center justify-between border-b border-[#3b1d5f] bg-[#1a0c2e] px-4 py-2.5 text-xs">
+      <div class="mt-12 sm:mt-16 mx-auto max-w-4xl">
+        <div class="glass-card rounded-3xl p-5 sm:p-7 shadow-lg border border-purple-200/60 bg-white/90">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-purple-100">
+            <div>
               <div class="flex items-center gap-2">
-                <span class="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
-                <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-                <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                <span class="ml-2 font-mono text-purple-300/80 hidden sm:inline">app.doxarank.com/dashboard</span>
+                <span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-bold text-[#774DA9] uppercase tracking-wide">
+                  Live SERP Simulation
+                </span>
+                <span class="text-xs text-slate-500 font-medium">google.com.et index</span>
               </div>
-              <div class="flex items-center gap-2 font-semibold">
-                <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="text-emerald-400 text-xs">Target: Google Ethiopia (google.com.et)</span>
-              </div>
+              <h3 class="text-lg font-extrabold text-[#24143C] mt-1">Explore High-Intent Ethiopian Search Queries</h3>
             </div>
-
-            <!-- Dashboard Content Preview -->
-            <div class="bg-[#24143C] p-4 sm:p-6 text-slate-100">
-              
-              <!-- Dashboard Top Bar -->
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#3b1d5f] pb-4">
-                <div class="flex items-center gap-3">
-                  <img src="/doxa-logo.png" alt="Doxa" class="h-8 w-8 object-contain rounded-md" />
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs font-bold uppercase tracking-wider text-[#a372df]">Active Project</span>
-                      <span class="rounded bg-[#3b1d5f] px-2 py-0.5 text-[10px] font-bold text-purple-200 border border-purple-700/60">
-                        https://addishotels.et
-                      </span>
-                    </div>
-                    <h2 class="text-base sm:text-lg font-bold text-white mt-0.5">Addis Hospitality Group</h2>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="rounded-md bg-emerald-950 px-2.5 py-1 text-xs font-semibold text-emerald-300 border border-emerald-800">
-                    ● SERP Tracker Active
-                  </span>
-                  <span class="rounded-md bg-[#3b1d5f] px-2.5 py-1 text-xs text-purple-200 border border-purple-700/60">
-                    Desktop + Mobile
-                  </span>
-                </div>
-              </div>
-
-              <!-- 4 Stat Summary Cards -->
-              <div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <div class="rounded-lg bg-[#1b0d2f] p-3.5 border border-[#3b1d5f]">
-                  <div class="text-[11px] font-semibold text-purple-300 uppercase tracking-wider">Visibility Index</div>
-                  <div class="mt-1 flex items-baseline gap-2">
-                    <span class="text-xl sm:text-2xl font-extrabold text-white">78.2%</span>
-                    <span class="text-xs font-bold text-emerald-400 flex items-center gap-0.5"><TrendingUp class="w-3 h-3" /> +5.2%</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5">Top 100 on google.com.et</div>
-                </div>
-
-                <div class="rounded-lg bg-[#1b0d2f] p-3.5 border border-[#3b1d5f]">
-                  <div class="text-[11px] font-semibold text-purple-300 uppercase tracking-wider">Tracked Keywords</div>
-                  <div class="mt-1 flex items-baseline gap-2">
-                    <span class="text-xl sm:text-2xl font-extrabold text-white">48</span>
-                    <span class="text-xs text-slate-400">/ 50 limit</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5">Amharic &amp; English queries</div>
-                </div>
-
-                <div class="rounded-lg bg-[#1b0d2f] p-3.5 border border-[#3b1d5f]">
-                  <div class="text-[11px] font-semibold text-purple-300 uppercase tracking-wider">Technical Health</div>
-                  <div class="mt-1 flex items-baseline gap-2">
-                    <span class="text-xl sm:text-2xl font-extrabold text-emerald-400">94/100</span>
-                    <span class="text-xs text-slate-400">0 critical</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5">180 URLs audited</div>
-                </div>
-
-                <div class="rounded-lg bg-[#1b0d2f] p-3.5 border border-[#3b1d5f]">
-                  <div class="text-[11px] font-semibold text-purple-300 uppercase tracking-wider">Search Demand</div>
-                  <div class="mt-1 flex items-baseline gap-2">
-                    <span class="text-xl sm:text-2xl font-extrabold text-[#a372df]">42.5K</span>
-                    <span class="text-xs text-slate-400">/month</span>
-                  </div>
-                  <div class="text-[10px] text-slate-400 mt-0.5">Ethiopia impressions</div>
-                </div>
-              </div>
-
-              <!-- Tracked Keywords SERP Table Preview -->
-              <div class="mt-4 rounded-lg bg-[#1b0d2f] border border-[#3b1d5f] overflow-hidden">
-                <div class="border-b border-[#3b1d5f] px-4 py-2.5 flex items-center justify-between text-xs">
-                  <span class="font-bold text-white">Target Keywords (google.com.et)</span>
-                  <span class="text-purple-300 hidden sm:inline">Last check: Live EAT</span>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-left text-xs">
-                    <thead>
-                      <tr class="border-b border-[#3b1d5f] text-slate-400 font-semibold bg-[#160b24]">
-                        <th class="py-2.5 px-4">Keyword Query</th>
-                        <th class="py-2.5 px-3">Position</th>
-                        <th class="py-2.5 px-3">Change</th>
-                        <th class="py-2.5 px-3">Volume</th>
-                        <th class="py-2.5 px-3">Est. CPC</th>
-                        <th class="py-2.5 px-3">Intent</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-[#2a1545] font-mono text-slate-200">
-                      <tr>
-                        <td class="py-2.5 px-4 font-sans font-semibold text-white">የአዲስ አበባ ሆቴል</td>
-                        <td class="py-2.5 px-3 text-emerald-400 font-bold">#3</td>
-                        <td class="py-2.5 px-3 text-emerald-400 font-semibold"><span class="inline-flex items-center gap-0.5"><TrendingUp class="w-3 h-3" /> +2</span></td>
-                        <td class="py-2.5 px-3">2,400</td>
-                        <td class="py-2.5 px-3 text-slate-300">$0.35</td>
-                        <td class="py-2.5 px-3 font-sans"><span class="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300 border border-amber-500/30">Commercial</span></td>
-                      </tr>
-                      <tr>
-                        <td class="py-2.5 px-4 font-sans font-semibold text-white">best hotels in addis ababa</td>
-                        <td class="py-2.5 px-3 text-purple-300 font-bold">#7</td>
-                        <td class="py-2.5 px-3 text-emerald-400 font-semibold"><span class="inline-flex items-center gap-0.5"><TrendingUp class="w-3 h-3" /> +1</span></td>
-                        <td class="py-2.5 px-3">5,400</td>
-                        <td class="py-2.5 px-3 text-slate-300">$0.85</td>
-                        <td class="py-2.5 px-3 font-sans"><span class="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300 border border-amber-500/30">Commercial</span></td>
-                      </tr>
-                      <tr>
-                        <td class="py-2.5 px-4 font-sans font-semibold text-white">ቡና መግዛት</td>
-                        <td class="py-2.5 px-3 text-emerald-400 font-bold">#2</td>
-                        <td class="py-2.5 px-3 text-slate-400">0</td>
-                        <td class="py-2.5 px-3">850</td>
-                        <td class="py-2.5 px-3 text-slate-300">$0.28</td>
-                        <td class="py-2.5 px-3 font-sans"><span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300 border border-emerald-500/30">Transactional</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Active Recommendation Pill -->
-              <div class="mt-4 rounded-lg bg-[#3b1d5f]/70 border border-[#774DA9]/60 p-3 flex items-start gap-2.5 text-xs text-purple-200">
-                <Lightbulb class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <strong class="text-white">Active Recommendation:</strong> Resolve 3 redirect chains on <code class="text-[#a372df]">/destinations</code> to conserve crawl budget and accelerate SERP indexation.
-                </div>
-              </div>
-
+            
+            <!-- Filter Pills -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="query-filter-tabs">
+              <button
+                type="button"
+                data-filter="all"
+                class="filter-pill active rounded-full px-3 py-1 text-xs font-semibold bg-[#774DA9] text-white shadow-xs cursor-pointer transition"
+              >
+                All Languages
+              </button>
+              <button
+                type="button"
+                data-filter="am"
+                class="filter-pill rounded-full px-3 py-1 text-xs font-semibold bg-white text-slate-700 hover:bg-purple-50 hover:text-[#774DA9] border border-purple-200/60 cursor-pointer transition"
+              >
+                🇪🇹 Amharic
+              </button>
+              <button
+                type="button"
+                data-filter="om"
+                class="filter-pill rounded-full px-3 py-1 text-xs font-semibold bg-white text-slate-700 hover:bg-purple-50 hover:text-[#774DA9] border border-purple-200/60 cursor-pointer transition"
+              >
+                🇪🇹 Afaan Oromoo
+              </button>
+              <button
+                type="button"
+                data-filter="en"
+                class="filter-pill rounded-full px-3 py-1 text-xs font-semibold bg-white text-slate-700 hover:bg-purple-50 hover:text-[#774DA9] border border-purple-200/60 cursor-pointer transition"
+              >
+                🌍 English
+              </button>
             </div>
+          </div>
+
+          <!-- Query Table in Glass Container -->
+          <div class="overflow-x-auto mt-4">
+            <table class="w-full text-left text-xs sm:text-sm" id="serp-query-table">
+              <thead>
+                <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-purple-100">
+                  <th class="py-2.5 px-3">Keyword Query</th>
+                  <th class="py-2.5 px-3">Position</th>
+                  <th class="py-2.5 px-3">Monthly Volume</th>
+                  <th class="py-2.5 px-3">Est. CPC (ETB)</th>
+                  <th class="py-2.5 px-3">Intent</th>
+                  <th class="py-2.5 px-3 text-right">SERP Snippet</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-purple-50 font-medium text-slate-700" id="query-table-body">
+                <tr data-lang="am" class="hover:bg-purple-50/50 transition">
+                  <td class="py-3 px-3 font-semibold text-[#24143C] flex items-center gap-2">
+                    <span class="rounded-full bg-purple-100 text-[#774DA9] text-[10px] px-1.5 py-0.5 font-bold">AM</span>
+                    የአዲስ አበባ ሆቴል
+                  </td>
+                  <td class="py-3 px-3 font-bold text-emerald-600">
+                    <span class="rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200 text-xs">#3 (+2)</span>
+                  </td>
+                  <td class="py-3 px-3 font-mono">2,400 /mo</td>
+                  <td class="py-3 px-3 font-mono text-slate-600">42 ETB</td>
+                  <td class="py-3 px-3">
+                    <span class="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-bold">Commercial</span>
+                  </td>
+                  <td class="py-3 px-3 text-right">
+                    <span class="text-xs text-[#774DA9] font-semibold hover:underline cursor-pointer">Local Pack (Map)</span>
+                  </td>
+                </tr>
+
+                <tr data-lang="en" class="hover:bg-purple-50/50 transition">
+                  <td class="py-3 px-3 font-semibold text-[#24143C] flex items-center gap-2">
+                    <span class="rounded-full bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.5 font-bold">EN</span>
+                    best hotels in addis ababa
+                  </td>
+                  <td class="py-3 px-3 font-bold text-emerald-600">
+                    <span class="rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200 text-xs">#2 (+1)</span>
+                  </td>
+                  <td class="py-3 px-3 font-mono">5,400 /mo</td>
+                  <td class="py-3 px-3 font-mono text-slate-600">105 ETB</td>
+                  <td class="py-3 px-3">
+                    <span class="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-bold">Commercial</span>
+                  </td>
+                  <td class="py-3 px-3 text-right">
+                    <span class="text-xs text-[#774DA9] font-semibold hover:underline cursor-pointer">Sitelinks Snippet</span>
+                  </td>
+                </tr>
+
+                <tr data-lang="om" class="hover:bg-purple-50/50 transition">
+                  <td class="py-3 px-3 font-semibold text-[#24143C] flex items-center gap-2">
+                    <span class="rounded-full bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0.5 font-bold">OM</span>
+                    buna oromiyaa gatii
+                  </td>
+                  <td class="py-3 px-3 font-bold text-emerald-600">
+                    <span class="rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200 text-xs">#1 (0)</span>
+                  </td>
+                  <td class="py-3 px-3 font-mono">1,850 /mo</td>
+                  <td class="py-3 px-3 font-mono text-slate-600">35 ETB</td>
+                  <td class="py-3 px-3">
+                    <span class="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold">Transactional</span>
+                  </td>
+                  <td class="py-3 px-3 text-right">
+                    <span class="text-xs text-[#774DA9] font-semibold hover:underline cursor-pointer">Product Grid</span>
+                  </td>
+                </tr>
+
+                <tr data-lang="am" class="hover:bg-purple-50/50 transition">
+                  <td class="py-3 px-3 font-semibold text-[#24143C] flex items-center gap-2">
+                    <span class="rounded-full bg-purple-100 text-[#774DA9] text-[10px] px-1.5 py-0.5 font-bold">AM</span>
+                    ቡና መግዛት ኦንላይን
+                  </td>
+                  <td class="py-3 px-3 font-bold text-emerald-600">
+                    <span class="rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-200 text-xs">#2 (+3)</span>
+                  </td>
+                  <td class="py-3 px-3 font-mono">1,120 /mo</td>
+                  <td class="py-3 px-3 font-mono text-slate-600">38 ETB</td>
+                  <td class="py-3 px-3">
+                    <span class="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold">Transactional</span>
+                  </td>
+                  <td class="py-3 px-3 text-right">
+                    <span class="text-xs text-[#774DA9] font-semibold hover:underline cursor-pointer">Organic #2</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2">
+            <span class="flex items-center gap-1.5">
+              <ShieldCheck class="w-4 h-4 text-emerald-500" />
+              Verified with live Google Ethiopia SERP telemetry.
+            </span>
+            <a href="/features#keyword-intelligence" class="font-bold text-[#774DA9] hover:text-[#673f97] inline-flex items-center gap-1">
+              Explore Keyword Demand Explorer <ArrowRight class="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
       </div>
@@ -327,32 +335,39 @@ const coreFeatures = [
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 3. ETHIOPIA-FIRST ADVANTAGE (Compact 4-Card Grid) -->
+  <!-- 2. WHY LOCAL CONTEXT MATTERS (Soft Rounded Cards & Pastel Glow) -->
   <!-- ========================================================================= -->
-  <section class="border-b border-purple-900/10 bg-[#faf9fc] py-14 sm:py-18">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+  <section class="py-16 sm:py-20 relative">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
       
       <div class="mx-auto max-w-2xl text-center">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-[#774DA9]">Why Local Context Matters</h2>
-        <p class="mt-2 text-2xl font-extrabold tracking-tight text-[#24143C] sm:text-3xl" data-i18n="diff.heading">
-          Why Ethiopian Brands &amp; Agencies Choose DoxaRank
-        </p>
-        <p class="mt-3 text-sm text-slate-600" data-i18n="diff.subheading">
+        <span class="glass-pill rounded-full px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#774DA9]">
+          The Ethiopia Advantage
+        </span>
+        <h2 class="mt-4 text-3xl font-extrabold tracking-tight text-[#24143C] sm:text-4xl" data-i18n="diff.heading">
+          Why Ethiopian Brands Choose DoxaRank
+        </h2>
+        <p class="mt-3 text-sm sm:text-base text-slate-600" data-i18n="diff.subheading">
           International SEO tools overlook google.com.et nuances, fidel homophones, and .et hosting realities. We built from the ground up for Ethiopia.
         </p>
       </div>
 
-      <div class="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {differentiators.map((item) => {
           const IconComp = item.iconComponent;
           return (
-            <div class="rounded-xl border border-purple-900/10 bg-white p-5 shadow-xs hover:border-[#774DA9]/50 hover:shadow-md transition">
-              <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f3eef9] text-[#774DA9]">
-                <IconComp class="w-5 h-5" />
+            <div class="glass-card glass-card-hover rounded-3xl p-6 flex flex-col justify-between">
+              <div>
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#f3eef9] to-purple-100 text-[#774DA9] shadow-2xs">
+                  <IconComp class="w-6 h-6" />
+                </div>
+                <h3 class="mt-4 text-base font-bold text-[#24143C]" data-i18n={`${item.key}.title`}>{item.title}</h3>
+                <p class="text-[11px] font-bold text-[#774DA9] uppercase tracking-wider mt-0.5" data-i18n={`${item.key}.subtitle`}>{item.subtitle}</p>
+                <p class="mt-2.5 text-xs text-slate-600 leading-relaxed" data-i18n={`${item.key}.desc`}>{item.description}</p>
               </div>
-              <h3 class="mt-3 text-base font-bold text-[#24143C]" data-i18n={`${item.key}.title`}>{item.title}</h3>
-              <p class="text-[11px] font-semibold text-[#774DA9] uppercase tracking-wide" data-i18n={`${item.key}.subtitle`}>{item.subtitle}</p>
-              <p class="mt-2 text-xs text-slate-600 leading-relaxed" data-i18n={`${item.key}.desc`}>{item.description}</p>
+              <div class="mt-4 pt-3 border-t border-purple-100/60 text-[11px] font-semibold text-[#774DA9]">
+                Ethiopian Market Native
+              </div>
             </div>
           );
         })}
@@ -362,44 +377,46 @@ const coreFeatures = [
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 4. CORE FEATURES (Organized Feature Grid) -->
+  <!-- 3. COMPREHENSIVE PLATFORM (Pill Badges & Rounded Modern Cards) -->
   <!-- ========================================================================= -->
-  <section id="features" class="bg-white py-14 sm:py-20 border-b border-purple-900/10">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+  <section id="features" class="py-16 sm:py-24 relative">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
       
       <div class="mx-auto max-w-2xl text-center">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-[#774DA9]">Comprehensive Platform</h2>
-        <p class="mt-2 text-2xl font-extrabold tracking-tight text-[#24143C] sm:text-3xl" data-i18n="feat.heading">
+        <span class="glass-pill rounded-full px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#774DA9]">
+          Comprehensive Architecture
+        </span>
+        <h2 class="mt-4 text-3xl font-extrabold tracking-tight text-[#24143C] sm:text-4xl" data-i18n="feat.heading">
           Engineered specifically for Ethiopian search market realities
-        </p>
-        <p class="mt-3 text-sm text-slate-600" data-i18n="feat.subheading">
+        </h2>
+        <p class="mt-3 text-sm sm:text-base text-slate-600" data-i18n="feat.subheading">
           Everything your team needs to optimize, track, and dominate search visibility on google.com.et.
         </p>
       </div>
 
-      <div class="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {coreFeatures.map((feat) => (
-          <div class="group relative rounded-xl border border-slate-200/90 p-5 bg-white hover:border-[#774DA9]/60 hover:shadow-md transition flex flex-col justify-between">
+          <div class="glass-card glass-card-hover rounded-3xl p-6 flex flex-col justify-between group">
             <div>
               <div class="flex items-center justify-between">
-                <span class="rounded bg-[#f3eef9] px-2 py-0.5 text-[10px] font-bold text-[#774DA9] uppercase tracking-wider" data-i18n={`${feat.key}.badge`}>
+                <span class="rounded-full bg-purple-100/80 px-2.5 py-0.5 text-[10px] font-bold text-[#774DA9] uppercase tracking-wider" data-i18n={`${feat.key}.badge`}>
                   {feat.badge}
                 </span>
-                <div class="h-8 w-8 rounded-lg bg-[#f3eef9] text-[#774DA9] flex items-center justify-center">
-                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                <div class="h-8 w-8 rounded-full bg-purple-50 text-[#774DA9] flex items-center justify-center group-hover:bg-[#774DA9] group-hover:text-white transition">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d={feat.icon} />
                   </svg>
                 </div>
               </div>
-              <h3 class="mt-3 text-sm font-bold text-[#24143C] group-hover:text-[#774DA9] transition" data-i18n={`${feat.key}.title`}>
+              <h3 class="mt-4 text-base font-bold text-[#24143C] group-hover:text-[#774DA9] transition" data-i18n={`${feat.key}.title`}>
                 {feat.title}
               </h3>
-              <p class="mt-1.5 text-xs text-slate-600 leading-relaxed" data-i18n={`${feat.key}.desc`}>
+              <p class="mt-2 text-xs text-slate-600 leading-relaxed" data-i18n={`${feat.key}.desc`}>
                 {feat.description}
               </p>
             </div>
-            <div class="mt-4 pt-3 border-t border-slate-100">
-              <a href={feat.link} class="inline-flex items-center text-xs font-bold text-[#774DA9] hover:text-[#673f97]">
+            <div class="mt-5 pt-3 border-t border-purple-100/60">
+              <a href={feat.link} class="inline-flex items-center text-xs font-bold text-[#774DA9] hover:text-[#582e8e]">
                 Explore capability
                 <svg class="ml-1 h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clip-rule="evenodd" />
@@ -414,37 +431,74 @@ const coreFeatures = [
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 5. FINAL HIGH-IMPACT CALL TO ACTION -->
+  <!-- 4. FINAL HIGH-IMPACT CALL TO ACTION (Floating Rounded Pill Container) -->
   <!-- ========================================================================= -->
-  <section class="bg-[#24143C] text-white py-16 sm:py-20 relative overflow-hidden">
-    <div class="absolute -right-20 -bottom-20 w-80 h-80 bg-[#774DA9]/20 blur-[90px] rounded-full pointer-events-none"></div>
-    <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center relative z-10">
-      <img src="/doxa-logo.png" alt="Doxa" class="h-12 w-12 mx-auto mb-4 object-contain" />
-      <h2 class="text-3xl font-extrabold sm:text-4xl tracking-tight" data-i18n="cta.title">
-        Ready to accelerate your search visibility in Ethiopia?
-      </h2>
-      <p class="mt-4 text-base text-slate-300 max-w-xl mx-auto" data-i18n="cta.subtitle">
-        Join leading Ethiopian brands and agencies already tracking their organic Google performance with DoxaRank.
-      </p>
-      <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a
-          href="/signup"
-          data-i18n="cta.start"
-          class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-[#774DA9] px-7 py-3.5 text-sm font-bold text-white shadow-lg hover:bg-[#865cb8] transition"
-        >
-          Start Free 14-Day Trial
-        </a>
-        <a
-          href="/pricing"
-          class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-[#3b1d5f] bg-[#1a0c2e] px-7 py-3.5 text-sm font-semibold text-purple-200 hover:bg-[#3b1d5f] transition"
-        >
-          Compare Pricing Plans
-        </a>
+  <section class="py-14 sm:py-20 relative">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <div class="rounded-3xl bg-gradient-to-br from-[#24143C] via-[#311652] to-[#492275] text-white p-8 sm:p-14 relative overflow-hidden shadow-2xl">
+        <!-- Ambient Glow inside CTA -->
+        <div class="absolute -right-20 -bottom-20 w-80 h-80 bg-[#a372df]/25 blur-[90px] rounded-full pointer-events-none"></div>
+        <div class="absolute -left-20 -top-20 w-72 h-72 bg-purple-400/20 blur-[80px] rounded-full pointer-events-none"></div>
+        
+        <div class="max-w-2xl mx-auto text-center relative z-10">
+          <div class="inline-flex items-center justify-center h-12 w-12 rounded-full bg-white/10 p-2 mb-4 backdrop-blur-md">
+            <img src="/doxa-logo.png" alt="Doxa" class="h-8 w-8 object-contain rounded-full" />
+          </div>
+          <h2 class="text-3xl font-extrabold sm:text-4xl tracking-tight" data-i18n="cta.title">
+            Ready to speedrun your search visibility in Ethiopia?
+          </h2>
+          <p class="mt-4 text-sm sm:text-base text-purple-200 max-w-lg mx-auto" data-i18n="cta.subtitle">
+            Join leading Ethiopian brands and agencies already tracking their organic Google performance with DoxaRank.
+          </p>
+          <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
+            <a
+              href="/signup"
+              data-i18n="cta.start"
+              class="btn-pill-primary w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 text-sm sm:text-base font-bold text-white shadow-lg"
+            >
+              Start Free 14-Day Trial
+            </a>
+            <a
+              href="/pricing"
+              class="w-full sm:w-auto inline-flex items-center justify-center rounded-full border border-purple-300/40 bg-white/10 px-8 py-3.5 text-sm sm:text-base font-semibold text-white hover:bg-white/20 transition"
+            >
+              Compare Pricing Plans
+            </a>
+          </div>
+          <p class="mt-4 text-xs text-purple-300/80">
+            Free forever tier available · Instant setup · Built for Ethiopian domains
+          </p>
+        </div>
       </div>
-      <p class="mt-4 text-xs text-slate-400">
-        Free forever tier available · Instant setup · Built for Ethiopian domains
-      </p>
     </div>
   </section>
 
 </Layout>
+
+<script>
+  // Tab filtering for Live SERP simulation
+  const tabs = document.querySelectorAll('#query-filter-tabs .filter-pill');
+  const rows = document.querySelectorAll('#query-table-body tr');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => {
+        t.classList.remove('active', 'bg-[#774DA9]', 'text-white', 'shadow-xs');
+        t.classList.add('bg-white', 'text-slate-700', 'border', 'border-purple-200/60');
+      });
+
+      tab.classList.add('active', 'bg-[#774DA9]', 'text-white', 'shadow-xs');
+      tab.classList.remove('bg-white', 'text-slate-700', 'border-purple-200/60');
+
+      const filter = tab.getAttribute('data-filter');
+      rows.forEach(row => {
+        const rowLang = row.getAttribute('data-lang');
+        if (filter === 'all' || rowLang === filter) {
+          (row as HTMLElement).style.display = '';
+        } else {
+          (row as HTMLElement).style.display = 'none';
+        }
+      });
+    });
+  });
+</script>
