@@ -1242,7 +1242,7 @@ export const Dashboard: React.FC = () => {
                       No matching keywords found
                     </h4>
                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '14px' }}>
-                      Add search terms in Amharic, Oromo, or English to monitor SERP visibility.
+                      Add search terms in Amharic, Oromic, or English to monitor SERP visibility.
                     </p>
                     <button onClick={handleOpenCreateKeywordModal} style={headerPrimaryBtnStyle}>
                       Track a keyword
@@ -2153,8 +2153,9 @@ const sidebarHeaderStyle: React.CSSProperties = {
 const etBadgeStyle: React.CSSProperties = {
   fontSize: '10px',
   fontWeight: 800,
-  backgroundColor: '#ecfdf5',
-  color: '#065f46',
+  backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  color: '#e2e8f0',
+  border: '1px solid rgba(255, 255, 255, 0.2)',
   padding: '2px 6px',
   borderRadius: '9999px',
 };

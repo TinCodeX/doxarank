@@ -75,11 +75,11 @@ export const Login: React.FC = () => {
             </h1>
             <span style={{
               fontSize: '10px',
-              fontWeight: 700,
-              backgroundColor: '#ecfdf5',
-              color: '#065f46',
-              border: '1px solid #a7f3d0',
-              padding: '2px 6px',
+              fontWeight: 800,
+              backgroundColor: '#f3eef9',
+              color: '#774DA9',
+              border: '1px solid #dac8ee',
+              padding: '2px 8px',
               borderRadius: '9999px',
             }}>
               ET
@@ -165,8 +165,14 @@ const containerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#24143C',
-  backgroundImage: 'radial-gradient(ellipse at 50% 20%, #3b1d5f 0%, #24143C 70%)',
+  backgroundColor: '#fbf9fd',
+  backgroundImage: `
+    radial-gradient(at 15% 12%, rgba(254, 215, 215, 0.6) 0px, transparent 50%),
+    radial-gradient(at 85% 10%, rgba(221, 214, 254, 0.7) 0px, transparent 55%),
+    radial-gradient(at 50% 28%, rgba(238, 242, 255, 0.65) 0px, transparent 60%),
+    radial-gradient(at 90% 45%, rgba(254, 226, 226, 0.4) 0px, transparent 50%),
+    radial-gradient(at 20% 60%, rgba(233, 213, 255, 0.45) 0px, transparent 55%)
+  `,
   padding: '24px 16px',
   fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
   position: 'relative',
@@ -176,11 +182,11 @@ const containerStyle: React.CSSProperties = {
 
 const glowStyle: React.CSSProperties = {
   position: 'absolute',
-  width: '500px',
-  height: '500px',
+  width: '540px',
+  height: '540px',
   borderRadius: '50%',
-  backgroundColor: 'rgba(119, 77, 169, 0.18)',
-  filter: 'blur(100px)',
+  backgroundColor: 'rgba(167, 139, 250, 0.15)',
+  filter: 'blur(120px)',
   top: '50%',
   left: '50%',
   transform: 'translate(-50%, -50%)',
@@ -189,11 +195,14 @@ const glowStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
   width: '100%',
-  maxWidth: '420px',
-  backgroundColor: '#ffffff',
+  maxWidth: '430px',
+  backgroundColor: 'rgba(255, 255, 255, 0.94)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
   padding: '36px 32px',
-  borderRadius: '16px',
-  boxShadow: '0 20px 35px -5px rgba(10, 5, 20, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15)',
+  borderRadius: '24px',
+  border: '1px solid rgba(167, 139, 250, 0.25)',
+  boxShadow: '0 20px 40px -8px rgba(36, 20, 60, 0.08), 0 4px 16px rgba(36, 20, 60, 0.03)',
   position: 'relative',
   zIndex: 1,
   boxSizing: 'border-box',
@@ -201,9 +210,9 @@ const cardStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: '12px',
+  fontSize: '11px',
   fontWeight: 700,
-  color: '#334155',
+  color: '#475569',
   marginBottom: '6px',
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
@@ -211,36 +220,37 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '11px 14px',
+  padding: '11px 16px',
   fontSize: '14px',
-  color: '#0f172a',
-  backgroundColor: '#f8fafc',
-  border: '1px solid #cbd5e1',
-  borderRadius: '8px',
+  color: '#1e1b4b',
+  backgroundColor: '#ffffff',
+  border: '1px solid rgba(167, 139, 250, 0.35)',
+  borderRadius: '9999px',
   boxSizing: 'border-box',
   outline: 'none',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
+  transition: 'border-color 0.2s, box-shadow 0.2s',
 };
 
 const buttonStyle: React.CSSProperties = {
   width: '100%',
-  padding: '12px 16px',
-  backgroundColor: '#774DA9',
+  padding: '12px 20px',
+  background: 'linear-gradient(135deg, #774DA9 0%, #663e99 100%)',
   color: '#ffffff',
   fontSize: '14px',
   fontWeight: 700,
   border: 'none',
-  borderRadius: '8px',
+  borderRadius: '9999px',
   marginTop: '8px',
-  boxShadow: '0 4px 14px rgba(119, 77, 169, 0.35)',
-  transition: 'all 0.15s ease',
+  boxShadow: '0 4px 14px -1px rgba(119, 77, 169, 0.38)',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
 };
 
 const errorBannerStyle: React.CSSProperties = {
   backgroundColor: '#fef2f2',
   color: '#991b1b',
   padding: '10px 14px',
-  borderRadius: '8px',
+  borderRadius: '12px',
   fontSize: '13px',
   marginBottom: '16px',
   border: '1px solid #fecaca',

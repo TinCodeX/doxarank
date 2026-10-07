@@ -25,6 +25,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [selectedCardCode, setSelectedCardCode] = useState<'FREE' | 'STARTER' | 'AGENCY'>('STARTER');
 
   const loadPlans = React.useCallback(async () => {
     setIsLoadingPlans(true);
@@ -402,190 +403,352 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
                   gap: '20px',
+                  alignItems: 'stretch',
                 }}
               >
                 {/* 1. FREE PLAN */}
-                <div
-                  id="plan-card-free"
-                  style={{
-                    borderRadius: '12px',
-                    border: currentPlanCode === 'FREE' ? '2px solid #774DA9' : '1px solid #e2e8f0',
-                    padding: '20px',
-                    backgroundColor: '#ffffff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                      Free
-                    </h3>
-                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#0f172a' }}>
-                      ETB 0
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#64748b' }}> / month</span>
-                    </div>
-                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
-                      Basic tools for freelancers and early testing in Ethiopia.
-                    </p>
+                {(() => {
+                  const isSelected = selectedCardCode === 'FREE';
+                  return (
+                    <div
+                      id="plan-card-free"
+                      onClick={() => setSelectedCardCode('FREE')}
+                      style={{
+                        borderRadius: '20px',
+                        border: isSelected ? '2px solid #774DA9' : '1px solid rgba(167, 139, 250, 0.25)',
+                        padding: '24px',
+                        backgroundColor: isSelected ? 'transparent' : 'rgba(255, 255, 255, 0.95)',
+                        backgroundImage: isSelected ? 'linear-gradient(180deg, #24143C 0%, #2f194e 100%)' : 'none',
+                        color: isSelected ? '#ffffff' : '#0f172a',
+                        boxShadow: isSelected ? '0 20px 40px -10px rgba(36, 20, 60, 0.35)' : '0 4px 16px -2px rgba(119, 77, 169, 0.08)',
+                        transform: isSelected ? 'translateY(-4px)' : 'translateY(0)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                        position: 'relative',
+                      }}
+                    >
+                      {isSelected && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '-12px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            backgroundColor: '#774DA9',
+                            color: '#ffffff',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 12px',
+                            borderRadius: '9999px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                            boxShadow: '0 2px 8px rgba(119, 77, 169, 0.4)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Free Tier
+                        </div>
+                      )}
 
-                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>1</strong> tracked website</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>3</strong> keywords</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>5</strong> daily SEO tool runs</span></div>
-                      <div style={{ marginBottom: '8px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No rank tracking</span></div>
-                      <div style={{ marginBottom: '8px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No GSC / GA4 integrations</span></div>
-                      <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>No technical crawler</span></div>
-                    </div>
-                  </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: isSelected ? '#ffffff' : '#0f172a' }}>
+                          Free
+                        </h3>
+                        <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: isSelected ? '#ffffff' : '#0f172a' }}>
+                          ETB 0
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: isSelected ? '#d8b4fe' : '#64748b' }}> / month</span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: isSelected ? '#e9d5ff' : '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
+                          Basic tools for freelancers and early testing in Ethiopia.
+                        </p>
 
-                  <button
-                    disabled={currentPlanCode === 'FREE'}
-                    style={{
-                      marginTop: '20px',
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: currentPlanCode === 'FREE' ? '#f1f5f9' : '#e2e8f0',
-                      color: currentPlanCode === 'FREE' ? '#0f172a' : '#475569',
-                      fontWeight: 600,
-                      cursor: currentPlanCode === 'FREE' ? 'default' : 'not-allowed',
-                      width: '100%',
-                    }}
-                  >
-                    {currentPlanCode === 'FREE' ? 'Current Plan' : 'Free Tier'}
-                  </button>
-                </div>
+                        <div style={{ borderTop: isSelected ? '1px solid #3b1d5f' : '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>1</strong> tracked website</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>3</strong> keywords</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>5</strong> daily SEO tool runs</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', color: isSelected ? '#818cf8' : '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <X size={14} color={isSelected ? '#818cf8' : '#94a3b8'} />
+                            <span>No rank tracking</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', color: isSelected ? '#818cf8' : '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <X size={14} color={isSelected ? '#818cf8' : '#94a3b8'} />
+                            <span>No GSC / GA4 integrations</span>
+                          </div>
+                          <div style={{ color: isSelected ? '#818cf8' : '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <X size={14} color={isSelected ? '#818cf8' : '#94a3b8'} />
+                            <span>No technical crawler</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        disabled={currentPlanCode === 'FREE'}
+                        style={{
+                          marginTop: '20px',
+                          padding: '11px 16px',
+                          borderRadius: '9999px',
+                          border: isSelected ? 'none' : '1px solid rgba(167, 139, 250, 0.35)',
+                          background: isSelected ? 'linear-gradient(135deg, #774DA9 0%, #663e99 100%)' : '#ffffff',
+                          color: isSelected ? '#ffffff' : '#24143C',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: currentPlanCode === 'FREE' ? 'default' : 'pointer',
+                          width: '100%',
+                          boxShadow: isSelected ? '0 4px 14px -1px rgba(119, 77, 169, 0.4)' : 'none',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        {currentPlanCode === 'FREE' ? 'Current Plan' : 'Free Tier'}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* 2. STARTER PLAN */}
-                <div
-                  id="plan-card-starter"
-                  style={{
-                    borderRadius: '12px',
-                    border: currentPlanCode === 'STARTER' ? '2px solid #774DA9' : '1px solid #e2e8f0',
-                    padding: '20px',
-                    backgroundColor: '#ffffff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                    position: 'relative',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '-10px',
-                      right: '16px',
-                      backgroundColor: '#774DA9',
-                      color: '#ffffff',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Popular
-                  </div>
+                {(() => {
+                  const isSelected = selectedCardCode === 'STARTER';
+                  return (
+                    <div
+                      id="plan-card-starter"
+                      onClick={() => setSelectedCardCode('STARTER')}
+                      style={{
+                        borderRadius: '20px',
+                        border: isSelected ? '2px solid #774DA9' : '1px solid rgba(167, 139, 250, 0.25)',
+                        padding: '24px',
+                        backgroundColor: isSelected ? 'transparent' : 'rgba(255, 255, 255, 0.95)',
+                        backgroundImage: isSelected ? 'linear-gradient(180deg, #24143C 0%, #2f194e 100%)' : 'none',
+                        color: isSelected ? '#ffffff' : '#0f172a',
+                        boxShadow: isSelected ? '0 20px 40px -10px rgba(36, 20, 60, 0.35)' : '0 4px 16px -2px rgba(119, 77, 169, 0.08)',
+                        transform: isSelected ? 'translateY(-4px)' : 'translateY(0)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                        position: 'relative',
+                      }}
+                    >
+                      {isSelected && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '-12px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            backgroundColor: '#774DA9',
+                            color: '#ffffff',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 12px',
+                            borderRadius: '9999px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                            boxShadow: '0 2px 8px rgba(119, 77, 169, 0.4)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Most Popular
+                        </div>
+                      )}
 
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                      Starter
-                    </h3>
-                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#774DA9' }}>
-                      {isLoadingPlans ? '...' : starterPrice}
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#64748b' }}> / month</span>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: isSelected ? '#ffffff' : '#0f172a' }}>
+                          Starter
+                        </h3>
+                        <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: isSelected ? '#ffffff' : '#774DA9' }}>
+                          {isLoadingPlans ? '...' : starterPrice}
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: isSelected ? '#d8b4fe' : '#64748b' }}> / month</span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: isSelected ? '#e9d5ff' : '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
+                          Complete rank tracking & analytics integrations for growing Ethiopian brands.
+                        </p>
+
+                        <div style={{ borderTop: isSelected ? '1px solid #3b1d5f' : '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>3</strong> tracked websites</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>50</strong> keywords on google.com.et</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Amharic Fidel normalization & <strong>Oromic</strong> intelligence</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Daily Google Ethiopia rank tracker</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>GSC, GA4, Clarity & GTM OAuth</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Technical site audit crawler</span>
+                          </div>
+                          <div style={{ color: isSelected ? '#818cf8' : '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <X size={14} color={isSelected ? '#818cf8' : '#94a3b8'} />
+                            <span>Competitor SERP snapshots</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        id="upgrade-starter-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInitiateCheckout('STARTER');
+                        }}
+                        disabled={isProcessingCheckout}
+                        style={{
+                          marginTop: '20px',
+                          padding: '11px 16px',
+                          borderRadius: '9999px',
+                          border: isSelected ? 'none' : '1px solid rgba(167, 139, 250, 0.35)',
+                          background: isSelected ? 'linear-gradient(135deg, #774DA9 0%, #663e99 100%)' : '#ffffff',
+                          color: isSelected ? '#ffffff' : '#774DA9',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
+                          width: '100%',
+                          boxShadow: isSelected ? '0 4px 14px -1px rgba(119, 77, 169, 0.4)' : 'none',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        {currentPlanCode === 'STARTER' ? 'Renew / Extend Starter' : 'Upgrade to Starter'}
+                      </button>
                     </div>
-                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
-                      Complete rank tracking & analytics integrations for growing Ethiopian brands.
-                    </p>
-
-                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>3</strong> tracked websites</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>50</strong> keywords on google.com.et</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>Unlimited</strong> tool usage</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Daily Google Ethiopia rank tracker</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>GSC, GA4, Clarity & GTM OAuth</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Technical site audit crawler</span></div>
-                      <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}><X size={14} color="#94a3b8" /> <span>Competitor SERP snapshots</span></div>
-                    </div>
-                  </div>
-
-                  <button
-                    id="upgrade-starter-btn"
-                    onClick={() => handleInitiateCheckout('STARTER')}
-                    disabled={isProcessingCheckout}
-                    style={{
-                      marginTop: '20px',
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: '#774DA9',
-                      color: '#ffffff',
-                      fontWeight: 600,
-                      cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
-                      width: '100%',
-                    }}
-                  >
-                    {currentPlanCode === 'STARTER' ? 'Renew / Extend Starter' : 'Upgrade to Starter'}
-                  </button>
-                </div>
+                  );
+                })()}
 
                 {/* 3. AGENCY PLAN */}
-                <div
-                  id="plan-card-agency"
-                  style={{
-                    borderRadius: '12px',
-                    border: currentPlanCode === 'AGENCY' ? '2px solid #774DA9' : '1px solid #cbd5e1',
-                    padding: '20px',
-                    backgroundColor: '#ffffff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                      Agency
-                    </h3>
-                    <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: '#774DA9' }}>
-                      {isLoadingPlans ? '...' : agencyPrice}
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#64748b' }}> / month</span>
-                    </div>
-                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
-                      Enterprise power for agencies managing client portfolios with competitor intelligence.
-                    </p>
+                {(() => {
+                  const isSelected = selectedCardCode === 'AGENCY';
+                  return (
+                    <div
+                      id="plan-card-agency"
+                      onClick={() => setSelectedCardCode('AGENCY')}
+                      style={{
+                        borderRadius: '20px',
+                        border: isSelected ? '2px solid #774DA9' : '1px solid rgba(167, 139, 250, 0.25)',
+                        padding: '24px',
+                        backgroundColor: isSelected ? 'transparent' : 'rgba(255, 255, 255, 0.95)',
+                        backgroundImage: isSelected ? 'linear-gradient(180deg, #24143C 0%, #2f194e 100%)' : 'none',
+                        color: isSelected ? '#ffffff' : '#0f172a',
+                        boxShadow: isSelected ? '0 20px 40px -10px rgba(36, 20, 60, 0.35)' : '0 4px 16px -2px rgba(119, 77, 169, 0.08)',
+                        transform: isSelected ? 'translateY(-4px)' : 'translateY(0)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                        position: 'relative',
+                      }}
+                    >
+                      {isSelected && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '-12px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            backgroundColor: '#774DA9',
+                            color: '#ffffff',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 12px',
+                            borderRadius: '9999px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                            boxShadow: '0 2px 8px rgba(119, 77, 169, 0.4)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Agency Pro
+                        </div>
+                      )}
 
-                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>20</strong> tracked websites</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span><strong>500</strong> keywords</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Everything in Starter tier</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Weekly Competitor SERP snapshots</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>White-label PDF reporting</span></div>
-                      <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Check size={14} color="#774DA9" /> <span>Multi-site audit automation</span></div>
-                    </div>
-                  </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: isSelected ? '#ffffff' : '#0f172a' }}>
+                          Agency
+                        </h3>
+                        <div style={{ margin: '12px 0', fontSize: '28px', fontWeight: 800, color: isSelected ? '#ffffff' : '#774DA9' }}>
+                          {isLoadingPlans ? '...' : agencyPrice}
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: isSelected ? '#d8b4fe' : '#64748b' }}> / month</span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: isSelected ? '#e9d5ff' : '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
+                          Enterprise power for agencies managing client portfolios with competitor intelligence.
+                        </p>
 
-                  <button
-                    id="upgrade-agency-btn"
-                    onClick={() => handleInitiateCheckout('AGENCY')}
-                    disabled={isProcessingCheckout}
-                    style={{
-                      marginTop: '20px',
-                      padding: '10px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: '#774DA9',
-                      color: '#ffffff',
-                      fontWeight: 600,
-                      cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
-                      width: '100%',
-                    }}
-                  >
-                    {currentPlanCode === 'AGENCY' ? 'Renew / Extend Agency' : 'Upgrade to Agency'}
-                  </button>
-                </div>
+                        <div style={{ borderTop: isSelected ? '1px solid #3b1d5f' : '1px solid #f1f5f9', paddingTop: '16px', fontSize: '13px' }}>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>20</strong> tracked websites</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}><strong>500</strong> keywords</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Everything in Starter tier</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Weekly Competitor SERP snapshots</span>
+                          </div>
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>White-label PDF reporting</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Check size={14} color={isSelected ? '#c084fc' : '#774DA9'} />
+                            <span style={{ color: isSelected ? '#e2e8f0' : '#334155' }}>Multi-site audit automation</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        id="upgrade-agency-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInitiateCheckout('AGENCY');
+                        }}
+                        disabled={isProcessingCheckout}
+                        style={{
+                          marginTop: '20px',
+                          padding: '11px 16px',
+                          borderRadius: '9999px',
+                          border: isSelected ? 'none' : '1px solid rgba(167, 139, 250, 0.35)',
+                          background: isSelected ? 'linear-gradient(135deg, #774DA9 0%, #663e99 100%)' : '#ffffff',
+                          color: isSelected ? '#ffffff' : '#774DA9',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
+                          width: '100%',
+                          boxShadow: isSelected ? '0 4px 14px -1px rgba(119, 77, 169, 0.4)' : 'none',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        {currentPlanCode === 'AGENCY' ? 'Renew / Extend Agency' : 'Upgrade to Agency'}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}

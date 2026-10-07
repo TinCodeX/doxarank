@@ -69,7 +69,7 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
     'kpi.in_top_100': 'In Top 100',
     'kpi.indexed': 'Indexed on google.com.et',
     'kpi.search_demand': 'Local Search Demand',
-    'kpi.multilingual_demand': 'Amharic, Afaan Oromoo & English',
+    'kpi.multilingual_demand': 'Amharic, Oromic & English',
 
     // Actions & Buttons
     'action.refresh': 'Refresh',
@@ -117,7 +117,7 @@ export const translations: Record<SupportedLanguage, Record<string, string>> = {
 
     // Empty States
     'empty.no_keywords': 'No keywords tracked yet.',
-    'empty.no_keywords_desc': 'Add target search terms in English, Amharic, or Afaan Oromoo to monitor daily positions on Google Ethiopia.',
+    'empty.no_keywords_desc': 'Add target search terms in English, Amharic, or Oromic to monitor daily positions on Google Ethiopia.',
     'empty.add_first_keyword': 'Track First Keyword',
     'empty.no_rankings': 'No ranking data recorded yet.',
     'empty.no_rankings_desc': 'Trigger SERP check or wait for the automated crawler to record live ranking history.',

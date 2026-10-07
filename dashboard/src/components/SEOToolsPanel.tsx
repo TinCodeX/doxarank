@@ -766,7 +766,7 @@ export const SEOToolsPanel: React.FC = () => {
                   type="text"
                   value={metaTitle}
                   onChange={(e) => setMetaTitle(e.target.value)}
-                  placeholder="e.g. Best Coffee Exporters in Addis Ababa | Top Ranked"
+                  placeholder="e.g. Best Coffee Exporters in Bishoftu | Top Ranked"
                   required
                   style={inputStyle}
                 />
@@ -782,7 +782,7 @@ export const SEOToolsPanel: React.FC = () => {
                   id="meta-input-description"
                   value={metaDescription}
                   onChange={(e) => setMetaDescription(e.target.value)}
-                  placeholder="Discover certified Ethiopian specialty coffee beans in Addis Ababa."
+                  placeholder="Discover certified Ethiopian specialty coffee beans in Bishoftu."
                   rows={3}
                   required
                   style={textareaStyle}
@@ -939,7 +939,7 @@ export const SEOToolsPanel: React.FC = () => {
                         type="text"
                         value={bizCity}
                         onChange={(e) => setBizCity(e.target.value)}
-                        placeholder="Addis Ababa"
+                        placeholder="Bishoftu"
                         style={inputStyle}
                       />
                     </div>
@@ -1771,7 +1771,7 @@ export const SEOToolsPanel: React.FC = () => {
                   }}
                   style={presetBtnStyle}
                 >
-                  + Afaan Oromo (om)
+                  + Oromic (om)
                 </button>
                 <button
                   type="button"
@@ -1881,7 +1881,7 @@ export const SEOToolsPanel: React.FC = () => {
               ) : (
                 <div style={placeholderBoxStyle}>
                   <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
-                    Add English, Amharic, and Afaan Oromo variants to generate reciprocal hreflang annotations.
+                    Add English, Amharic, and Oromic variants to generate reciprocal hreflang annotations.
                   </p>
                 </div>
               )}
