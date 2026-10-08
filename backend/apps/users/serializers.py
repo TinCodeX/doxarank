@@ -105,3 +105,30 @@ class LogoutSerializer(serializers.Serializer):
             token.blacklist()
         except Exception:
             raise serializers.ValidationError({'refresh': 'Invalid or expired refresh token.'})
+
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for inbound contact messages from the marketing site.
+    """
+    class Meta:
+        from .models import ContactMessage
+        model = ContactMessage
+        fields = ('id', 'name', 'email', 'domain', 'message', 'created_at')
+        read_only_fields = ('id', 'created_at')
+
+    def validate_name(self, value):
+        val = value.strip()
+        if len(val) < 2:
+            raise serializers.ValidationError("Name must be at least 2 characters long.")
+        return val
+
+    def validate_message(self, value):
+        val = value.strip()
+        if len(val) < 5:
+            raise serializers.ValidationError("Message must be at least 5 characters long.")
+        return val
+
+    def validate_email(self, value):
+        return value.lower().strip()
+

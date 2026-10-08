@@ -16,13 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from apps.users.views import ContactMessageCreateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/contact/', ContactMessageCreateView.as_view(), name='contact_message'),
     path('api/auth/', include('apps.users.urls')),
     path('api/projects/', include('apps.projects.urls')),
     path('api/seo/', include('apps.seo.urls')),
     path('api/subscriptions/', include('apps.subscriptions.urls')),
     path('api/integrations/', include('apps.integrations.urls')),
 ]
+
 

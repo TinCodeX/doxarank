@@ -71,3 +71,29 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
+
+
+class ContactMessage(models.Model):
+    """
+    Stores inbound inquiries and support messages submitted via the marketing contact page.
+    """
+    name = models.CharField(max_length=255)
+    email = models.EmailField(max_length=255)
+    domain = models.CharField(max_length=255, blank=True, default='')
+    message = models.TextField()
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True, default='')
+    is_resolved = models.BooleanField(default=False)
+    email_sent = models.BooleanField(default=False)
+    email_error = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'contact message'
+        verbose_name_plural = 'contact messages'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Message from {self.name} <{self.email}> ({self.created_at:%Y-%m-%d %H:%M})"
+

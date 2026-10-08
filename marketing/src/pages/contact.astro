@@ -1,5 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:8000';
 ---
 
 <Layout title="Contact Support & Sales — DoxaRank" description="Get in touch with the DoxaRank team for inquiries, sales, onboarding, or technical support in Addis Ababa, Ethiopia.">
@@ -72,62 +74,197 @@ import Layout from '../layouts/Layout.astro';
           Send a Direct Message
         </h2>
 
-        <form class="space-y-3.5" onsubmit="event.preventDefault(); alert('Thank you for contacting DoxaRank. Our team will get back to you shortly.');">
-          <div>
-            <label for="name" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Your Name</label>
-            <input 
-              type="text" 
-              id="name" 
-              name="name" 
-              required 
-              placeholder="e.g. Abebe Kebede"
-              class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9]"
-            />
-          </div>
+        <!-- Notification container -->
+        <div id="contact-feedback" class="mb-4 space-y-2"></div>
 
-          <div>
-            <label for="email" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email Address</label>
-            <input 
-              type="email" 
-              id="email" 
-              name="email" 
-              required 
-              placeholder="name@company.com"
-              class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9]"
-            />
+        <!-- Success card state (hidden by default) -->
+        <div id="success-card" class="hidden text-center py-6 px-4 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-3">
+          <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
           </div>
-
-          <div>
-            <label for="domain" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Website Domain (Optional)</label>
-            <input 
-              type="text" 
-              id="domain" 
-              name="domain" 
-              placeholder="e.g. mybusiness.et"
-              class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9]"
-            />
-          </div>
-
-          <div>
-            <label for="message" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Message</label>
-            <textarea 
-              id="message" 
-              name="message" 
-              rows="3" 
-              required 
-              placeholder="How can our team help your search rankings?"
-              class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9]"
-            ></textarea>
-          </div>
-
+          <h3 class="text-base font-bold text-emerald-900">Message Received!</h3>
+          <p class="text-xs text-emerald-800 leading-relaxed max-w-sm mx-auto">
+            Thank you for contacting us. A confirmation has been sent and our team will get back to <span id="success-user-email" class="font-semibold text-emerald-950"></span> within 24 hours.
+          </p>
           <button 
-            type="submit"
-            class="w-full py-2.5 px-5 rounded-xl font-bold text-white bg-[#774DA9] hover:bg-[#673f97] active:bg-[#53327d] transition-all shadow-sm text-xs sm:text-sm"
+            type="button" 
+            id="send-another-btn" 
+            class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-semibold hover:bg-emerald-50 transition-colors shadow-xs"
           >
-            Send Message
+            Send Another Message
           </button>
+        </div>
+
+        <!-- Form fields container -->
+        <form id="contact-form" class="space-y-3.5">
+          <div id="form-fields" class="space-y-3.5">
+            <div>
+              <label for="name" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Your Name *</label>
+              <input 
+                type="text" 
+                id="name" 
+                name="name" 
+                required 
+                placeholder="e.g. Abebe Kebede"
+                class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9] transition-all"
+              />
+            </div>
+
+            <div>
+              <label for="email" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email Address *</label>
+              <input 
+                type="email" 
+                id="email" 
+                name="email" 
+                required 
+                placeholder="name@company.com"
+                class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9] transition-all"
+              />
+            </div>
+
+            <div>
+              <label for="domain" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Website Domain (Optional)</label>
+              <input 
+                type="text" 
+                id="domain" 
+                name="domain" 
+                placeholder="e.g. mybusiness.et"
+                class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9] transition-all"
+              />
+            </div>
+
+            <div>
+              <label for="message" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Message *</label>
+              <textarea 
+                id="message" 
+                name="message" 
+                rows="3" 
+                required 
+                placeholder="How can our team help your search rankings?"
+                class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#774DA9] focus:border-[#774DA9] transition-all"
+              ></textarea>
+            </div>
+
+            <button 
+              type="submit"
+              id="contact-submit-btn"
+              class="w-full py-2.5 px-5 rounded-xl font-bold text-white bg-[#774DA9] hover:bg-[#673f97] active:bg-[#53327d] disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2"
+            >
+              <svg id="btn-spinner" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span id="btn-text">Send Message</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>
   </div>
+
+  <script define:vars={{ apiUrl }}>
+    const form = document.getElementById('contact-form');
+    const formFields = document.getElementById('form-fields');
+    const submitBtn = document.getElementById('contact-submit-btn');
+    const btnText = document.getElementById('btn-text');
+    const btnSpinner = document.getElementById('btn-spinner');
+    const feedbackContainer = document.getElementById('contact-feedback');
+    const successCard = document.getElementById('success-card');
+    const successUserEmail = document.getElementById('success-user-email');
+    const sendAnotherBtn = document.getElementById('send-another-btn');
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      feedbackContainer.innerHTML = '';
+
+      const nameInput = document.getElementById('name');
+      const emailInput = document.getElementById('email');
+      const domainInput = document.getElementById('domain');
+      const messageInput = document.getElementById('message');
+
+      const payload = {
+        name: nameInput?.value?.trim() || '',
+        email: emailInput?.value?.trim() || '',
+        domain: domainInput?.value?.trim() || '',
+        message: messageInput?.value?.trim() || ''
+      };
+
+      if (!payload.name || !payload.email || !payload.message) {
+        feedbackContainer.innerHTML = `
+          <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+            Please fill out all required fields (Name, Email, and Message).
+          </div>
+        `;
+        return;
+      }
+
+      // Loading state
+      submitBtn.disabled = true;
+      btnSpinner.classList.remove('hidden');
+      btnText.textContent = 'Sending message...';
+
+      try {
+        const response = await fetch(`${apiUrl}/api/contact/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (response.ok && data.success) {
+          formFields.classList.add('hidden');
+          successCard.classList.remove('hidden');
+          if (successUserEmail) {
+            successUserEmail.textContent = payload.email;
+          }
+          form.reset();
+        } else {
+          let errorText = 'Unable to send message. Please review the form or try again.';
+          if (data.errors) {
+            errorText = Object.entries(data.errors)
+              .map(([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(', ') : errs}`)
+              .join('; ');
+          } else if (data.message) {
+            errorText = data.message;
+          }
+
+          feedbackContainer.innerHTML = `
+            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+              <svg class="w-4 h-4 mt-0.5 shrink-0 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div><strong class="font-bold">Error:</strong> ${errorText}</div>
+            </div>
+          `;
+        }
+      } catch (err) {
+        feedbackContainer.innerHTML = `
+          <div class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+            <svg class="w-4 h-4 mt-0.5 shrink-0 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <strong class="font-bold">Connection Error:</strong> Could not connect to the backend server. Please verify your connection or email <a href="mailto:support@doxarank.com" class="underline font-semibold">support@doxarank.com</a> directly.
+            </div>
+          </div>
+        `;
+      } finally {
+        submitBtn.disabled = false;
+        btnSpinner.classList.add('hidden');
+        btnText.textContent = 'Send Message';
+      }
+    });
+
+    sendAnotherBtn?.addEventListener('click', () => {
+      successCard.classList.add('hidden');
+      formFields.classList.remove('hidden');
+      feedbackContainer.innerHTML = '';
+    });
+  </script>
 </Layout>
+

@@ -338,6 +338,26 @@ DATAFORSEO_API_URL = config('DATAFORSEO_API_URL', default='https://api.dataforse
 SERP_TRACKER_PROVIDER = config('SERP_TRACKER_PROVIDER', default='auto')
 
 
+
+# ==============================================================================
+# Email Configuration (Contact Inquiries & System Notifications)
+# ==============================================================================
+_EMAIL_BACKEND_DEFAULT = (
+    'django.core.mail.backends.smtp.EmailBackend'
+    if config('EMAIL_HOST_USER', default='')
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_BACKEND = config('EMAIL_BACKEND', default=_EMAIL_BACKEND_DEFAULT)
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='DoxaRank <noreply@doxarank.com>')
+CONTACT_NOTIFICATION_EMAIL = config('CONTACT_NOTIFICATION_EMAIL', default='support@doxarank.com')
+
+
 # ==============================================================================
 # Production Security Hardening (Enabled when DEBUG is False)
 # ==============================================================================
@@ -351,5 +371,3 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True, cast=bool)
     SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=True, cast=bool)
-
-
